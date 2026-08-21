@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+/* ──────────────────────────────────────────────
+   Brand Tokens
+   ────────────────────────────────────────────── */
+
+:root {
+  /* Brand palette */
+  --color-navy: #151B29;
+  --color-gold: #E2A033;
+  --color-warm-white: #F4F3EE;
+  --color-white: #FFFFFF;
+
+  /* Semantic aliases */
+  --background: var(--color-warm-white);
+  --foreground: var(--color-navy);
+  --primary: var(--color-gold);
+  --primary-foreground: var(--color-navy);
+  --muted: #E8E7E3;
+  --muted-foreground: #6B7280;
+  --border: #D1D0CC;
+  --ring: var(--color-gold);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+
+  /* Brand palette exposed to Tailwind */
+  --color-navy: #151B29;
+  --color-gold: #E2A033;
+  --color-warm-white: #F4F3EE;
+
+  /* Typography */
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-geist-mono);
+
+  /* Spacing scale extensions */
+  --spacing-18: 4.5rem;
+  --spacing-22: 5.5rem;
+  --height-18: 4.5rem;
+
+  /* Shadows — subtle, cinematic */
+  --shadow-card: 0 1px 3px rgba(21, 27, 41, 0.06), 0 1px 2px rgba(21, 27, 41, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(21, 27, 41, 0.08), 0 2px 4px rgba(21, 27, 41, 0.04);
+  --shadow-elevated: 0 8px 24px rgba(21, 27, 41, 0.10), 0 2px 8px rgba(21, 27, 41, 0.04);
+}
+
+/* ──────────────────────────────────────────────
+   Base Styles
+   ────────────────────────────────────────────── */
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ──────────────────────────────────────────────
+   Typography Defaults
+   ────────────────────────────────────────────── */
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--color-navy);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+/* ──────────────────────────────────────────────
+   Focus Ring
+   ────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+/* ──────────────────────────────────────────────
+   Selection
+   ────────────────────────────────────────────── */
+
+::selection {
+  background: var(--color-gold);
+  color: var(--color-navy);
+}
+
+/* ──────────────────────────────────────────────
+   Smooth Scroll
+   ────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
