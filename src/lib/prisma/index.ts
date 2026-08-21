@@ -1,53 +1,19 @@
-import { PrismaClient } from "@/generated/prisma/client";
+import { createClient } from '@libsql/client';
+import { PrismaLibSQL } from '@prisma/adapter-libsql';
+// Note: Based on your logs, you generate the client to a custom path. 
+// Adjust this import to match your generated client path if needed.
+import { PrismaClient } from '../../generated/prisma'; 
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+// 1. Initialize the LibSQL client first
+const libsql = createClient({
+  url: databaseUrl, // Make sure databaseUrl is defined in your file
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
 
-function createPrismaClient() {
-  const databaseUrl = process.env.DATABASE_URL;
+// 2. Pass the instantiated client to the Prisma adapter
+const adapter = new PrismaLibSQL(libsql);
 
-  // Production: use Turso (libSQL)
-  if (databaseUrl?.startsWith("libsql://") || databaseUrl?.startsWith("https://")) {
-    // Dynamic import to avoid bundling libSQL in dev
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const _libsql = require("@prisma/adapter-libsql");
-    // Resolve common export shapes: named, default, or the module itself
-    let PrismaLibSQL = _libsql.PrismaLibSQL ?? _libsql.default ?? _libsql;
-    // If the resolved export isn't a constructor, try common factory shapes
-    let adapter;
-    if (typeof PrismaLibSQL === "function") {
-      adapter = new PrismaLibSQL({ url: databaseUrl, authToken: process.env.TURSO_AUTH_TOKEN });
-    } else if (PrismaLibSQL && typeof PrismaLibSQL.create === "function") {
-      adapter = PrismaLibSQL.create({ url: databaseUrl, authToken: process.env.TURSO_AUTH_TOKEN });
-    } else if (typeof _libsql.createAdapter === "function") {
-      adapter = _libsql.createAdapter({ url: databaseUrl, authToken: process.env.TURSO_AUTH_TOKEN });
-    } else {
-      // As a last resort, pass the raw export through; Prisma will error with a clearer message
-      adapter = PrismaLibSQL;
-    }
-    return new PrismaClient({ adapter });
-  }
+// 3. Initialize Prisma with the adapter
+const prisma = new PrismaClient({ adapter });
 
-  // Development: use local SQLite via better-sqlite3
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const _bs3 = require("@prisma/adapter-better-sqlite3");
-  let PrismaBetterSqlite3 = _bs3.PrismaBetterSqlite3 ?? _bs3.default ?? _bs3;
-  let adapter;
-  if (typeof PrismaBetterSqlite3 === "function") {
-    adapter = new PrismaBetterSqlite3({ url: databaseUrl || "file:./dev.db" });
-  } else if (PrismaBetterSqlite3 && typeof PrismaBetterSqlite3.create === "function") {
-    adapter = PrismaBetterSqlite3.create({ url: databaseUrl || "file:./dev.db" });
-  } else if (typeof _bs3.createAdapter === "function") {
-    adapter = _bs3.createAdapter({ url: databaseUrl || "file:./dev.db" });
-  } else {
-    adapter = PrismaBetterSqlite3;
-  }
-  return new PrismaClient({ adapter });
-}
-
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
+export default prisma;
