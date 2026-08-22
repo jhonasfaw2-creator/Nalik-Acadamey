@@ -1,26 +1,65 @@
 "use client";
 
+import { useRef, useEffect, useState } from "react";
 import { Container } from "@/components/ui/Container";
 import { FadeUp } from "@/components/motion/FadeUp";
 import { useApplicationModal } from "@/components/application/ApplicationContext";
 import { useSiteContent } from "@/lib/hooks/use-site-content";
+import { useReducedMotion } from "@/lib/hooks/use-reduced-motion";
 
 export function FinalCTA() {
   const { final_cta } = useSiteContent();
+  const sectionRef = useRef<HTMLElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const prefersReduced = useReducedMotion();
+  const [loadVideo, setLoadVideo] = useState(false);
+
+  // Lazy-load the background video when section is near viewport
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setLoadVideo(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "400px" }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Handle autoplay after video source loads
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || prefersReduced || !loadVideo) return;
+
+    const timer = setTimeout(() => {
+      video.play().catch(() => {});
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [prefersReduced, loadVideo]);
 
   return (
-    <section className="relative overflow-hidden">
+    <section ref={sectionRef} className="relative overflow-hidden">
       <div className="absolute inset-0 z-0">
-        <video
-          autoPlay
-          muted
-          loop
-          playsInline
-          className="h-full w-full object-cover"
-          poster={final_cta.poster || "/images/general/editing-workspace.jpg"}
-        >
-          <source src={final_cta.video || "/videos/hero.mp4"} type="video/mp4" />
-        </video>
+        {loadVideo && !prefersReduced && (
+          <video
+            ref={videoRef}
+            muted
+            loop
+            playsInline
+            preload="none"
+            className="h-full w-full object-cover"
+            poster={final_cta.poster || "/images/general/editing-workspace.jpg"}
+          >
+            <source src={final_cta.video || "/videos/hero.mp4"} type="video/mp4" />
+          </video>
+        )}
         <div className="absolute inset-0 bg-navy/80" />
         <div className="absolute inset-0 bg-gradient-to-b from-navy/40 via-navy/60 to-navy/90" />
       </div>

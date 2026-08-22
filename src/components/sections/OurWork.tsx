@@ -31,7 +31,9 @@ export function OurWork() {
     let cancelled = false;
     async function load() {
       try {
-        const res = await fetch("/api/portfolio");
+        const res = await fetch("/api/portfolio", {
+          headers: { "Cache-Control": "public, s-maxage=60" },
+        });
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && data.items?.length) {

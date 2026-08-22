@@ -61,6 +61,7 @@ html {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   scroll-padding-top: 5rem;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -68,6 +69,8 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   overflow-x: hidden;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 * {
@@ -77,6 +80,24 @@ body {
 img, video {
   display: block;
   max-width: 100%;
+  height: auto;
+}
+
+/* Prevent horizontal overflow from videos/media */
+section {
+  overflow-x: clip;
+}
+
+/* Smooth focus for accessibility */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Improve touch targets on mobile */
+@media (pointer: coarse) {
+  button, a, [role="button"] {
+    min-height: 44px;
+  }
 }
 
 /* ──────────────────────────────────────────────

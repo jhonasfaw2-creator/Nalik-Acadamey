@@ -61,7 +61,19 @@ const nextConfig: NextConfig = {
 
   images: {
     formats: ["image/avif", "image/webp"],
+    // Allow Next.js to optimize images served from public/
+    unoptimized: false,
+    // Device sizes for responsive images
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    // Image sizes for srcSet
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
+
+  // Optimize production output
+  poweredByHeader: false,
+
+  // Compress responses
+  compress: true,
 
   async headers() {
     return [
@@ -159,12 +171,21 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=86400",
+            value: "public, max-age=604800, stale-while-revalidate=86400",
           },
         ],
       },
       {
         source: "/logo/(.*)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/favicon.svg",
         headers: [
           {
             key: "Cache-Control",

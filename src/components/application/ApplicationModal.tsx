@@ -1,12 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 import { ModalDrawer } from "@/components/motion/ModalDrawer";
-import { ApplicationForm } from "@/components/application/ApplicationForm";
 import { useApplicationModal } from "@/components/application/ApplicationContext";
 import { SITE_NAME } from "@/lib/constants";
+
+// Lazy-load the form so its JS is only fetched when the modal opens
+const ApplicationForm = dynamic(
+  () =>
+    import("@/components/application/ApplicationForm").then(
+      (m) => m.ApplicationForm
+    ),
+  { ssr: false }
+);
 
 export function ApplicationModal() {
   const { isOpen, closeModal } = useApplicationModal();

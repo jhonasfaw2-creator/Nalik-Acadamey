@@ -45,7 +45,7 @@ export function AboutNalik() {
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || prefersReduced) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -69,7 +69,7 @@ export function AboutNalik() {
 
     observer.observe(video);
     return () => observer.disconnect();
-  }, []);
+  }, [prefersReduced]);
 
   return (
     <section id="about" className="bg-warm-white py-24 sm:py-32">

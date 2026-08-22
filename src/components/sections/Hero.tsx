@@ -6,10 +6,24 @@ import { FadeIn } from "@/components/motion/FadeIn";
 import { MOTION } from "@/components/motion/constants";
 import { useApplicationModal } from "@/components/application/ApplicationContext";
 import { useSiteContent } from "@/lib/hooks/use-site-content";
+import { useCallback } from "react";
 
 export function Hero() {
   const { openModal } = useApplicationModal();
   const { hero } = useSiteContent();
+
+  const scrollToSection = useCallback((id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  const handleCtaPrimary = useCallback(() => {
+    const raw = (hero.ctaPrimaryLink || "/#courses");
+    const id = raw.replace(/^\//, "").replace(/^#/, "").split("/").pop() || "program";
+    const sectionId = id === "programs" ? "program" : id;
+    scrollToSection(sectionId);
+  }, [hero.ctaPrimaryLink, scrollToSection]);
+
+  const scrollDown = useCallback(() => scrollToSection("about"), [scrollToSection]);
 
   return (
     <section id="home" className="relative h-[100dvh] min-h-[600px]">
@@ -48,14 +62,7 @@ export function Hero() {
               <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
                 <button
                   type="button"
-                  onClick={() => {
-                    const raw = (hero.ctaPrimaryLink || "/#courses");
-                    // Strip leading slash and hash, extract last path segment
-                    const id = raw.replace(/^\//, "").replace(/^#/, "").split("/").pop() || "program";
-                    // Map plural names to actual section IDs
-                    const sectionId = id === "programs" ? "program" : id;
-                    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
+                  onClick={handleCtaPrimary}
                   className="inline-flex h-12 items-center rounded bg-gold px-7 text-sm font-semibold text-navy transition-colors duration-150 hover:bg-gold/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
                 >
                   {hero.ctaPrimary || "Explore Courses"}
@@ -74,9 +81,7 @@ export function Hero() {
           <FadeIn delay={0.9} y={0} className="absolute bottom-8 left-1/2 -translate-x-1/2">
             <button
               type="button"
-              onClick={() => {
-                document.getElementById("about")?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
+              onClick={scrollDown}
               className="group flex min-h-[44px] flex-col items-center justify-center gap-2 text-white/40 transition-colors hover:text-white/70"
               aria-label="Learn more about us"
             >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useReducedMotion } from "@/lib/hooks/use-reduced-motion";
 
@@ -21,6 +21,39 @@ interface BackgroundVideoProps {
   lazy?: boolean;
 }
 
+/** Detect slow / data-saver connections */
+function useSlowConnection(): boolean {
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    const conn = (
+      navigator as unknown as {
+        connection?: {
+          saveData?: boolean;
+          effectiveType?: string;
+          addEventListener?: (type: string, handler: () => void) => void;
+          removeEventListener?: (type: string, handler: () => void) => void;
+        };
+      }
+    ).connection;
+    if (conn) {
+      const check = () =>
+        setSlow(
+          conn.saveData === true ||
+          conn.effectiveType === "slow-2g" ||
+          conn.effectiveType === "2g"
+        );
+      check();
+      conn.addEventListener?.("change", check);
+      return () => {
+        conn.removeEventListener?.("change", check);
+      };
+    }
+  }, []);
+
+  return slow;
+}
+
 export function BackgroundVideo({
   src,
   poster,
@@ -32,12 +65,16 @@ export function BackgroundVideo({
 }: BackgroundVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const prefersReduced = useReducedMotion();
+  const slowConnection = useSlowConnection();
   const [isVisible, setIsVisible] = useState(!lazy);
   const [hasError, setHasError] = useState(false);
 
+  // Skip video entirely for reduced-motion or slow connections (show poster only)
+  const skipVideo = prefersReduced || (slowConnection && lazy);
+
   // ── Lazy-load via IntersectionObserver ────────
   useEffect(() => {
-    if (!lazy || isVisible) return;
+    if (!lazy || isVisible || skipVideo) return;
 
     const el = videoRef.current;
     if (!el) return;
@@ -54,17 +91,12 @@ export function BackgroundVideo({
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [lazy, isVisible]);
+  }, [lazy, isVisible, skipVideo]);
 
   // ── Ensure autoplay works on mobile (iOS/Safari) ─
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
-
-    if (prefersReduced) {
-      video.pause();
-      return;
-    }
+    if (!video || skipVideo) return;
 
     // Native autoplay via attribute handles most browsers.
     // For iOS Safari, also try programmatic play as a fallback.
@@ -77,40 +109,46 @@ export function BackgroundVideo({
     // Small delay ensures the DOM is ready on iOS
     const timer = setTimeout(tryPlay, 100);
     return () => clearTimeout(timer);
-  }, [prefersReduced]);
+  }, [skipVideo]);
 
   // ── iOS fallback: tap to unmute ──────────────
-  const handleTap = () => {
+  const handleTap = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
       video.muted = false;
       video.play().catch(() => {});
     }
-  };
+  }, []);
 
   const overlay = overlayColor.replace("VAR", String(overlayOpacity));
+
+  const videoSource = useMemo(() => {
+    if (skipVideo || hasError) return null;
+    if (!isVisible && lazy) return null;
+    return (
+      <video
+        ref={videoRef}
+        className="absolute inset-0 h-full w-full object-cover"
+        autoPlay={!skipVideo}
+        muted
+        loop
+        playsInline
+        preload={lazy ? "none" : "metadata"}
+        poster={poster}
+        onError={() => setHasError(true)}
+        onClick={handleTap}
+        aria-hidden="true"
+      >
+        <source src={src} type="video/mp4" />
+      </video>
+    );
+  }, [skipVideo, hasError, lazy, isVisible, poster, src, handleTap]);
 
   return (
     <div className={cn("relative overflow-hidden", className)}>
       {/* Video layer */}
-      {!hasError && (
-        <video
-          ref={videoRef}
-          className="absolute inset-0 h-full w-full object-cover cursor-pointer"
-          autoPlay={!prefersReduced}
-          muted
-          loop
-          playsInline
-          preload={lazy ? "none" : "metadata"}
-          poster={poster}
-          onError={() => setHasError(true)}
-          onClick={handleTap}
-          aria-hidden="true"
-        >
-          {isVisible && <source src={src} type="video/mp4" />}
-        </video>
-      )}
+      {videoSource}
 
       {/* Dark overlay */}
       <div

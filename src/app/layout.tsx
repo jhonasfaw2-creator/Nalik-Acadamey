@@ -16,13 +16,26 @@ const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
+  preload: true,
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
   display: "swap",
+  preload: false,
 });
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#151B29" },
+    { media: "(prefers-color-scheme: light)", color: "#F4F3EE" },
+  ],
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// Revalidate every 60 seconds on Vercel (ISR)
+export const revalidate = 60;
+
 // ── GET: Public content endpoint ──────────────
 export async function GET() {
   try {
@@ -17,10 +20,14 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({
-      content,
-      programs: [],
-    });
+    return NextResponse.json(
+      { content, programs: [] },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        },
+      }
+    );
   } catch (error) {
     console.error("Public content error:", error);
     return NextResponse.json(

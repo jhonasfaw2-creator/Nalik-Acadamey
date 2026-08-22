@@ -21,11 +21,11 @@ export function VideoCard({ item, className, featured }: VideoCardProps) {
   const [isMuted, setIsMuted] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-play on scroll
+  // Auto-play on scroll (pause when out of view)
   useEffect(() => {
     const video = videoRef.current;
     const container = containerRef.current;
-    if (!video || !container) return;
+    if (!video || !container || prefersReduced) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -41,7 +41,7 @@ export function VideoCard({ item, className, featured }: VideoCardProps) {
 
     observer.observe(container);
     return () => observer.disconnect();
-  }, []);
+  }, [prefersReduced]);
 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
@@ -96,6 +96,7 @@ export function VideoCard({ item, className, featured }: VideoCardProps) {
         loop
         playsInline
         preload="metadata"
+        poster={item.posterImage || undefined}
         aria-hidden="true"
       />
 

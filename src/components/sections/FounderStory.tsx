@@ -17,11 +17,12 @@ function FounderVideo({ videoSrc }: { videoSrc: string }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [progress, setProgress] = useState(0);
+  const prefersReduced = useReducedMotion();
 
   useEffect(() => {
     const video = videoRef.current;
     const container = containerRef.current;
-    if (!video || !container) return;
+    if (!video || !container || prefersReduced) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -42,7 +43,7 @@ function FounderVideo({ videoSrc }: { videoSrc: string }) {
 
     observer.observe(container);
     return () => observer.disconnect();
-  }, []);
+  }, [prefersReduced]);
 
   useEffect(() => {
     const video = videoRef.current;

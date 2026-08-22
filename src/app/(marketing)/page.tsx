@@ -1,13 +1,41 @@
+import dynamic from "next/dynamic";
 import { Hero } from "@/components/sections/Hero";
-import { AboutNalik } from "@/components/sections/AboutNalik";
-import { WhatWeTeach } from "@/components/sections/WhatWeTeach";
-import { FeaturedCourses } from "@/components/sections/FeaturedCourses";
-import { CareerPath } from "@/components/sections/CareerPath";
-import { FounderStory } from "@/components/sections/FounderStory";
-import { OurWork } from "@/components/sections/OurWork";
-import { LearningProcess } from "@/components/sections/LearningProcess";
-import { ContactSection } from "@/components/sections/ContactSection";
-import { FinalCTA } from "@/components/sections/FinalCTA";
+
+// Below-fold sections: dynamically imported for JS code-splitting.
+// Server still renders the HTML for SEO; the client hydrates when the chunk loads.
+const AboutNalik = dynamic(() =>
+  import("@/components/sections/AboutNalik").then((m) => m.AboutNalik)
+);
+const WhatWeTeach = dynamic(() =>
+  import("@/components/sections/WhatWeTeach").then((m) => m.WhatWeTeach)
+);
+const FeaturedCourses = dynamic(() =>
+  import("@/components/sections/FeaturedCourses").then(
+    (m) => m.FeaturedCourses
+  )
+);
+const CareerPath = dynamic(() =>
+  import("@/components/sections/CareerPath").then((m) => m.CareerPath)
+);
+const FounderStory = dynamic(() =>
+  import("@/components/sections/FounderStory").then((m) => m.FounderStory)
+);
+const OurWork = dynamic(() =>
+  import("@/components/sections/OurWork").then((m) => m.OurWork)
+);
+const LearningProcess = dynamic(() =>
+  import("@/components/sections/LearningProcess").then(
+    (m) => m.LearningProcess
+  )
+);
+const ContactSection = dynamic(() =>
+  import("@/components/sections/ContactSection").then(
+    (m) => m.ContactSection
+  )
+);
+const FinalCTA = dynamic(() =>
+  import("@/components/sections/FinalCTA").then((m) => m.FinalCTA)
+);
 
 export default function HomePage() {
   return (
