@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { Loader2, Upload, ExternalLink } from "lucide-react";
 import { useAdminAuth } from "@/components/admin/AdminAuthProvider";
@@ -229,11 +230,15 @@ export function SectionEditor({ config }: { config: SectionConfig }) {
                             playsInline
                           />
                         ) : (
-                          <img
-                            src={sectionData[field.name]}
-                            alt={field.label}
-                            className="h-20 rounded object-cover"
-                          />
+                          <div className="relative h-20 w-full overflow-hidden rounded">
+                            <Image
+                              src={sectionData[field.name]}
+                              alt={field.label}
+                              fill
+                              sizes="(max-width: 768px) 100vw, 320px"
+                              className="object-cover"
+                            />
+                          </div>
                         )}
                       </div>
                     )}

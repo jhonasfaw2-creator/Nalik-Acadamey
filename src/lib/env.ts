@@ -23,6 +23,12 @@ export function validateEnv() {
     }
   }
 
+  for (const key of OPTIONAL_VARS) {
+    if (!process.env[key]) {
+      console.info(`[Env] Optional variable not set: ${key}`);
+    }
+  }
+
   if (missing.length > 0) {
     console.error(
       `[Env] Missing required environment variables: ${missing.join(", ")}. ` +

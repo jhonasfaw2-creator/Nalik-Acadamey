@@ -60,14 +60,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_ET",
-    url: "https://nalikacademy.com",
+    url: SITE_URL,
     siteName: "Nalik Academy",
     title: "Nalik Academy | Professional Video Editing Education",
     description:
       "Master DaVinci Resolve and Adobe Premiere Pro with hands-on, career-focused training at Nalik Academy in Addis Ababa, Ethiopia.",
     images: [
       {
-        url: "/images/og/nalik-academy-og.jpg",
+        url: "/logo/nalik-acadamey.png",
         width: 1200,
         height: 630,
         alt: "Nalik Academy | Professional Video Editing Education",
@@ -79,15 +79,20 @@ export const metadata: Metadata = {
     title: "Nalik Academy | Professional Video Editing Education",
     description:
       "Master DaVinci Resolve and Adobe Premiere Pro with hands-on, career-focused training at Nalik Academy.",
-    images: ["/images/og/nalik-academy-og.jpg"],
+    images: ["/logo/nalik-acadamey.png"],
     creator: "@nalikacademy",
   },
   alternates: {
-    canonical: "https://nalikacademy.com",
+    canonical: SITE_URL,
   },
   category: "Education",
   icons: {
-    icon: "/favicon.svg",
+    icon: [
+      { url: "/logo/nalik-acadamey.png", type: "image/png" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/logo/nalik-acadamey.png",
+    apple: "/logo/nalik-acadamey.png",
   },
 };
 

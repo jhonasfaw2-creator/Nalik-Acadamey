@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState, useRef } from "react";
 import { Loader2, Plus, Pencil, Trash2, Upload, GripVertical } from "lucide-react";
 import { useAdminAuth } from "@/components/admin/AdminAuthProvider";
@@ -265,11 +266,15 @@ export default function AdminOurWorkPage() {
                   {uploading ? "Uploading..." : "Upload Poster"}
                 </button>
                 {form.posterImage && (
-                  <img
-                    src={form.posterImage}
-                    alt="Preview"
-                    className="h-10 w-16 rounded object-cover"
-                  />
+                  <div className="relative h-10 w-16 overflow-hidden rounded">
+                    <Image
+                      src={form.posterImage}
+                      alt="Preview"
+                      fill
+                      sizes="64px"
+                      className="object-cover"
+                    />
+                  </div>
                 )}
               </div>
             </Field>
@@ -310,11 +315,15 @@ export default function AdminOurWorkPage() {
             >
               <GripVertical className="h-4 w-4 text-navy/20" />
               {item.posterImage ? (
-                <img
-                  src={item.posterImage}
-                  alt={item.title}
-                  className="h-12 w-16 rounded object-cover"
-                />
+                <div className="relative h-12 w-16 overflow-hidden rounded">
+                  <Image
+                    src={item.posterImage}
+                    alt={item.title}
+                    fill
+                    sizes="64px"
+                    className="object-cover"
+                  />
+                </div>
               ) : (
                 <div className="h-12 w-16 rounded bg-navy/5" />
               )}
