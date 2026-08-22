@@ -2,46 +2,51 @@ import { PrismaClient } from "@/generated/prisma/client";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-function createPrismaClient() {
-  const databaseUrl = process.env.DATABASE_URL;
-
-  // Production: use Turso (libSQL)
-  if (databaseUrl?.startsWith("libsql://") || databaseUrl?.startsWith("https://")) {
-    // Dynamic import to avoid bundling libSQL in dev
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const _libsql = require("@prisma/adapter-libsql");
-    // Resolve common export shapes
-    let PrismaLibSQL = _libsql.PrismaLibSQL ?? _libsql.default ?? _libsql;
-    let adapter;
-    if (typeof PrismaLibSQL === "function") {
-      adapter = new PrismaLibSQL({ url: databaseUrl, authToken: process.env.TURSO_AUTH_TOKEN });
-    } else if (PrismaLibSQL && typeof PrismaLibSQL.create === "function") {
-      adapter = PrismaLibSQL.create({ url: databaseUrl, authToken: process.env.TURSO_AUTH_TOKEN });
-    } else if (typeof _libsql.createAdapter === "function") {
-      adapter = _libsql.createAdapter({ url: databaseUrl, authToken: process.env.TURSO_AUTH_TOKEN });
-    } else {
-      adapter = PrismaLibSQL;
-    }
-
-    return new PrismaClient({ adapter });
-  }
-
-  // Development: use local SQLite via better-sqlite3
+function resolveLibsqlAdapter(databaseUrl: string) {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const _bs3 = require("@prisma/adapter-better-sqlite3");
-  let PrismaBetterSqlite3 = _bs3.PrismaBetterSqlite3 ?? _bs3.default ?? _bs3;
-  let adapter;
-  if (typeof PrismaBetterSqlite3 === "function") {
-    adapter = new PrismaBetterSqlite3({ url: databaseUrl || "file:./dev.db" });
-  } else if (PrismaBetterSqlite3 && typeof PrismaBetterSqlite3.create === "function") {
-    adapter = PrismaBetterSqlite3.create({ url: databaseUrl || "file:./dev.db" });
-  } else if (typeof _bs3.createAdapter === "function") {
-    adapter = _bs3.createAdapter({ url: databaseUrl || "file:./dev.db" });
-  } else {
-    adapter = PrismaBetterSqlite3;
+  const libsqlModule = require("@prisma/adapter-libsql");
+  const PrismaLibSql =
+    libsqlModule.PrismaLibSql ??
+    libsqlModule.PrismaLibSQL ??
+    libsqlModule.default?.PrismaLibSql ??
+    libsqlModule.default?.PrismaLibSQL;
+
+  if (!PrismaLibSql) {
+    throw new Error("@prisma/adapter-libsql did not export PrismaLibSql");
   }
 
-  return new PrismaClient({ adapter });
+  return new PrismaLibSql({
+    url: databaseUrl,
+    authToken: process.env.TURSO_AUTH_TOKEN,
+  });
+}
+
+function resolveSqliteAdapter(databaseUrl: string) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const sqliteModule = require("@prisma/adapter-better-sqlite3");
+  const PrismaBetterSqlite3 =
+    sqliteModule.PrismaBetterSqlite3 ??
+    sqliteModule.default?.PrismaBetterSqlite3 ??
+    sqliteModule.default ??
+    sqliteModule;
+
+  if (!PrismaBetterSqlite3) {
+    throw new Error("@prisma/adapter-better-sqlite3 did not export PrismaBetterSqlite3");
+  }
+
+  return new PrismaBetterSqlite3({
+    url: databaseUrl,
+  });
+}
+
+function createPrismaClient() {
+  const databaseUrl = process.env.DATABASE_URL || "file:./dev.db";
+
+  if (databaseUrl.startsWith("libsql://") || databaseUrl.startsWith("https://")) {
+    return new PrismaClient({ adapter: resolveLibsqlAdapter(databaseUrl) });
+  }
+
+  return new PrismaClient({ adapter: resolveSqliteAdapter(databaseUrl) });
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
