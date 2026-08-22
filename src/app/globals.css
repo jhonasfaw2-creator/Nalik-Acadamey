@@ -83,8 +83,10 @@ img, video {
   height: auto;
 }
 
-/* Prevent horizontal overflow from videos/media */
-section {
+/* Prevent horizontal overflow — only on the main wrapper, not every section
+   (overflow-x: clip on sections clips absolutely-positioned children like
+    the navbar mobile menu dropdown). */
+main {
   overflow-x: clip;
 }
 
