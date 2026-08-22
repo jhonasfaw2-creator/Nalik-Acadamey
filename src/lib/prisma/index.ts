@@ -1,11 +1,10 @@
 import { createClient } from '@libsql/client';
 import { PrismaLibSQL } from '@prisma/adapter-libsql';
-// Adjust this path if your generated client is located elsewhere
-import { PrismaClient } from '../../generated/prisma'; 
+import { PrismaClient } from '../../generated/prisma'; // Adjust path if needed
 
 // 1. Initialize the LibSQL client first
 const libsql = createClient({
-  url: databaseUrl, // Ensure databaseUrl is defined in your file
+  url: process.env.TURSO_DATABASE_URL!, // Make sure this matches your env variable name
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
