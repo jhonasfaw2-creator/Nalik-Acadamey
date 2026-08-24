@@ -34,27 +34,45 @@ export default function OurWork() {
       .catch(() => {});
   }, []);
 
+  // Scroll reveal for heading
   useEffect(() => {
+    const el = headingRef.current;
+    if (!el) return;
+    el.classList.add("reveal");
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("opacity-100", "translate-y-0");
-            entry.target.classList.remove("opacity-0", "translate-y-6");
-          }
-        });
-      },
+      ([entry]) => { if (entry.isIntersecting) { el.classList.add("visible"); observer.unobserve(el); } },
       { threshold: 0.1 }
     );
-    const els = [headingRef.current, gridRef.current].filter(Boolean);
-    els.forEach((el) => observer.observe(el!));
-    return () => els.forEach((el) => observer.unobserve(el!));
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
+
+  // Staggered card reveal
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+
+    const cards = Array.from(grid.children) as HTMLElement[];
+    cards.forEach((card, i) => {
+      card.classList.add("reveal-child");
+      card.style.transitionDelay = `${i * 0.12}s`;
+    });
+
+    grid.classList.add("stagger-children");
+    grid.classList.add("reveal");
+
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { grid.classList.add("visible"); observer.unobserve(grid); } },
+      { threshold: 0.1 }
+    );
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [projects]);
 
   return (
     <section id="our-work" className="bg-warm-white px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div ref={headingRef} className="opacity-0 translate-y-6 transition-all duration-700 ease-out">
+        <div ref={headingRef}>
           <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">Our Work</p>
           <h2 className="max-w-2xl text-3xl font-bold leading-snug text-navy sm:text-4xl">
             See what our students and team have created.
@@ -64,7 +82,7 @@ export default function OurWork() {
           </p>
         </div>
 
-        <div ref={gridRef} className="mt-12 grid gap-8 sm:grid-cols-2 opacity-0 translate-y-6 transition-all duration-700 delay-150 ease-out">
+        <div ref={gridRef} className="mt-12 grid gap-8 sm:grid-cols-2">
           {projects.map((project) => (
             <VideoCard key={project.id} project={project} />
           ))}
@@ -76,6 +94,7 @@ export default function OurWork() {
 
 function VideoCard({ project }: { project: Project }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -83,6 +102,10 @@ function VideoCard({ project }: { project: Project }) {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
+          if (video.getAttribute("preload") === "none") {
+            video.setAttribute("preload", "metadata");
+            video.load();
+          }
           video.play().catch(() => {});
         } else {
           video.pause();
@@ -92,33 +115,39 @@ function VideoCard({ project }: { project: Project }) {
     );
     observer.observe(video);
     return () => observer.disconnect();
-  }, []);
+  }, [project.videoUrl]);
 
-  const videoSrc = project.videoUrl || "/assets/our works/cinmatic vedio.mp4";
+  if (!project.videoUrl) return null;
 
   return (
-    <div className="group overflow-hidden rounded-xl border border-gray-200 bg-white transition-shadow duration-300 hover:shadow-lg">
+    <div className="card-hover overflow-hidden rounded-xl bg-white shadow-sm">
       <div className="relative aspect-video overflow-hidden bg-navy">
         <video
           ref={videoRef}
           muted
           loop
           playsInline
-          preload="metadata"
-          controls
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+          preload="none"
+          poster={project.posterUrl || undefined}
+          onLoadedData={() => setReady(true)}
+          className="h-full w-full object-cover"
         >
-          <source src={videoSrc} type="video/mp4" />
+          <source src={project.videoUrl} type="video/mp4" />
         </video>
-        {project.category && (
-          <div className="absolute left-3 top-3 rounded-full bg-navy/70 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
-            {project.category}
+        {!ready && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="h-8 w-8 animate-pulse rounded-full bg-white/20" />
           </div>
+        )}
+        {project.category && (
+          <span className="absolute left-3 top-3 rounded-full bg-navy/70 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
+            {project.category}
+          </span>
         )}
       </div>
       <div className="p-5">
         <h3 className="text-lg font-bold text-navy">{project.title}</h3>
-        <p className="mt-2 text-sm leading-relaxed text-gray-500">{project.description}</p>
+        <p className="mt-2 text-sm leading-relaxed text-gray-600">{project.description}</p>
       </div>
     </div>
   );

@@ -13,7 +13,7 @@ const QUICK_LINKS = [
 const CONTACT_ITEMS = [
   { label: "+251 911 223 344", href: "tel:+251911223344", icon: Phone },
   { label: "info@nalikacademy.com", href: "mailto:info@nalikacademy.com", icon: Mail },
-  { label: "Addis Ababa, Ethiopia", href: "#", icon: MapPin },
+  { label: "Addis Ababa, Ethiopia", href: "https://maps.app.goo.gl/CgbFhJJYRSGMnWbg8", icon: MapPin },
 ];
 
 const SOCIAL_LINKS = [
@@ -55,7 +55,7 @@ export default function Footer() {
                   href={link.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-white/50 transition-all duration-200 hover:bg-gold/20 hover:text-gold"
+                  className="social-link flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-white/50 hover:bg-gold/20 hover:text-gold"
                   aria-label={link.label}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">

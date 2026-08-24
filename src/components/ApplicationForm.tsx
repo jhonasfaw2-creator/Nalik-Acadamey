@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { X, CheckCircle, Loader2, AlertCircle, RefreshCw } from "lucide-react";
+
 interface CourseOption {
   id: string;
   title: string;
@@ -12,7 +14,6 @@ const FALLBACK_COURSES: CourseOption[] = [
   { id: "2", title: "DaVinci Resolve", price: "8,000 Birr" },
   { id: "3", title: "Adobe Premiere", price: "8,000 Birr" },
 ];
-import { X, CheckCircle, Loader2 } from "lucide-react";
 
 interface ApplicationFormProps {
   open: boolean;
@@ -38,6 +39,11 @@ export default function ApplicationForm({
   const [referenceId, setReferenceId] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState("");
+  const [networkError, setNetworkError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+
+  const [courseList, setCourseList] = useState<CourseOption[]>(FALLBACK_COURSES);
+  const [coursesLoaded, setCoursesLoaded] = useState(false);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -62,18 +68,25 @@ export default function ApplicationForm({
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
-  const [courseList, setCourseList] = useState<CourseOption[]>(FALLBACK_COURSES);
-
   useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
     fetch("/api/courses")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load courses");
+        return r.json();
+      })
       .then((d) => {
-        if (Array.isArray(d) && d.length > 0) {
+        if (!cancelled && Array.isArray(d) && d.length > 0) {
           setCourseList(d.map((c: { id: string; title: string; price: string }) => ({ id: c.id, title: c.title, price: c.price })));
         }
+        setCoursesLoaded(true);
       })
-      .catch(() => {});
-  }, []);
+      .catch(() => {
+        if (!cancelled) setCoursesLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, [open]);
 
   const courseSelectRef = useRef<HTMLSelectElement>(null);
   useEffect(() => {
@@ -87,6 +100,8 @@ export default function ApplicationForm({
     setReferenceId("");
     setErrors({});
     setServerError("");
+    setNetworkError(false);
+    setRetryCount(0);
   }, []);
 
   const handleClose = useCallback(() => {
@@ -132,6 +147,7 @@ export default function ApplicationForm({
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setServerError("");
+    setNetworkError(false);
 
     const form = e.currentTarget;
     const formData = new FormData(form);
@@ -144,7 +160,6 @@ export default function ApplicationForm({
       courseSelection: String(formData.get("courseSelection") || ""),
       previousExperience: String(formData.get("previousExperience") || ""),
       motivation: String(formData.get("motivation") || ""),
-
     };
 
     const validationErrors = validate(values);
@@ -154,32 +169,56 @@ export default function ApplicationForm({
     setSubmitting(true);
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
       const res = await fetch("/api/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
+        signal: controller.signal,
       });
 
-      const data = await res.json();
+      clearTimeout(timeoutId);
+
+      let data: { success?: boolean; referenceId?: string; error?: string } = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = { error: "Invalid response from server" };
+      }
 
       if (res.ok && data.success) {
-        setReferenceId(data.referenceId);
+        setReferenceId(data.referenceId || "");
         setSubmitted(true);
       } else if (res.status === 409) {
         setServerError(data.error || "You have already applied for this course.");
         if (data.referenceId) setReferenceId(data.referenceId);
+      } else if (res.status >= 500) {
+        setServerError(data.error || "Server error. Please try again later.");
       } else {
         setServerError(data.error || "Something went wrong. Please try again.");
       }
-    } catch {
-      setServerError("Network error. Please check your connection and try again.");
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        setServerError("Request timed out. Please check your connection and try again.");
+      } else {
+        setNetworkError(true);
+        setServerError("Network error. Please check your connection and try again.");
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
+  const handleRetry = () => {
+    setServerError("");
+    setNetworkError(false);
+    setRetryCount((c) => c + 1);
+  };
+
   const fieldClass =
-    "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy placeholder-gray-400 transition-colors focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20";
+    "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy placeholder-gray-400 transition-colors focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20 disabled:bg-gray-50";
 
   const errorClass = "mt-1 text-xs text-red-500";
 
@@ -224,11 +263,22 @@ export default function ApplicationForm({
               </button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} key={retryCount} className="space-y-4">
               {serverError && (
-                <div className="rounded-lg bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
-                  {serverError}
+                <div className="rounded-lg bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600 flex items-start gap-2">
+                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                  <span>{serverError}</span>
                 </div>
+              )}
+
+              {networkError && (
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gold/30 bg-gold/5 px-4 py-2 text-sm font-medium text-gold transition-colors hover:bg-gold/10"
+                >
+                  <RefreshCw size={14} /> Retry
+                </button>
               )}
 
               <div>
@@ -267,8 +317,8 @@ export default function ApplicationForm({
                 <label htmlFor="courseSelection" className="mb-1 block text-sm font-medium text-gray-700">
                   Course Selection <span className="text-gold">*</span>
                 </label>
-                <select id="courseSelection" name="courseSelection" ref={courseSelectRef} className={fieldClass}>
-                  <option value="">Select a course</option>
+                <select id="courseSelection" name="courseSelection" ref={courseSelectRef} className={fieldClass} disabled={!coursesLoaded}>
+                  <option value="">{coursesLoaded ? "Select a course" : "Loading courses..."}</option>
                   {courseList.map((c) => (
                     <option key={c.id} value={c.title}>{c.title} — {c.price}</option>
                   ))}

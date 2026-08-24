@@ -32,12 +32,25 @@ export default function Founders() {
       .catch(() => {});
   }, []);
 
+  // Scroll reveal
   useEffect(() => {
+    const els = [contentRef.current, mediaRef.current].filter(Boolean);
+    els.forEach((el, i) => {
+      if (!el) return;
+      el.classList.add("reveal");
+      el.style.transitionDelay = `${i * 0.15}s`;
+    });
     const observer = new IntersectionObserver(
-      (entries) => { entries.forEach((entry) => { if (entry.isIntersecting) { entry.target.classList.add("opacity-100", "translate-y-0"); entry.target.classList.remove("opacity-0", "translate-y-6"); } }); },
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
       { threshold: 0.15 }
     );
-    const els = [contentRef.current, mediaRef.current].filter(Boolean);
     els.forEach((el) => observer.observe(el!));
     return () => els.forEach((el) => observer.unobserve(el!));
   }, []);
@@ -47,17 +60,17 @@ export default function Founders() {
       <div className="mx-auto max-w-7xl">
         <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">{data.badge}</p>
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
-          <div ref={mediaRef} className="opacity-0 translate-y-6 transition-all duration-700 ease-out order-2 lg:order-1">
+          <div ref={mediaRef} className="order-2 lg:order-1">
             <div className="relative mx-auto max-w-xs overflow-hidden rounded-lg bg-navy">
               <img src="/assets/logo.jpeg" alt="Nalik Academy founding team" className="h-auto w-full" loading="lazy" />
             </div>
           </div>
-          <div ref={contentRef} className="opacity-0 translate-y-6 transition-all duration-700 delay-150 ease-out order-1 lg:order-2">
+          <div ref={contentRef} className="order-1 lg:order-2">
             <h2 className="text-3xl font-bold leading-snug text-navy sm:text-4xl">{data.name}</h2>
             <p className="mt-2 text-sm font-semibold uppercase tracking-wide text-gold">{data.role}</p>
             <p className="mt-6 text-base leading-relaxed text-gray-600">{data.bio}</p>
             <div className="mt-8 flex flex-wrap gap-4">
-              <a href="#contact" onClick={(e) => { e.preventDefault(); const el = document.getElementById("contact"); if (el) { const top = el.getBoundingClientRect().top + window.scrollY - 80; window.scrollTo({ top, behavior: "smooth" }); } }} className="inline-flex items-center gap-2 rounded-md bg-navy px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-navy-light hover:shadow-md">
+              <a href="#contact" onClick={(e) => { e.preventDefault(); const el = document.getElementById("contact"); if (el) { const top = el.getBoundingClientRect().top + window.scrollY - 80; window.scrollTo({ top, behavior: "smooth" }); } }} className="btn-navy inline-flex items-center gap-2 rounded-md bg-navy px-6 py-2.5 text-sm font-semibold text-white">
                 Get in Touch <ArrowRight size={14} />
               </a>
             </div>

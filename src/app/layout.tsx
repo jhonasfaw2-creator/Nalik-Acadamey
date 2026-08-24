@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -10,6 +10,12 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#151B29",
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -17,6 +23,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        {/* Performance: preconnect to self for API calls */}
+        <link rel="preconnect" href="/" />
+      </head>
       <body className="min-h-screen bg-white text-navy antialiased">
         {children}
       </body>

@@ -37,6 +37,7 @@ export default function AdminApplications() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [viewing, setViewing] = useState<Application | null>(null);
 
   const load = useCallback(() => {
@@ -44,10 +45,18 @@ export default function AdminApplications() {
     if (search) params.set("search", search);
     if (statusFilter) params.set("status", statusFilter);
     fetch(`/api/admin/applications?${params}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load");
+        return r.json();
+      })
       .then((d) => {
         setApplications(d.applications || []);
         setStatusCounts(d.statusCounts || {});
+        setLoading(false);
+        setError("");
+      })
+      .catch((err) => {
+        setError(err.message);
         setLoading(false);
       });
   }, [search, statusFilter]);
@@ -73,7 +82,18 @@ export default function AdminApplications() {
         Manage student applications.
       </p>
 
-      {/* Status counts */}
+      {error && (
+        <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 flex items-center justify-between">
+          <span>{error}</span>
+          <button
+            onClick={load}
+            className="rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <div className="mt-4 flex flex-wrap gap-2">
         {STATUS_OPTIONS.map((opt) => (
           <button
@@ -101,7 +121,6 @@ export default function AdminApplications() {
         ))}
       </div>
 
-      {/* Search */}
       <div className="mt-4">
         <input
           type="text"
@@ -115,7 +134,6 @@ export default function AdminApplications() {
         />
       </div>
 
-      {/* Detail modal */}
       {viewing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-lg bg-white p-6">
@@ -171,7 +189,6 @@ export default function AdminApplications() {
               <p className="mt-1 text-sm text-navy">{viewing.motivation}</p>
             </div>
 
-            {/* Status change */}
             <div className="mt-5">
               <label className="mb-1 block text-sm font-medium text-gray-700">Status</label>
               <div className="flex flex-wrap gap-2">
@@ -194,11 +211,15 @@ export default function AdminApplications() {
         </div>
       )}
 
-      {/* Applications list */}
       {loading ? (
-        <div className="py-12 text-center text-sm text-gray-400">Loading...</div>
+        <div className="mt-6 flex items-center justify-center py-12">
+          <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gold border-t-transparent" />
+          <p className="ml-3 text-sm text-gray-400">Loading applications...</p>
+        </div>
       ) : applications.length === 0 ? (
-        <div className="py-12 text-center text-sm text-gray-400">No applications found.</div>
+        <div className="mt-6 py-12 text-center text-sm text-gray-400">
+          No applications found.
+        </div>
       ) : (
         <div className="mt-4 space-y-2">
           {applications.map((app) => (

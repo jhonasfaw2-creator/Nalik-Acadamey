@@ -17,12 +17,20 @@ export default function ContentEditor({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     fetch(`/api/admin/content?section=${section}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load");
+        return r.json();
+      })
       .then((d) => {
         setData(d);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message);
         setLoading(false);
       });
   }, [section]);
@@ -35,18 +43,41 @@ export default function ContentEditor({
   const handleSave = async () => {
     setSaving(true);
     setSaved(false);
-    await fetch("/api/admin/content", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ section, data }),
-    });
-    setSaving(false);
-    setSaved(true);
+    try {
+      const res = await fetch("/api/admin/content", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section, data }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      setSaved(true);
+    } catch {
+      setError("Failed to save changes");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {
     return (
-      <div className="py-12 text-center text-sm text-gray-400">Loading...</div>
+      <div className="py-12 text-center">
+        <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gold border-t-transparent" />
+        <p className="mt-3 text-sm text-gray-400">Loading content...</p>
+      </div>
+    );
+  }
+
+  if (error && Object.keys(data).length === 0) {
+    return (
+      <div className="py-12 text-center">
+        <p className="text-sm text-red-500">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-3 rounded-md bg-navy px-4 py-2 text-sm font-medium text-white hover:bg-navy-light"
+        >
+          Retry
+        </button>
+      </div>
     );
   }
 
@@ -67,6 +98,12 @@ export default function ContentEditor({
           </button>
         </div>
       </div>
+
+      {error && (
+        <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
+          {error}
+        </div>
+      )}
 
       <div className="rounded-lg border border-gray-200 bg-white p-6">
         <div className="space-y-5">

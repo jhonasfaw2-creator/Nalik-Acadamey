@@ -40,33 +40,55 @@ export default function HowItWorks() {
       .catch(() => {});
   }, []);
 
+  // Scroll reveal heading
   useEffect(() => {
+    const el = headingRef.current;
+    if (!el) return;
+    el.classList.add("reveal");
     const observer = new IntersectionObserver(
-      (entries) => { entries.forEach((entry) => { if (entry.isIntersecting) { entry.target.classList.add("opacity-100", "translate-y-0"); entry.target.classList.remove("opacity-0", "translate-y-6"); } }); },
+      ([entry]) => { if (entry.isIntersecting) { el.classList.add("visible"); observer.unobserve(el); } },
       { threshold: 0.1 }
     );
-    const els = [headingRef.current, gridRef.current].filter(Boolean);
-    els.forEach((el) => observer.observe(el!));
-    return () => els.forEach((el) => observer.unobserve(el!));
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
+
+  // Staggered step reveal
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const cards = Array.from(grid.children) as HTMLElement[];
+    cards.forEach((card, i) => {
+      card.classList.add("reveal-child");
+      card.style.transitionDelay = `${i * 0.12}s`;
+    });
+    grid.classList.add("stagger-children");
+    grid.classList.add("reveal");
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { grid.classList.add("visible"); observer.unobserve(grid); } },
+      { threshold: 0.1 }
+    );
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [content.steps]);
 
   return (
     <section className="bg-white px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div ref={headingRef} className="opacity-0 translate-y-6 transition-all duration-700 ease-out">
+        <div ref={headingRef}>
           <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">{content.badge}</p>
           <h2 className="max-w-2xl text-3xl font-bold leading-snug text-navy sm:text-4xl">{content.title}</h2>
         </div>
-        <div ref={gridRef} className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4 opacity-0 translate-y-6 transition-all duration-700 delay-150 ease-out">
+        <div ref={gridRef} className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {content.steps.map((step, i) => {
             const Icon = ICONS[i] || BookOpen;
             return (
-              <div key={step.title} className="group rounded-xl border border-gray-200 p-6 transition-all duration-300 hover:border-gold/20 hover:shadow-md">
+              <div key={step.title} className="group relative">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gold/10 text-gold transition-colors group-hover:bg-gold/20"><Icon size={18} /></div>
-                  <span className="text-2xl font-bold text-gold/40">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="text-3xl font-bold text-gold/30 transition-colors group-hover:text-gold/50">{String(i + 1).padStart(2, "0")}</span>
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gold/10 text-gold transition-colors duration-300 group-hover:bg-gold/20"><Icon size={18} /></div>
                 </div>
-                <h3 className="mt-4 text-lg font-bold text-navy">{step.title}</h3>
+                <h3 className="mt-3 text-lg font-bold text-navy">{step.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-gray-600">{step.text}</p>
               </div>
             );

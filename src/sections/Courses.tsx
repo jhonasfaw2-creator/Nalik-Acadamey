@@ -25,7 +25,6 @@ const DEFAULTS: Course[] = [
   { id: "3", title: "Adobe Premiere", description: "Master professional video editing from timeline basics to advanced multicam workflows and export settings.", price: "8,000 Birr", discountPrice: "6,500 Birr", discountLabel: "Opening Offer — 19% off", videoUrl: null, posterUrl: null, sortOrder: 3 },
 ];
 
-// Map course titles to local images
 const COURSE_IMAGES: Record<string, string> = {
   "Adobe Illustrator + Photoshop": "/assets/courses/adobe and photo shop.avif",
   "DaVinci Resolve": "/assets/courses/davinci resolve.jpeg",
@@ -49,27 +48,45 @@ export default function Courses({ onApplyWithCourse }: CoursesProps) {
       .catch(() => {});
   }, []);
 
+  // Scroll reveal for heading
   useEffect(() => {
+    const el = headingRef.current;
+    if (!el) return;
+    el.classList.add("reveal");
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("opacity-100", "translate-y-0");
-            entry.target.classList.remove("opacity-0", "translate-y-6");
-          }
-        });
-      },
+      ([entry]) => { if (entry.isIntersecting) { el.classList.add("visible"); observer.unobserve(el); } },
       { threshold: 0.1 }
     );
-    const els = [headingRef.current, gridRef.current].filter(Boolean);
-    els.forEach((el) => observer.observe(el!));
-    return () => els.forEach((el) => observer.unobserve(el!));
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
+
+  // Staggered card reveal
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+
+    const cards = Array.from(grid.children) as HTMLElement[];
+    cards.forEach((card, i) => {
+      card.classList.add("reveal-child");
+      card.style.transitionDelay = `${i * 0.12}s`;
+    });
+
+    grid.classList.add("stagger-children");
+    grid.classList.add("reveal");
+
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { grid.classList.add("visible"); observer.unobserve(grid); } },
+      { threshold: 0.1 }
+    );
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [courses]);
 
   return (
     <section id="courses" ref={sectionRef} className="bg-white px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div ref={headingRef} className="opacity-0 translate-y-6 transition-all duration-700 ease-out">
+        <div ref={headingRef}>
           <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">Our Courses</p>
           <h2 className="max-w-2xl text-3xl font-bold leading-snug text-navy sm:text-4xl">
             Start your creative career with hands-on training.
@@ -79,13 +96,13 @@ export default function Courses({ onApplyWithCourse }: CoursesProps) {
           </p>
         </div>
 
-        <div ref={gridRef} className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 opacity-0 translate-y-6 transition-all duration-700 delay-150 ease-out">
+        <div ref={gridRef} className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {courses.map((course) => {
             const image = course.posterUrl || COURSE_IMAGES[course.title] || null;
             return (
               <div
                 key={course.id}
-                className="group relative flex flex-col items-center rounded-xl border border-gray-200 bg-white p-6 text-center transition-all duration-300 hover:border-gold/20 hover:shadow-lg"
+                className="card-hover group relative flex flex-col items-center rounded-xl border border-gray-200 bg-white p-6 text-center"
               >
                 {image && (
                   <div className="mb-4 h-28 w-28 overflow-hidden rounded-xl bg-gray-50 transition-transform duration-300 group-hover:scale-105">
@@ -115,7 +132,7 @@ export default function Courses({ onApplyWithCourse }: CoursesProps) {
 
                 <button
                   onClick={() => onApplyWithCourse(course.title)}
-                  className="mt-5 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-navy px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-navy-light hover:shadow-md"
+                  className="btn-navy mt-5 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-navy px-5 py-2.5 text-sm font-semibold text-white"
                 >
                   Apply Now <ArrowRight size={14} />
                 </button>

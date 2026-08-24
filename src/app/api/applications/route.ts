@@ -12,7 +12,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // Validate with Zod
     const result = applicationSchema.safeParse(body);
     if (!result.success) {
       const firstError = result.error.errors[0];
@@ -24,7 +23,6 @@ export async function POST(request: NextRequest) {
 
     const data = result.data;
 
-    // Check for duplicate submission (same email + course)
     const existing = await prisma.application.findUnique({
       where: {
         email_courseSelection: {
@@ -45,7 +43,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate unique reference ID (retry on collision)
     let referenceId = generateReferenceId();
     let attempts = 0;
     while (attempts < 5) {
@@ -57,7 +54,6 @@ export async function POST(request: NextRequest) {
       attempts++;
     }
 
-    // Save to database
     const application = await prisma.application.create({
       data: {
         referenceId,
@@ -81,8 +77,11 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("Application submission error:", error);
+    const message = error instanceof Error && error.message.includes("connect")
+      ? "Database connection failed. Please try again later."
+      : "Something went wrong. Please try again later.";
     return NextResponse.json(
-      { error: "Something went wrong. Please try again later." },
+      { error: message },
       { status: 500 }
     );
   }

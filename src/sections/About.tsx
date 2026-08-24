@@ -9,6 +9,8 @@ const DEFAULTS = {
     "We are a hands-on media production academy based in Ethiopia, focused on training the next generation of video editors, graphic designers, and visual storytellers. Our courses are built around real-world projects — not theory alone.",
   paragraph2:
     "Whether you are a complete beginner or looking to sharpen your skills, our structured programs take you from fundamentals to professional-level output using the same tools the industry relies on every day.",
+  video: "/assets/About/about.mp4",
+  poster: "/assets/About/poster.jpg",
 };
 
 export default function About() {
@@ -18,6 +20,7 @@ export default function About() {
   const videoElRef = useRef<HTMLVideoElement>(null);
   const [isMuted, setIsMuted] = useState(true);
   const [content, setContent] = useState(DEFAULTS);
+  const [videoReady, setVideoReady] = useState(false);
 
   useEffect(() => {
     fetch("/api/content?section=about")
@@ -29,35 +32,48 @@ export default function About() {
             title: d.title || DEFAULTS.title,
             paragraph1: d.paragraph1 || DEFAULTS.paragraph1,
             paragraph2: d.paragraph2 || DEFAULTS.paragraph2,
+            video: d.video || DEFAULTS.video,
+            poster: d.poster || DEFAULTS.poster,
           });
         }
       })
       .catch(() => {});
   }, []);
 
+  // Scroll reveal for text and video
   useEffect(() => {
+    const els = [textRef.current, videoRef.current].filter(Boolean);
+    els.forEach((el, i) => {
+      if (!el) return;
+      el.classList.add("reveal");
+      el.style.transitionDelay = `${i * 0.15}s`;
+    });
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            entry.target.classList.add("opacity-100", "translate-y-0");
-            entry.target.classList.remove("opacity-0", "translate-y-6");
+            entry.target.classList.add("visible");
+            observer.unobserve(entry.target);
           }
         });
       },
       { threshold: 0.15 }
     );
-    const els = [textRef.current, videoRef.current].filter(Boolean);
     els.forEach((el) => observer.observe(el!));
     return () => els.forEach((el) => observer.unobserve(el!));
   }, []);
 
+  // Video play/pause on scroll
   useEffect(() => {
     const video = videoElRef.current;
     if (!video) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
+          if (video.getAttribute("preload") === "none") {
+            video.setAttribute("preload", "metadata");
+            video.load();
+          }
           video.play().catch(() => {});
         } else {
           video.pause();
@@ -67,7 +83,7 @@ export default function About() {
     );
     observer.observe(video);
     return () => observer.disconnect();
-  }, []);
+  }, [content.video]);
 
   const toggleSound = () => {
     const video = videoElRef.current;
@@ -83,17 +99,31 @@ export default function About() {
         <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">{content.badge}</p>
 
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
-          <div ref={textRef} className="opacity-0 translate-y-6 transition-all duration-700 ease-out">
+          <div ref={textRef}>
             <h2 className="text-3xl font-bold leading-snug text-navy sm:text-4xl">{content.title}</h2>
             <p className="mt-6 text-base leading-relaxed text-gray-600">{content.paragraph1}</p>
             <p className="mt-4 text-base leading-relaxed text-gray-600">{content.paragraph2}</p>
           </div>
 
-          <div ref={videoRef} className="opacity-0 translate-y-6 transition-all duration-700 delay-150 ease-out">
+          <div ref={videoRef}>
             <div className="relative mx-auto max-w-md overflow-hidden rounded-lg bg-navy">
-              <video ref={videoElRef} muted loop playsInline className="h-auto w-full">
-                <source src="/assets/About/about.mp4" type="video/mp4" />
+              <video
+                ref={videoElRef}
+                muted
+                loop
+                playsInline
+                preload="none"
+                poster={content.poster}
+                onLoadedData={() => setVideoReady(true)}
+                className="h-auto w-full"
+              >
+                <source src={content.video} type="video/mp4" />
               </video>
+              {!videoReady && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="h-8 w-8 animate-pulse rounded-full bg-white/20" />
+                </div>
+              )}
               <button
                 onClick={toggleSound}
                 aria-label={isMuted ? "Unmute video" : "Mute video"}

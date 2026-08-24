@@ -46,37 +46,52 @@ export default function WhatWeTeach() {
       .catch(() => {});
   }, []);
 
+  // Scroll reveal heading
   useEffect(() => {
+    const el = headingRef.current;
+    if (!el) return;
+    el.classList.add("reveal");
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("opacity-100", "translate-y-0");
-            entry.target.classList.remove("opacity-0", "translate-y-6");
-          }
-        });
-      },
+      ([entry]) => { if (entry.isIntersecting) { el.classList.add("visible"); observer.unobserve(el); } },
       { threshold: 0.1 }
     );
-    const els = [headingRef.current, gridRef.current].filter(Boolean);
-    els.forEach((el) => observer.observe(el!));
-    return () => els.forEach((el) => observer.unobserve(el!));
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
+
+  // Staggered card reveal
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const cards = Array.from(grid.children) as HTMLElement[];
+    cards.forEach((card, i) => {
+      card.classList.add("reveal-child");
+      card.style.transitionDelay = `${i * 0.1}s`;
+    });
+    grid.classList.add("stagger-children");
+    grid.classList.add("reveal");
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { grid.classList.add("visible"); observer.unobserve(grid); } },
+      { threshold: 0.1 }
+    );
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [content.tools]);
 
   return (
     <section id="what-we-teach" ref={sectionRef} className="bg-navy px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <div ref={headingRef} className="opacity-0 translate-y-6 transition-all duration-700 ease-out">
+        <div ref={headingRef}>
           <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">{content.badge}</p>
           <h2 className="max-w-2xl text-3xl font-bold leading-snug text-white sm:text-4xl">{content.title}</h2>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-white/60">{content.description}</p>
         </div>
 
-        <div ref={gridRef} className="mt-12 grid gap-6 sm:grid-cols-2 opacity-0 translate-y-6 transition-all duration-700 delay-150 ease-out">
+        <div ref={gridRef} className="mt-12 grid gap-6 sm:grid-cols-2">
           {content.tools.map((tool, i) => {
             const Icon = ICONS[i] || Film;
             return (
-              <div key={tool.name} className="group rounded-lg border border-white/10 bg-white/5 p-6 transition-all duration-300 hover:border-gold/30 hover:bg-white/[0.07]">
+              <div key={tool.name} className="card-hover group rounded-lg border border-white/10 bg-white/5 p-6">
                 <div className="flex items-start gap-4">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gold/10 text-gold transition-colors duration-300 group-hover:bg-gold/20">
                     <Icon size={20} />

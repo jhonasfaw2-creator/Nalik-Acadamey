@@ -172,7 +172,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
 
             <button
               onClick={handleApply}
-              className="group relative overflow-hidden rounded-lg bg-gold px-5 py-2.5 text-[13px] font-bold uppercase tracking-wider text-navy transition-all duration-300 hover:shadow-lg hover:shadow-gold/25"
+              className="btn-gold group relative overflow-hidden rounded-lg bg-gold px-5 py-2.5 text-[13px] font-bold uppercase tracking-wider text-navy"
             >
               <span className="relative z-10 flex items-center gap-1.5">
                 Apply Now <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />

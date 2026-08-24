@@ -60,12 +60,25 @@ export default function Contact({ onApplyClick }: ContactProps) {
       .catch(() => {});
   }, []);
 
+  // Scroll reveal
   useEffect(() => {
+    const els = [contentRef.current, detailsRef.current].filter(Boolean);
+    els.forEach((el, i) => {
+      if (!el) return;
+      el.classList.add("reveal");
+      el.style.transitionDelay = `${i * 0.15}s`;
+    });
     const observer = new IntersectionObserver(
-      (entries) => { entries.forEach((entry) => { if (entry.isIntersecting) { entry.target.classList.add("opacity-100", "translate-y-0"); entry.target.classList.remove("opacity-0", "translate-y-6"); } }); },
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
       { threshold: 0.15 }
     );
-    const els = [contentRef.current, detailsRef.current].filter(Boolean);
     els.forEach((el) => observer.observe(el!));
     return () => els.forEach((el) => observer.unobserve(el!));
   }, []);
@@ -74,7 +87,7 @@ export default function Contact({ onApplyClick }: ContactProps) {
     { label: "Phone", value: content.phone, href: `tel:${content.phone.replace(/\s/g, "")}`, icon: "Phone" },
     { label: "WhatsApp", value: content.whatsapp, href: `https://wa.me/${content.whatsapp.replace(/\s|\+/g, "")}`, icon: "WhatsApp" },
     { label: "Email", value: content.email, href: `mailto:${content.email}`, icon: "Email" },
-    { label: "Location", value: content.location, href: "#", icon: "Location" },
+    { label: "Location", value: content.location, href: "https://maps.app.goo.gl/CgbFhJJYRSGMnWbg8", icon: "Location" },
   ];
 
   const socialLinks = [
@@ -89,23 +102,23 @@ export default function Contact({ onApplyClick }: ContactProps) {
     <section id="contact" ref={sectionRef} className="bg-white px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <div className="grid gap-12 lg:grid-cols-2 lg:gap-16">
-          <div ref={contentRef} className="opacity-0 translate-y-6 transition-all duration-700 ease-out">
+          <div ref={contentRef}>
             <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">{content.badge}</p>
             <h2 className="text-3xl font-bold leading-snug text-navy sm:text-4xl">{content.title}</h2>
             <p className="mt-4 max-w-md text-base leading-relaxed text-gray-600">{content.description}</p>
-            <button onClick={onApplyClick} className="mt-8 inline-flex items-center gap-2 rounded-md bg-gold px-7 py-3 text-sm font-semibold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-lg hover:shadow-gold/20">
+            <button onClick={onApplyClick} className="btn-gold mt-8 inline-flex items-center gap-2 rounded-md bg-gold px-7 py-3 text-sm font-semibold text-navy">
               Join Nalik Academy <ArrowRight size={16} />
             </button>
             <div className="mt-10 flex flex-wrap gap-2.5">
               {socialLinks.map((link) => (
-                <a key={link.label} href={link.href} target="_blank" rel="noopener noreferrer" className="group flex items-center gap-2 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-navy transition-all duration-200 hover:border-gold hover:bg-gold/5 hover:text-gold" aria-label={link.label}>
+                <a key={link.label} href={link.href} target="_blank" rel="noopener noreferrer" className="social-link group flex items-center gap-2 rounded-lg border border-gray-200 px-3.5 py-2 text-sm font-medium text-navy hover:border-gold hover:bg-gold/5 hover:text-gold" aria-label={link.label}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="shrink-0"><path d={link.path} /></svg>
                   <span className="hidden sm:inline">{link.label}</span>
                 </a>
               ))}
             </div>
           </div>
-          <div ref={detailsRef} className="opacity-0 translate-y-6 transition-all duration-700 delay-150 ease-out">
+          <div ref={detailsRef}>
             <div className="space-y-5">
               {contactItems.map((item) => {
                 const Icon = CONTACT_ICONS[item.icon] || Phone;

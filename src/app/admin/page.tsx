@@ -9,11 +9,19 @@ export default function AdminOverview() {
     accepted: 0,
     courses: 0,
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/admin/applications").then((r) => r.json()),
-      fetch("/api/admin/courses").then((r) => r.json()),
+      fetch("/api/admin/applications").then((r) => {
+        if (!r.ok) throw new Error("Failed to load applications");
+        return r.json();
+      }),
+      fetch("/api/admin/courses").then((r) => {
+        if (!r.ok) throw new Error("Failed to load courses");
+        return r.json();
+      }),
     ]).then(([appData, courses]) => {
       setStats({
         applications: appData.applications?.length || 0,
@@ -21,6 +29,10 @@ export default function AdminOverview() {
         accepted: appData.statusCounts?.accepted || 0,
         courses: courses?.length || 0,
       });
+      setLoading(false);
+    }).catch((err) => {
+      setError(err.message);
+      setLoading(false);
     });
   }, []);
 
@@ -38,21 +50,40 @@ export default function AdminOverview() {
         Overview of your academy.
       </p>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cards.map((card) => (
-          <div
-            key={card.label}
-            className="rounded-lg border border-gray-200 bg-white p-5"
+      {error && (
+        <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 flex items-center justify-between">
+          <span>{error}</span>
+          <button
+            onClick={() => window.location.reload()}
+            className="rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200"
           >
-            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-              {card.label}
-            </p>
-            <p className={`mt-2 text-3xl font-bold ${card.color}`}>
-              {card.value}
-            </p>
-          </div>
-        ))}
-      </div>
+            Retry
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="mt-6 flex items-center justify-center py-12">
+          <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gold border-t-transparent" />
+          <p className="ml-3 text-sm text-gray-400">Loading dashboard...</p>
+        </div>
+      ) : (
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {cards.map((card) => (
+            <div
+              key={card.label}
+              className="rounded-lg border border-gray-200 bg-white p-5"
+            >
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                {card.label}
+              </p>
+              <p className={`mt-2 text-3xl font-bold ${card.color}`}>
+                {card.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         <a
