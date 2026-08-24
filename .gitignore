@@ -1,17 +1,5 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
 /node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
 
 # next.js
 /.next/
@@ -26,27 +14,21 @@
 
 # debug
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
+# env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # database
-dev.db
+*.db
 *.db-journal
-
-# media (large files — deploy separately or use CDN)
-public/videos/*.mp4
-public/videos/*.webm
-public/videos/*.mov
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 
+# prisma generated
 /src/generated/prisma

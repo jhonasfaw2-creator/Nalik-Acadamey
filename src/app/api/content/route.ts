@@ -1,38 +1,23 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// Revalidate every 60 seconds on Vercel (ISR)
-export const revalidate = 60;
-
-// ── GET: Public content endpoint ──────────────
-export async function GET() {
-  try {
-    const contentRows = await prisma.websiteContent.findMany();
-
-    // Convert content to key-value, parsing JSON strings
-    const content: Record<string, Record<string, string>> = {};
-    for (const row of contentRows) {
-      try {
-        content[row.key] = JSON.parse(row.value);
-      } catch {
-        // If parsing fails, store as empty object
-        content[row.key] = {};
-      }
-    }
-
-    return NextResponse.json(
-      { content, programs: [] },
-      {
-        headers: {
-          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
-        },
-      }
-    );
-  } catch (error) {
-    console.error("Public content error:", error);
-    return NextResponse.json(
-      { error: "Failed to load content" },
-      { status: 500 }
-    );
+// GET /api/content?section=hero
+export async function GET(request: NextRequest) {
+  const section = request.nextUrl.searchParams.get("section");
+  if (!section) {
+    return NextResponse.json({ error: "section param required" }, { status: 400 });
   }
+
+  const items = await prisma.content.findMany({
+    where: { section },
+    orderBy: { key: "asc" },
+  });
+
+  // Return as a flat object { key: value }
+  const data: Record<string, string> = {};
+  for (const item of items) {
+    data[item.key] = item.value;
+  }
+
+  return NextResponse.json(data);
 }

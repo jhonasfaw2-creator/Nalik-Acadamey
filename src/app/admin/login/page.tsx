@@ -1,169 +1,119 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Loader2, Lock, Mail } from "lucide-react";
-import { useAdminAuth } from "@/components/admin/AdminAuthProvider";
-import { SITE_NAME } from "@/lib/constants";
-import { cn } from "@/lib/utils";
+import { Lock, Loader2, Eye, EyeOff } from "lucide-react";
 
-export default function AdminLoginPage() {
-  const { signIn, user, loading } = useAdminAuth();
+export default function AdminLogin() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Redirect if already logged in
-  useEffect(() => {
-    if (!loading && user) {
-      router.replace("/admin");
-    }
-  }, [user, loading, router]);
-
-  // Show loading while checking auth
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-navy">
-        <Loader2 className="h-8 w-8 animate-spin text-gold" />
-      </div>
-    );
-  }
-
-  // If user is logged in, show nothing while redirect happens
-  if (user) return null;
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setIsSubmitting(true);
+    setError("");
+    setLoading(true);
 
-    const err = await signIn(email, password);
-    if (err) {
-      setError("Invalid email or password. Please try again.");
-      setIsSubmitting(false);
-      return;
+    try {
+      const res = await fetch("/api/admin/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        router.push("/admin");
+        router.refresh();
+      } else {
+        setError(data.error || "Invalid password. Please try again.");
+      }
+    } catch {
+      setError("Connection error. Please try again.");
+    } finally {
+      setLoading(false);
     }
-
-    router.push("/admin");
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-navy px-5">
+    <div className="flex min-h-screen items-center justify-center bg-navy px-4">
       <div className="w-full max-w-sm">
-        {/* Logo / Title */}
+        {/* Logo */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 h-10 w-10 rounded bg-gold/10 flex items-center justify-center">
-            <Lock className="h-5 w-5 text-gold" />
-          </div>
-          <h1 className="text-xl font-bold text-white">
-            {SITE_NAME}
-          </h1>
-          <p className="mt-1 text-sm text-white/40">
-            Admin Dashboard
+          <img
+            src="/assets/logo.jpeg"
+            alt="Nalik Academy"
+            className="mx-auto h-16 w-16 rounded-2xl object-cover shadow-lg"
+          />
+          <h1 className="mt-4 text-2xl font-bold text-white">Nalik Admin</h1>
+          <p className="mt-1 text-sm text-white/50">
+            Enter your password to access the dashboard
           </p>
         </div>
 
-        {/* Login form */}
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-lg border border-white/10 bg-white/5 p-6 backdrop-blur-sm"
-        >
-          <div className="flex flex-col gap-4">
-            {/* Email */}
-            <div>
-              <label
-                htmlFor="admin-email"
-                className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-white/50"
-              >
-                Email
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-                <input
-                  id="admin-email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@nalikacademy.com"
-                  className={cn(
-                    "w-full rounded border border-white/15 bg-white/5 py-2.5 pl-10 pr-3.5 text-sm text-white",
-                    "placeholder:text-white/25 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20 transition-colors"
-                  )}
-                />
-              </div>
-            </div>
-
-            {/* Password */}
-            <div>
-              <label
-                htmlFor="admin-password"
-                className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-white/50"
-              >
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-                <input
-                  id="admin-password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className={cn(
-                    "w-full rounded border border-white/15 bg-white/5 py-2.5 pl-10 pr-3.5 text-sm text-white",
-                    "placeholder:text-white/25 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20 transition-colors"
-                  )}
-                />
-              </div>
-            </div>
-
-            {/* Error */}
+        {/* Login Card */}
+        <div className="rounded-2xl bg-white p-8 shadow-xl">
+          <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div
-                className="rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400"
-                role="alert"
-              >
+              <div className="rounded-lg bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
                 {error}
               </div>
             )}
 
-            {/* Submit */}
+            <div>
+              <label
+                htmlFor="password"
+                className="mb-1.5 block text-sm font-medium text-gray-700"
+              >
+                Password
+              </label>
+              <div className="relative">
+                <Lock
+                  size={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter admin password"
+                  autoFocus
+                  className="w-full rounded-lg border border-gray-200 py-2.5 pl-10 pr-10 text-sm text-navy placeholder-gray-400 transition-colors focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-600"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
             <button
               type="submit"
-              disabled={isSubmitting}
-              className={cn(
-                "mt-1 flex h-11 items-center justify-center gap-2 rounded bg-gold text-sm font-bold text-navy transition-all duration-150",
-                "hover:bg-gold/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold",
-                "disabled:pointer-events-none disabled:opacity-60"
-              )}
+              disabled={loading || !password}
+              className="w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 size={16} className="animate-spin" />
                   Signing in...
-                </>
+                </span>
               ) : (
                 "Sign In"
               )}
             </button>
-          </div>
-        </form>
+          </form>
+        </div>
 
-        {/* Back to site */}
         <p className="mt-6 text-center text-xs text-white/30">
-          <Link
-            href="/"
-            className="text-white/50 underline underline-offset-2 transition-colors hover:text-white/70"
-          >
-            ← Back to {SITE_NAME}
-          </Link>
+          Protected area. Unauthorized access is prohibited.
         </p>
       </div>
     </div>

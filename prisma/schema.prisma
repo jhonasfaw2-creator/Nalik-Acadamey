@@ -1,62 +1,93 @@
+// Nalik Academy - Prisma Schema
+// Database: SQLite
+
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
-model Application {
-  id                String   @id @default(cuid())
-  fullName          String
-  phone             String
-  email             String
-  age               Int
-  location          String
-  program           String
-  skillLevel        String
-  experience        String
-  preferredSchedule String
-  motivation        String
-  status            String   @default("pending") // pending | approved | rejected
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  @@index([email, program], map: "idx_application_email_program")
-  @@index([status])
-  @@index([createdAt])
-}
-
-model WebsiteContent {
+// ── Website Content (CMS-like key-value store) ────────
+model Content {
   id        String   @id @default(cuid())
-  key       String   @unique
-  value     String   // JSON string
+  section   String   // e.g. "hero", "about", "footer"
+  key       String   // e.g. "title", "description", "subtitle"
+  value     String
   updatedAt DateTime @updatedAt
+
+  @@unique([section, key])
 }
 
-model OurWork {
+// ── Courses ───────────────────────────────────────────
+model Course {
+  id             String   @id @default(cuid())
+  title          String
+  description    String
+  price          String   // e.g. "8,000 Birr"
+  discountPrice  String?  // e.g. "6,500 Birr"
+  discountLabel  String?  // e.g. "Opening Offer — 19% off"
+  videoUrl       String?
+  posterUrl      String?
+  sortOrder      Int      @default(0)
+  published      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ── Founders ──────────────────────────────────────────
+model Founder {
   id          String   @id @default(cuid())
-  title       String
-  description String   @default("")
-  videoSrc    String   @default("")
-  posterImage String   @default("")
+  name        String
+  title       String   // e.g. "CEO & Co-Founder"
+  bio         String
+  avatarUrl   String?
+  videoUrl    String?
+  posterUrl   String?
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  @@index([sortOrder])
 }
 
-model Media {
-  id        String   @id @default(cuid())
-  filename  String
-  path      String   @unique
-  url       String
-  size      Int
-  type      String
-  folder    String   @default("uploads")
-  createdAt DateTime @default(now())
+// ── Our Work (Portfolio / Projects) ───────────────────
+model Project {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  videoUrl    String?
+  posterUrl   String?
+  category    String?  // e.g. "Film", "Commercial", "Music Video"
+  sortOrder   Int      @default(0)
+  published   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
 
-  @@index([folder])
+// ── Applications ──────────────────────────────────────
+model Application {
+  id                 String   @id @default(cuid())
+  referenceId        String   @unique // e.g. NA-2026-0001
+  fullName           String
+  email              String
+  phone              String
+  age                Int
+  courseSelection    String
+  previousExperience String
+  motivation         String
+  whatsappNumber     String   @default("")
+  status             String   @default("pending") // pending, reviewed, accepted, rejected
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([email, courseSelection]) // prevent duplicate submissions
+}
+
+// ── Contact Settings ──────────────────────────────────
+model ContactSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique // e.g. "email", "phone", "address", "working_hours"
+  value     String
+  updatedAt DateTime @updatedAt
 }

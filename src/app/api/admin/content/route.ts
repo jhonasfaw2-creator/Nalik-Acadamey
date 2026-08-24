@@ -1,116 +1,43 @@
-import { NextResponse } from "next/server";
-import { z } from "zod";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/api/auth-guard";
-import { createRateLimiter, getClientIp } from "@/lib/api/rate-limit";
 
-const rateLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30 });
-
-// ── Valid content keys (must match SECTION_CONFIGS) ──
-const VALID_KEYS = [
-  "hero",
-  "about",
-  "what_we_teach",
-  "featured_courses",
-  "founder",
-  "our_work",
-  "career_path",
-  "learning_process",
-  "contact",
-  "final_cta",
-  "footer",
-  "programs",
-] as const;
-
-const MAX_VALUE_SIZE = 50_000; // 50KB per section
-
-// ── Zod schema ────────────────────────────────
-const updateContentSchema = z.object({
-  key: z.enum(VALID_KEYS),
-  value: z.record(z.string(), z.string()),
-});
-
-// ── GET: Fetch all site content ───────────────
-export async function GET(request: Request) {
-  const authError = requireAdmin(request);
-  if (authError) return authError;
-
-  try {
-    const rows = await prisma.websiteContent.findMany({
-      orderBy: { key: "asc" },
-    });
-
-    const content: Record<string, Record<string, string>> = {};
-    for (const row of rows) {
-      try {
-        content[row.key] = JSON.parse(row.value);
-      } catch {
-        content[row.key] = {};
-      }
-    }
-
-    return NextResponse.json({ content });
-  } catch (error) {
-    console.error("Content fetch error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch content" },
-      { status: 500 }
-    );
+// GET /api/admin/content?section=hero
+export async function GET(request: NextRequest) {
+  const section = request.nextUrl.searchParams.get("section");
+  if (!section) {
+    return NextResponse.json({ error: "section param required" }, { status: 400 });
   }
+
+  const items = await prisma.content.findMany({
+    where: { section },
+    orderBy: { key: "asc" },
+  });
+
+  // Return as a flat object { key: value }
+  const data: Record<string, string> = {};
+  for (const item of items) {
+    data[item.key] = item.value;
+  }
+
+  return NextResponse.json(data);
 }
 
-// ── PUT: Update site content ──────────────────
-export async function PUT(request: Request) {
-  const authError = requireAdmin(request);
-  if (authError) return authError;
+// PUT /api/admin/content  body: { section, data: { key: value, ... } }
+export async function PUT(request: NextRequest) {
+  const body = await request.json();
+  const { section, data } = body as { section: string; data: Record<string, string> };
 
-  const ip = getClientIp(request);
-  if (rateLimiter.isRateLimited(`content:${ip}`)) {
-    return NextResponse.json(
-      { error: "Too many requests. Please wait." },
-      { status: 429 }
-    );
+  if (!section || !data) {
+    return NextResponse.json({ error: "section and data required" }, { status: 400 });
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-
-  const parsed = updateContentSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message || "Invalid input" },
-      { status: 400 }
-    );
-  }
-
-  const { key, value } = parsed.data;
-
-  // Validate serialized size to prevent oversized payloads
-  const serialized = JSON.stringify(value);
-  if (serialized.length > MAX_VALUE_SIZE) {
-    return NextResponse.json(
-      { error: `Content too large (max ${MAX_VALUE_SIZE / 1000}KB)` },
-      { status: 400 }
-    );
-  }
-
-  try {
-    await prisma.websiteContent.upsert({
-      where: { key },
-      update: { value: serialized },
-      create: { key, value: serialized },
+  for (const [key, value] of Object.entries(data)) {
+    await prisma.content.upsert({
+      where: { section_key: { section, key } },
+      update: { value },
+      create: { section, key, value },
     });
-
-    return NextResponse.json({ message: "Content updated", key });
-  } catch (error) {
-    console.error("Content update error:", error);
-    return NextResponse.json(
-      { error: "Failed to update content" },
-      { status: 500 }
-    );
   }
+
+  return NextResponse.json({ success: true });
 }

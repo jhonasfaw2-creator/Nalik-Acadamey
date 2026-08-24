@@ -1,245 +1,164 @@
-import { PrismaClient } from "../src/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaClient } from "@prisma/client";
 
-const adapter = new PrismaBetterSqlite3({
-  url: process.env.DATABASE_URL || "file:./dev.db",
-});
-const prisma = new PrismaClient({ adapter });
+const prisma = new PrismaClient();
 
 async function main() {
-  console.log("Seeding database...");
+  console.log("🌱 Seeding database...");
 
-  // ── Website Content ──────────────────────────
-  const contentEntries: { key: string; value: string }[] = [
-    {
-      key: "hero",
-      value: JSON.stringify({
-        badge: "Nalik Academy \u2014 Creative Learning",
-        heading: "Edit Your Vision.",
-        headingHighlight: "Create Your Future.",
-        description:
-          "Master video editing, motion graphics, and creative technology with hands-on courses designed to launch your career in the creative industry.",
-        ctaPrimary: "Explore Courses",
-        ctaPrimaryLink: "/#courses",
-        ctaSecondary: "Start Learning",
-        video: "/videos/hero.mp4",
-        poster: "/images/general/hero-poster.jpg",
-      }),
-    },
-    {
-      key: "about",
-      value: JSON.stringify({
-        label: "About the Academy",
-        title: "A New Academy.",
-        titleHighlight: "Focused",
-        description:
-          "Nalik Academy is a new, focused video-editing academy built around one belief: that real skill comes from hands-on practice, not theory alone.",
-        description2:
-          "Created by an experienced editor and content creator, the academy trains students in DaVinci Resolve and Adobe Premiere Pro \u2014 the tools professionals actually use. Every lesson is designed around editing, storytelling, and the skills that matter in the creator economy.",
-        video: "/videos/about.mp4",
-        poster: "/images/general/about-poster.jpg",
-        videoLabel: "Nalik Academy \u2014 Behind the Edit",
-        cta: "Explore Programs",
-        ctaLink: "/#courses",
-        pillar1Label: "Editing",
-        pillar1Desc: "Precision cuts, pacing, and timeline craft.",
-        pillar2Label: "Storytelling",
-        pillar2Desc: "Narrative structure that connects with audiences.",
-        pillar3Label: "Creator Skills",
-        pillar3Desc: "Workflows built for the modern content landscape.",
-      }),
-    },
-    {
-      key: "what_we_teach",
-      value: JSON.stringify({
-        eyebrow: "What We Teach",
-        heading: "Turn Creativity Into a Skill.",
-        subtitle: "The core disciplines every editor needs to master.",
-        item1Title: "Video Editing",
-        item1Desc: "Precision cuts, pacing, and timeline craft that shape raw footage into a compelling story.",
-        item2Title: "Motion Graphics",
-        item2Desc: "Dynamic animations, text effects, and visual elements that bring energy to every frame.",
-        item3Title: "Color Grading",
-        item3Desc: "Cinematic color correction and grading techniques that set the mood and tone of your work.",
-        item4Title: "Audio & Sound",
-        item4Desc: "Sound design, mixing, and audio cleanup that give your edits a polished, professional finish.",
-      }),
-    },
-    {
-      key: "featured_courses",
-      value: JSON.stringify({
-        eyebrow: "Our Programs",
-        heading: "Learn. Create. Master.",
-        subtitle: "Two focused programs designed to take you from beginner to professional editor.",
-        viewAll: "View All Courses",
-      }),
-    },
-    {
-      key: "founder",
-      value: JSON.stringify({
-        label: "The Founder",
-        title: "Learn From Someone",
-        titleHighlight: "Done It.",
-        description:
-          "Built by a professional video editor and content creator who has worked behind the scenes for established Ethiopian digital creators and TikTok creators \u2014 turning raw footage into compelling stories that reach real audiences.",
-        description2:
-          "This academy exists to pass on the exact skills, workflows, and creative thinking that power professional content \u2014 without the guesswork.",
-        video: "/videos/founder.mp4",
-        cta: "Meet the Founder",
-        highlight1: "Video Editing",
-        highlight2: "Storytelling",
-        highlight3: "Content Creation",
-        highlight4: "Industry Connections",
-      }),
-    },
-    {
-      key: "our_work",
-      value: JSON.stringify({
-        title: "Work That",
-        titleHighlight: "Inspires.",
-        subtitle:
-          "A look at the projects we have created. Real edits, built for real audiences.",
-      }),
-    },
-    {
-      key: "career_path",
-      value: JSON.stringify({
-        title: "Your Path to",
-        titleHighlight: "Work-Ready",
-        subtitle:
-          "Nalik Academy focuses on developing strong video-editing skills and preparing students for career opportunities in the creative industry.",
-        note:
-          "High-performing students may have opportunities to be connected with potential first clients through the academy\u2019s network. This is an opportunity, not a guarantee.",
-        step1Label: "Learn",
-        step1Desc:
-          "Master the fundamentals of video editing, motion design, and creative storytelling through structured lessons.",
-        step2Label: "Practice",
-        step2Desc:
-          "Reinforce your skills with hands-on exercises and real-world editing challenges that build muscle memory.",
-        step3Label: "Build Your Skills",
-        step3Desc:
-          "Develop a polished portfolio of professional-quality edits that showcase your creative and technical range.",
-        step4Label: "Become Work-Ready",
-        step4Desc:
-          "Graduate with the confidence, workflows, and industry knowledge to take on freelance or team-based editing work.",
-      }),
-    },
-    {
-      key: "learning_process",
-      value: JSON.stringify({
-        title: "How You",
-        titleHighlight: "Learn",
-        subtitle:
-          "A structured, skill-focused journey from first lesson to portfolio-ready editor.",
-        note:
-          "Built for skill. Every step is designed to develop your craft \u2014 no shortcuts, just focused, practical learning that prepares you for real creative work.",
-        step1Label: "Choose Your Program",
-        step1Desc:
-          "Select a program that aligns with your goals \u2014 from DaVinci Resolve to Adobe Premiere Pro \u2014 and start with a clear roadmap.",
-        step2Label: "Learn the Skills",
-        step2Desc:
-          "Follow structured lessons covering editing fundamentals, motion design, color grading, and creative storytelling.",
-        step3Label: "Practice & Create",
-        step3Desc:
-          "Apply what you learn through hands-on projects, real footage, and exercises that build professional muscle memory.",
-        step4Label: "Build Your Career",
-        step4Desc:
-          "Develop a portfolio of polished work and gain the confidence to pursue freelance or team-based editing opportunities.",
-      }),
-    },
-    {
-      key: "contact",
-      value: JSON.stringify({
-        title: "Let\u2019s Create Something Great.",
-        subtitle:
-          "Have questions about our programs? Ready to start your creative journey? Get in touch \u2014 we\u2019d love to hear from you.",
-        phone: "+251 9XX XXX XXX",
-        whatsapp: "+251911234567",
-        whatsappMessage: "Hello! I\u2019m interested in Nalik Academy.",
-        email: "info@nalikacademy.com",
-        location: "Addis Ababa, Ethiopia",
-        instagram: "https://instagram.com/nalikacademy",
-        tiktok: "https://tiktok.com/@nalikacademy",
-        facebook: "https://facebook.com/nalikacademy",
-        formRecipientEmail: "",
-      }),
-    },
-    {
-      key: "final_cta",
-      value: JSON.stringify({
-        heading: "Ready to Start Editing?",
-        description:
-          "Develop professional video-editing skills and bring your creative vision to life with hands-on training from industry experts.",
-        cta: "Join Nalik Academy",
-        video: "/videos/hero.mp4",
-        poster: "/images/general/editing-workspace.jpg",
-      }),
-    },
-    {
-      key: "footer",
-      value: JSON.stringify({
-        facebook: "https://facebook.com/nalikacademy",
-        instagram: "https://instagram.com/nalikacademy",
-        youtube: "https://youtube.com/nalikacademy",
-        telegram: "https://t.me/nalikacademy",
-      }),
-    },
+  // ── Website Content (key-value for text sections) ────
+  const content: { section: string; key: string; value: string }[] = [
+    // Hero
+    { section: "hero", key: "badge", value: "Professional Media Training" },
+    { section: "hero", key: "title", value: "Master the Art of Visual Storytelling" },
+    { section: "hero", key: "description", value: "Learn filmmaking, video editing, and media production from industry professionals. Transform your creative passion into a career." },
+    { section: "hero", key: "video", value: "/assets/hero/hero.mp4" },
+    // About
+    { section: "about", key: "badge", value: "About Us" },
+    { section: "about", key: "title", value: "Nalik Academy is where aspiring editors become professionals." },
+    { section: "about", key: "paragraph1", value: "We are a hands-on media production academy based in Ethiopia, focused on training the next generation of video editors, graphic designers, and visual storytellers. Our courses are built around real-world projects — not theory alone." },
+    { section: "about", key: "paragraph2", value: "Whether you are a complete beginner or looking to sharpen your skills, our structured programs take you from fundamentals to professional-level output using the same tools the industry relies on every day." },
+    { section: "about", key: "video", value: "/assets/About/about.mp4" },
+    // What We Teach
+    { section: "what-we-teach", key: "badge", value: "What We Teach" },
+    { section: "what-we-teach", key: "title", value: "Practical skills. Professional tools. Real projects." },
+    { section: "what-we-teach", key: "description", value: "Every course at Nalik Academy is built around the software professionals actually use. You learn by doing — not by watching lectures." },
+    { section: "what-we-teach", key: "tool1_name", value: "Adobe Premiere Pro" },
+    { section: "what-we-teach", key: "tool1_desc", value: "Industry-standard video editing. From timeline basics to advanced multicam workflows, color correction, and export settings for any platform." },
+    { section: "what-we-teach", key: "tool2_name", value: "Adobe Photoshop" },
+    { section: "what-we-teach", key: "tool2_desc", value: "Essential for thumbnail design, title cards, image retouching, and visual assets that complement your video projects." },
+    { section: "what-we-teach", key: "tool3_name", value: "Adobe Illustrator" },
+    { section: "what-we-teach", key: "tool3_desc", value: "Vector graphics for logos, lower thirds, motion graphics elements, and scalable design assets used across all media." },
+    { section: "what-we-teach", key: "tool4_name", value: "DaVinci Resolve" },
+    { section: "what-we-teach", key: "tool4_desc", value: "Professional-grade color grading and post-production. Used on major films and increasingly adopted for editing and audio finishing." },
+    // Our Programs
+    { section: "our-programs", key: "badge", value: "Our Programs" },
+    { section: "our-programs", key: "title", value: "What you get when you join Nalik Academy." },
+    { section: "our-programs", key: "description", value: "Every program is designed to take you from beginner to confident creator — with practical skills you can use immediately." },
+    { section: "our-programs", key: "item1_title", value: "Hands-On Video Editing" },
+    { section: "our-programs", key: "item1_text", value: "Edit real projects from day one. Learn timeline workflow, transitions, multicam editing, and export settings for YouTube, TV, and cinema using Adobe Premiere Pro and DaVinci Resolve." },
+    { section: "our-programs", key: "item2_title", value: "Graphic Design Foundations" },
+    { section: "our-programs", key: "item2_text", value: "Create professional thumbnails, title cards, logos, and social media assets. Master Adobe Photoshop for image editing and Illustrator for scalable vector design." },
+    { section: "our-programs", key: "item3_title", value: "Color Grading & Finishing" },
+    { section: "our-programs", key: "item3_text", value: "Go beyond basic corrections. Learn professional color grading workflows in DaVinci Resolve — the same tool used on major Hollywood productions." },
+    { section: "our-programs", key: "item4_title", value: "Portfolio-Ready Output" },
+    { section: "our-programs", key: "item4_text", value: "Every course ends with a portfolio project. You graduate with real work to show employers or clients, not just a certificate of attendance." },
+    // How It Works
+    { section: "how-it-works", key: "badge", value: "How It Works" },
+    { section: "how-it-works", key: "title", value: "Four simple steps to get started." },
+    { section: "how-it-works", key: "step1_title", value: "Choose Your Course" },
+    { section: "how-it-works", key: "step1_text", value: "Browse our programs and pick the one that matches your goals — video editing, graphic design, or color grading." },
+    { section: "how-it-works", key: "step2_title", value: "Submit Your Application" },
+    { section: "how-it-works", key: "step2_text", value: "Fill out the short application form with your details, experience level, and motivation. Takes less than two minutes." },
+    { section: "how-it-works", key: "step3_title", value: "Get Contacted" },
+    { section: "how-it-works", key: "step3_text", value: "Our team reviews your application and reaches out to discuss next steps, scheduling, and any questions you have." },
+    { section: "how-it-works", key: "step4_title", value: "Start Learning" },
+    { section: "how-it-works", key: "step4_text", value: "Jump into hands-on classes with real projects. Build your skills week by week and leave with a professional portfolio." },
+    // How You Learn
+    { section: "how-you-learn", key: "badge", value: "How You Learn" },
+    { section: "how-you-learn", key: "title", value: "A learning experience built around practice, not theory." },
+    { section: "how-you-learn", key: "description", value: "From day one, you are editing, designing, and creating. That is how real skills are built." },
+    { section: "how-you-learn", key: "step1_title", value: "Learn by Doing" },
+    { section: "how-you-learn", key: "step1_text", value: "No long lectures. Every class is hands-on — you edit footage, design graphics, and build projects from the first session." },
+    { section: "how-you-learn", key: "step2_title", value: "Work on Real Projects" },
+    { section: "how-you-learn", key: "step2_text", value: "Practice with the same types of content professionals create daily — promos, social media videos, title sequences, and more." },
+    { section: "how-you-learn", key: "step3_title", value: "Get Personal Feedback" },
+    { section: "how-you-learn", key: "step3_text", value: "Instructors review your work one-on-one, point out what to improve, and guide you toward professional-level output." },
+    { section: "how-you-learn", key: "step4_title", value: "Build Your Portfolio" },
+    { section: "how-you-learn", key: "step4_text", value: "Leave the academy with a collection of polished projects ready to show employers, clients, or use for freelancing." },
+    // Founders
+    { section: "founders", key: "badge", value: "Meet the Founders" },
+    { section: "founders", key: "name", value: "Nalik Academy" },
+    { section: "founders", key: "role", value: "Founding Team" },
+    { section: "founders", key: "bio", value: "A team of passionate media professionals dedicated to training the next generation of storytellers in Ethiopia. With years of hands-on experience in film, television, and digital content creation, we built Nalik Academy to bridge the gap between talent and opportunity in the creative industry." },
+    { section: "founders", key: "image", value: "/assets/logo.jpeg" },
+    // Contact
+    { section: "contact", key: "badge", value: "Get in Touch" },
+    { section: "contact", key: "title", value: "Ready to start your creative journey?" },
+    { section: "contact", key: "description", value: "Have questions about our courses, schedules, or the application process? Reach out — we are happy to help." },
+    { section: "contact", key: "phone", value: "+251 911 223 344" },
+    { section: "contact", key: "whatsapp", value: "+251 911 223 344" },
+    { section: "contact", key: "email", value: "info@nalikacademy.com" },
+    { section: "contact", key: "location", value: "Addis Ababa, Ethiopia" },
+    { section: "contact", key: "facebook", value: "https://facebook.com/nalikacademy" },
+    { section: "contact", key: "instagram", value: "https://instagram.com/nalikacademy" },
+    { section: "contact", key: "youtube", value: "https://youtube.com/@nalikacademy" },
+    { section: "contact", key: "telegram", value: "https://t.me/nalikacademy" },
+    // Footer
+    { section: "footer", key: "tagline", value: "Professional media production training — filmmaking, video editing, and visual storytelling." },
   ];
 
-  for (const entry of contentEntries) {
-    await prisma.websiteContent.upsert({
-      where: { key: entry.key },
-      update: { value: entry.value },
-      create: { key: entry.key, value: entry.value },
+  for (const item of content) {
+    await prisma.content.upsert({
+      where: { section_key: { section: item.section, key: item.key } },
+      update: { value: item.value },
+      create: item,
     });
   }
-  console.log(`  Seeded ${contentEntries.length} content sections`);
 
-  // ── Portfolio Items ──────────────────────────
-  const portfolioItems = [
+  // ── Courses ──────────────────────────────────────────
+  const courses = [
     {
-      title: "Cinematic Brand",
-      description: "Cinematic edit blending narrative pacing with visual storytelling.",
-      videoSrc: "/videos/cinmatic vedio.mp4",
-      posterImage: "",
-      sortOrder: 0,
-    },
-    {
-      title: "Brand Focus",
-      description: "Brand-focused content crafted for social media impact.",
-      videoSrc: "/videos/brand focused.mp4",
-      posterImage: "",
+      id: "adobe-illustrator-photoshop",
+      title: "Adobe Illustrator + Photoshop",
+      description: "Learn to create logos, thumbnails, social media assets, and print-ready designs from scratch.",
+      price: "6,000 Birr",
+      discountPrice: "4,800 Birr",
+      discountLabel: "Opening Offer — 20% off",
       sortOrder: 1,
+      published: true,
     },
     {
-      title: "Showcase Reel",
-      description: "A fast-paced reel showcasing editing rhythm and motion.",
-      videoSrc: "/videos/shortshow.mp4",
-      posterImage: "",
+      id: "davinci-resolve",
+      title: "DaVinci Resolve",
+      description: "Professional color grading, editing, and audio finishing used on Hollywood productions.",
+      price: "8,000 Birr",
+      discountPrice: "6,500 Birr",
+      discountLabel: "Opening Offer — 19% off",
       sortOrder: 2,
+      published: true,
     },
     {
-      title: "Content Edit",
-      description: "Engaging short-form content built for viral reach.",
-      videoSrc: "/videos/showcase.mp4",
-      posterImage: "",
+      id: "adobe-premiere",
+      title: "Adobe Premiere",
+      description: "Master professional video editing from timeline basics to advanced multicam workflows and export settings.",
+      price: "8,000 Birr",
+      discountPrice: "6,500 Birr",
+      discountLabel: "Opening Offer — 19% off",
       sortOrder: 3,
+      published: true,
     },
   ];
 
-  // Clear existing and re-seed
-  await prisma.ourWork.deleteMany();
-  for (const item of portfolioItems) {
-    await prisma.ourWork.create({ data: item });
+  for (const course of courses) {
+    await prisma.course.upsert({
+      where: { id: course.id },
+      update: course,
+      create: course,
+    });
   }
-  console.log(`  Seeded ${portfolioItems.length} portfolio items`);
 
-  console.log("Database seeded successfully!");
+  // ── Projects (Our Work) ──────────────────────────────
+  const projects = [
+    { id: "promo-reel-2024", title: "Promo Reel 2024", description: "A showcase of our academy's promotional content.", category: "Promotional", sortOrder: 1, published: true },
+    { id: "student-showcase", title: "Student Showcase", description: "Highlighting the best work from our students.", category: "Documentary", sortOrder: 2, published: true },
+    { id: "brand-story", title: "Brand Story", description: "Visual storytelling for brand identity.", category: "Commercial", sortOrder: 3, published: true },
+    { id: "behind-the-scenes", title: "Behind the Scenes", description: "A look inside the Nalik Academy experience.", category: "Behind the Scenes", sortOrder: 4, published: true },
+  ];
+
+  for (const project of projects) {
+    await prisma.project.upsert({
+      where: { id: project.id },
+      update: project,
+      create: project,
+    });
+  }
+
+  console.log("✅ Database seeded successfully!");
 }
 
 main()
   .catch((e) => {
-    console.error("Seed error:", e);
+    console.error("❌ Seed failed:", e);
     process.exit(1);
   })
   .finally(async () => {

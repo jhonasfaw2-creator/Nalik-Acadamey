@@ -1,90 +1,52 @@
-import { NextResponse } from "next/server";
-import {
-  verifyCredentials,
-  createSession,
-  createSessionCookie,
-  getSessionFromRequest,
-} from "@/lib/auth";
-import { createRateLimiter, getClientIp } from "@/lib/api/rate-limit";
+import { NextRequest, NextResponse } from "next/server";
+import { SignJWT } from "jose";
+import { SESSION_SECRET, COOKIE_NAME } from "@/lib/auth";
 
-// Stricter rate limit for login attempts (5 per minute per IP)
-const loginLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5 });
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 
-// ── POST: Admin login ─────────────────────────
-export async function POST(request: Request) {
-  const ip = getClientIp(request);
-
-  if (loginLimiter.isRateLimited(`login:${ip}`)) {
-    return NextResponse.json(
-      { error: "Too many login attempts. Please wait a minute." },
-      { status: 429 }
-    );
-  }
-
+// ── POST /api/admin/auth — Login ──────────────────────
+export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { email, password } = body || {};
+    const { password } = await request.json();
 
-    if (!email || !password) {
+    if (password !== ADMIN_PASSWORD) {
       return NextResponse.json(
-        { error: "Email and password are required" },
-        { status: 400 }
-      );
-    }
-
-    if (typeof email !== "string" || typeof password !== "string") {
-      return NextResponse.json(
-        { error: "Invalid credentials format" },
-        { status: 400 }
-      );
-    }
-
-    if (!verifyCredentials(email, password)) {
-      return NextResponse.json(
-        { error: "Invalid email or password" },
+        { error: "Invalid password" },
         { status: 401 }
       );
     }
 
-    const token = createSession(email);
+    // Create JWT token (24 hours)
+    const token = await new SignJWT({ role: "admin" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("24h")
+      .sign(SESSION_SECRET);
 
-    const response = NextResponse.json({
-      success: true,
-      user: { email },
+    const response = NextResponse.json({ success: true });
+
+    response.cookies.set(COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24, // 24 hours
     });
 
-    response.headers.set("Set-Cookie", createSessionCookie(token));
-
     return response;
-  } catch (error) {
-    console.error("Auth error:", error);
+  } catch {
     return NextResponse.json(
-      { error: "An unexpected error occurred" },
+      { error: "Login failed" },
       { status: 500 }
     );
   }
 }
 
-// ── GET: Check current session ────────────────
-export async function GET(request: Request) {
-  try {
-    const session = getSessionFromRequest(request);
-
-    if (!session.valid) {
-      return NextResponse.json(
-        { authenticated: false },
-        { status: 401 }
-      );
-    }
-
-    return NextResponse.json({
-      authenticated: true,
-      user: { email: session.email },
-    });
-  } catch {
-    return NextResponse.json(
-      { authenticated: false },
-      { status: 401 }
-    );
-  }
+// ── DELETE /api/admin/auth — Logout ───────────────────
+export async function DELETE() {
+  const response = NextResponse.json({ success: true });
+  response.cookies.delete(COOKIE_NAME);
+  return response;
 }
+
+
