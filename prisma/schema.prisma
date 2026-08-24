@@ -1,13 +1,15 @@
 // Nalik Academy - Prisma Schema
-// Database: SQLite
+// Database: PostgreSQL (Neon)
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ── Website Content (CMS-like key-value store) ────────
@@ -23,32 +25,32 @@ model Content {
 
 // ── Courses ───────────────────────────────────────────
 model Course {
-  id             String   @id @default(cuid())
-  title          String
-  description    String
-  price          String   // e.g. "8,000 Birr"
-  discountPrice  String?  // e.g. "6,500 Birr"
-  discountLabel  String?  // e.g. "Opening Offer — 19% off"
-  videoUrl       String?
-  posterUrl      String?
-  sortOrder      Int      @default(0)
-  published      Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String   @id @default(cuid())
+  title         String
+  description   String
+  price         String   // e.g. "8,000 Birr"
+  discountPrice String?  // e.g. "6,500 Birr"
+  discountLabel String?  // e.g. "Opening Offer — 19% off"
+  videoUrl      String?
+  posterUrl     String?
+  sortOrder     Int      @default(0)
+  published     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 // ── Founders ──────────────────────────────────────────
 model Founder {
-  id          String   @id @default(cuid())
-  name        String
-  title       String   // e.g. "CEO & Co-Founder"
-  bio         String
-  avatarUrl   String?
-  videoUrl    String?
-  posterUrl   String?
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  title     String   // e.g. "CEO & Co-Founder"
+  bio       String
+  avatarUrl String?
+  videoUrl  String?
+  posterUrl String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ── Our Work (Portfolio / Projects) ───────────────────

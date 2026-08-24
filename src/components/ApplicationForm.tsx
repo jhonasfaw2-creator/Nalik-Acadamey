@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { X, CheckCircle, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 
 interface CourseOption {
@@ -102,7 +102,7 @@ export default function ApplicationForm({
     }
   }, [open, preselectedCourse]);
 
-  const resetForm = useCallback(() => {
+  const resetForm = () => {
     setSubmitted(false);
     setReferenceId("");
     setErrors({});
@@ -116,14 +116,14 @@ export default function ApplicationForm({
     if (courseRef.current) courseRef.current.value = "";
     if (experienceRef.current) experienceRef.current.value = "";
     if (motivationRef.current) motivationRef.current.value = "";
-  }, []);
+  };
 
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     resetForm();
     dialogRef.current?.close();
-  }, [resetForm]);
+  };
 
-  const validate = useCallback((): Record<string, string> => {
+  const validate = (): Record<string, string> => {
     const newErrors: Record<string, string> = {};
 
     const fullName = fullNameRef.current?.value?.trim() || "";
@@ -157,7 +157,7 @@ export default function ApplicationForm({
       newErrors.motivation = "Motivation must be at most 500 characters";
 
     return newErrors;
-  }, []);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,6 +201,8 @@ export default function ApplicationForm({
         data = { error: "Invalid response from server" };
       }
 
+      console.log("[ApplicationForm] status:", res.status, "data:", data);
+
       if (res.ok && data.success) {
         setReferenceId(data.referenceId || "");
         setSubmitted(true);
@@ -210,9 +212,10 @@ export default function ApplicationForm({
       } else if (res.status >= 500) {
         setServerError(data.error || "Server error. Please try again later.");
       } else {
-        setServerError(data.error || "Something went wrong. Please try again.");
+        setServerError(data.error || `Something went wrong (status: ${res.status}). Please try again.`);
       }
     } catch (err) {
+      console.error("[ApplicationForm] submission error:", err);
       if (err instanceof Error && err.name === "AbortError") {
         setServerError("Request timed out. Please check your connection and try again.");
       } else {
