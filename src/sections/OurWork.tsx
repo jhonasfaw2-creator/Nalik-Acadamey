@@ -12,10 +12,10 @@ interface Project {
 }
 
 const DEFAULTS: Project[] = [
-  { id: "1", title: "Cinematic Reel", description: "A cinematic showcase of visual storytelling and film-grade color grading.", videoUrl: "/assets/our works/cinmatic vedio.mp4", posterUrl: null, category: "Cinematic" },
-  { id: "2", title: "Short Film Showcase", description: "Student-produced short film demonstrating narrative editing and sound design.", videoUrl: "/assets/our works/shortshow.mp4", posterUrl: null, category: "Short Film" },
-  { id: "3", title: "Production Showcase", description: "A highlight reel of projects created throughout the academy program.", videoUrl: "/assets/our works/showcase.mp4", posterUrl: null, category: "Production" },
-  { id: "4", title: "Brand Campaign", description: "Brand-focused content crafted for commercial and social media platforms.", videoUrl: "/assets/our works/brand focused.mp4", posterUrl: null, category: "Commercial" },
+  { id: "1", title: "Cinematic Reel", description: "A cinematic showcase of visual storytelling and film-grade color grading.", videoUrl: "/assets/our works/cinmatic vedio.mp4", posterUrl: "/assets/our works/cinmatic_vedio_poster.jpg", category: "Cinematic" },
+  { id: "2", title: "Short Film Showcase", description: "Student-produced short film demonstrating narrative editing and sound design.", videoUrl: "/assets/our works/shortshow.mp4", posterUrl: "/assets/our works/shortshow_poster.jpg", category: "Short Film" },
+  { id: "3", title: "Production Showcase", description: "A highlight reel of projects created throughout the academy program.", videoUrl: "/assets/our works/showcase.mp4", posterUrl: "/assets/our works/showcase_poster.jpg", category: "Production" },
+  { id: "4", title: "Brand Campaign", description: "Brand-focused content crafted for commercial and social media platforms.", videoUrl: "/assets/our works/brand focused.mp4", posterUrl: "/assets/our works/brand_focused_poster.jpg", category: "Commercial" },
 ];
 
 export default function OurWork() {
@@ -94,7 +94,6 @@ export default function OurWork() {
 
 function VideoCard({ project }: { project: Project }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -119,6 +118,8 @@ function VideoCard({ project }: { project: Project }) {
 
   if (!project.videoUrl) return null;
 
+  const posterSrc = project.posterUrl || "/assets/our works/cinmatic_vedio_poster.jpg";
+
   return (
     <div className="card-hover overflow-hidden rounded-xl bg-white shadow-sm">
       <div className="relative aspect-video overflow-hidden bg-navy">
@@ -128,17 +129,11 @@ function VideoCard({ project }: { project: Project }) {
           loop
           playsInline
           preload="none"
-          poster={project.posterUrl || undefined}
-          onLoadedData={() => setReady(true)}
+          poster={posterSrc}
           className="h-full w-full object-cover"
         >
           <source src={project.videoUrl} type="video/mp4" />
         </video>
-        {!ready && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="h-8 w-8 animate-pulse rounded-full bg-white/20" />
-          </div>
-        )}
         {project.category && (
           <span className="absolute left-3 top-3 rounded-full bg-navy/70 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
             {project.category}

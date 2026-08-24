@@ -45,6 +45,14 @@ export default function ApplicationForm({
   const [courseList, setCourseList] = useState<CourseOption[]>(FALLBACK_COURSES);
   const [coursesLoaded, setCoursesLoaded] = useState(false);
 
+  const fullNameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const phoneRef = useRef<HTMLInputElement>(null);
+  const ageRef = useRef<HTMLInputElement>(null);
+  const courseRef = useRef<HTMLSelectElement>(null);
+  const experienceRef = useRef<HTMLSelectElement>(null);
+  const motivationRef = useRef<HTMLTextAreaElement>(null);
+
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -88,10 +96,9 @@ export default function ApplicationForm({
     return () => { cancelled = true; };
   }, [open]);
 
-  const courseSelectRef = useRef<HTMLSelectElement>(null);
   useEffect(() => {
-    if (open && preselectedCourse && courseSelectRef.current) {
-      courseSelectRef.current.value = preselectedCourse;
+    if (open && preselectedCourse && courseRef.current) {
+      courseRef.current.value = preselectedCourse;
     }
   }, [open, preselectedCourse]);
 
@@ -102,6 +109,13 @@ export default function ApplicationForm({
     setServerError("");
     setNetworkError(false);
     setRetryCount(0);
+    if (fullNameRef.current) fullNameRef.current.value = "";
+    if (emailRef.current) emailRef.current.value = "";
+    if (phoneRef.current) phoneRef.current.value = "";
+    if (ageRef.current) ageRef.current.value = "";
+    if (courseRef.current) courseRef.current.value = "";
+    if (experienceRef.current) experienceRef.current.value = "";
+    if (motivationRef.current) motivationRef.current.value = "";
   }, []);
 
   const handleClose = useCallback(() => {
@@ -109,64 +123,63 @@ export default function ApplicationForm({
     dialogRef.current?.close();
   }, [resetForm]);
 
-  const validate = (data: Record<string, unknown>): Record<string, string> => {
+  const validate = useCallback((): Record<string, string> => {
     const newErrors: Record<string, string> = {};
 
-    const fullName = String(data.fullName || "").trim();
+    const fullName = fullNameRef.current?.value?.trim() || "";
     if (!fullName || fullName.length < 2)
       newErrors.fullName = "Full name must be at least 2 characters";
 
-    const email = String(data.email || "").trim();
+    const email = emailRef.current?.value?.trim() || "";
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       newErrors.email = "Please enter a valid email address";
 
-    const phone = String(data.phone || "").trim();
+    const phone = phoneRef.current?.value?.trim() || "";
     if (!phone || phone.length < 8)
       newErrors.phone = "Phone number must be at least 8 digits";
 
-    const age = Number(data.age);
-    if (!age || age < 10 || age > 99 || !Number.isInteger(age))
+    const age = ageRef.current?.value?.trim() || "";
+    const ageNum = Number(age);
+    if (!age || isNaN(ageNum) || ageNum < 10 || ageNum > 99 || !Number.isInteger(ageNum))
       newErrors.age = "Please enter a valid age (10-99)";
 
-    const courseSelection = String(data.courseSelection || "").trim();
+    const courseSelection = courseRef.current?.value?.trim() || "";
     if (!courseSelection) newErrors.courseSelection = "Please select a course";
 
-    const previousExperience = String(data.previousExperience || "").trim();
+    const previousExperience = experienceRef.current?.value?.trim() || "";
     if (!previousExperience)
       newErrors.previousExperience = "Please describe your experience level";
 
-    const motivation = String(data.motivation || "").trim();
+    const motivation = motivationRef.current?.value?.trim() || "";
     if (motivation.length < 10)
       newErrors.motivation = "Please tell us a bit more about your motivation";
     if (motivation.length > 500)
       newErrors.motivation = "Motivation must be at most 500 characters";
 
     return newErrors;
-  };
+  }, []);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setServerError("");
     setNetworkError(false);
+    setErrors({});
 
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-
-    const values = {
-      fullName: String(formData.get("fullName") || ""),
-      email: String(formData.get("email") || ""),
-      phone: String(formData.get("phone") || ""),
-      age: Number(formData.get("age") || 0),
-      courseSelection: String(formData.get("courseSelection") || ""),
-      previousExperience: String(formData.get("previousExperience") || ""),
-      motivation: String(formData.get("motivation") || ""),
-    };
-
-    const validationErrors = validate(values);
+    const validationErrors = validate();
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
 
     setSubmitting(true);
+
+    const values = {
+      fullName: fullNameRef.current?.value?.trim() || "",
+      email: emailRef.current?.value?.trim() || "",
+      phone: phoneRef.current?.value?.trim() || "",
+      age: Number(ageRef.current?.value?.trim() || 0),
+      courseSelection: courseRef.current?.value?.trim() || "",
+      previousExperience: experienceRef.current?.value?.trim() || "",
+      motivation: motivationRef.current?.value?.trim() || "",
+    };
 
     try {
       const controller = new AbortController();
@@ -285,7 +298,15 @@ export default function ApplicationForm({
                 <label htmlFor="fullName" className="mb-1 block text-sm font-medium text-gray-700">
                   Full Name <span className="text-gold">*</span>
                 </label>
-                <input id="fullName" name="fullName" type="text" placeholder="e.g. Daniel Kebede" autoComplete="name" className={fieldClass} />
+                <input
+                  ref={fullNameRef}
+                  id="fullName"
+                  name="fullName"
+                  type="text"
+                  placeholder="e.g. Daniel Kebede"
+                  autoComplete="name"
+                  className={fieldClass}
+                />
                 {errors.fullName && <p className={errorClass}>{errors.fullName}</p>}
               </div>
 
@@ -293,7 +314,15 @@ export default function ApplicationForm({
                 <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">
                   Email <span className="text-gold">*</span>
                 </label>
-                <input id="email" name="email" type="email" placeholder="you@example.com" autoComplete="email" className={fieldClass} />
+                <input
+                  ref={emailRef}
+                  id="email"
+                  name="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  className={fieldClass}
+                />
                 {errors.email && <p className={errorClass}>{errors.email}</p>}
               </div>
 
@@ -301,7 +330,15 @@ export default function ApplicationForm({
                 <label htmlFor="phone" className="mb-1 block text-sm font-medium text-gray-700">
                   Phone <span className="text-gold">*</span>
                 </label>
-                <input id="phone" name="phone" type="tel" placeholder="+251 9XX XXX XXX" autoComplete="tel" className={fieldClass} />
+                <input
+                  ref={phoneRef}
+                  id="phone"
+                  name="phone"
+                  type="tel"
+                  placeholder="+251 9XX XXX XXX"
+                  autoComplete="tel"
+                  className={fieldClass}
+                />
                 {errors.phone && <p className={errorClass}>{errors.phone}</p>}
               </div>
 
@@ -309,7 +346,16 @@ export default function ApplicationForm({
                 <label htmlFor="age" className="mb-1 block text-sm font-medium text-gray-700">
                   Age <span className="text-gold">*</span>
                 </label>
-                <input id="age" name="age" type="number" min={10} max={99} placeholder="e.g. 22" className={fieldClass} />
+                <input
+                  ref={ageRef}
+                  id="age"
+                  name="age"
+                  type="number"
+                  min={10}
+                  max={99}
+                  placeholder="e.g. 22"
+                  className={fieldClass}
+                />
                 {errors.age && <p className={errorClass}>{errors.age}</p>}
               </div>
 
@@ -317,7 +363,13 @@ export default function ApplicationForm({
                 <label htmlFor="courseSelection" className="mb-1 block text-sm font-medium text-gray-700">
                   Course Selection <span className="text-gold">*</span>
                 </label>
-                <select id="courseSelection" name="courseSelection" ref={courseSelectRef} className={fieldClass} disabled={!coursesLoaded}>
+                <select
+                  ref={courseRef}
+                  id="courseSelection"
+                  name="courseSelection"
+                  className={fieldClass}
+                  disabled={!coursesLoaded}
+                >
                   <option value="">{coursesLoaded ? "Select a course" : "Loading courses..."}</option>
                   {courseList.map((c) => (
                     <option key={c.id} value={c.title}>{c.title} — {c.price}</option>
@@ -330,7 +382,12 @@ export default function ApplicationForm({
                 <label htmlFor="previousExperience" className="mb-1 block text-sm font-medium text-gray-700">
                   Previous Experience <span className="text-gold">*</span>
                 </label>
-                <select id="previousExperience" name="previousExperience" className={fieldClass}>
+                <select
+                  ref={experienceRef}
+                  id="previousExperience"
+                  name="previousExperience"
+                  className={fieldClass}
+                >
                   <option value="">Select your level</option>
                   {EXPERIENCE_OPTIONS.map((opt) => (
                     <option key={opt} value={opt}>{opt}</option>
@@ -344,6 +401,7 @@ export default function ApplicationForm({
                   Why do you want to join? <span className="text-gold">*</span>
                 </label>
                 <textarea
+                  ref={motivationRef}
                   id="motivation"
                   name="motivation"
                   rows={3}

@@ -18,7 +18,7 @@ const DEFAULTS = {
 
 export default function Hero({ onApplyClick }: HeroProps) {
   const [content, setContent] = useState(DEFAULTS);
-  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
 
@@ -43,15 +43,21 @@ export default function Hero({ onApplyClick }: HeroProps) {
     const section = sectionRef.current;
     if (!section) return;
 
+    const video = section.querySelector("video");
+    if (!video) return;
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            const video = section.querySelector("video");
-            if (video && video.getAttribute("preload") === "none") {
+            const preload = video.getAttribute("preload");
+            if (preload === "none") {
               video.setAttribute("preload", "auto");
               video.load();
             }
+            video.play().catch(() => {});
+          } else {
+            video.pause();
           }
         });
       },
@@ -60,7 +66,7 @@ export default function Hero({ onApplyClick }: HeroProps) {
 
     observer.observe(section);
     return () => observer.disconnect();
-  }, []);
+  }, [content.video]);
 
   const handleVideoError = () => {
     setVideoError(true);
@@ -73,21 +79,15 @@ export default function Hero({ onApplyClick }: HeroProps) {
         muted
         loop
         playsInline
-        preload="none"
+        preload="metadata"
         poster={content.poster}
-        onLoadedData={() => setVideoLoaded(true)}
+        onLoadedData={() => setVideoReady(true)}
         onError={handleVideoError}
         className="absolute inset-0 h-full w-full object-cover"
       >
         <source src={content.video} type="video/mp4" />
       </video>
       <div className="absolute inset-0 bg-navy/80" />
-
-      {!videoLoaded && !videoError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-navy">
-          <div className="h-8 w-8 animate-pulse rounded-full bg-gold/30" />
-        </div>
-      )}
 
       <div className="relative z-10 flex h-full items-center">
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">

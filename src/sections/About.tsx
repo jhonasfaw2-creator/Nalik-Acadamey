@@ -20,7 +20,6 @@ export default function About() {
   const videoElRef = useRef<HTMLVideoElement>(null);
   const [isMuted, setIsMuted] = useState(true);
   const [content, setContent] = useState(DEFAULTS);
-  const [videoReady, setVideoReady] = useState(false);
 
   useEffect(() => {
     fetch("/api/content?section=about")
@@ -114,16 +113,10 @@ export default function About() {
                 playsInline
                 preload="none"
                 poster={content.poster}
-                onLoadedData={() => setVideoReady(true)}
                 className="h-auto w-full"
               >
                 <source src={content.video} type="video/mp4" />
               </video>
-              {!videoReady && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="h-8 w-8 animate-pulse rounded-full bg-white/20" />
-                </div>
-              )}
               <button
                 onClick={toggleSound}
                 aria-label={isMuted ? "Unmute video" : "Mute video"}
