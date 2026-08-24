@@ -26,20 +26,20 @@ export default function About() {
       .then((r) => r.json())
       .then((d) => {
         if (d.badge || d.title) {
-          setContent({
-            badge: d.badge || DEFAULTS.badge,
-            title: d.title || DEFAULTS.title,
-            paragraph1: d.paragraph1 || DEFAULTS.paragraph1,
-            paragraph2: d.paragraph2 || DEFAULTS.paragraph2,
-            video: d.video || DEFAULTS.video,
-            poster: d.poster || DEFAULTS.poster,
-          });
+          setContent((prev) => ({
+            badge: d.badge || prev.badge,
+            title: d.title || prev.title,
+            paragraph1: d.paragraph1 || prev.paragraph1,
+            paragraph2: d.paragraph2 || prev.paragraph2,
+            video: d.video || prev.video,
+            poster: d.poster || prev.poster,
+          }));
         }
       })
       .catch(() => {});
   }, []);
 
-  // Scroll reveal for text and video
+  // Scroll reveal animation for text and video
   useEffect(() => {
     const els = [textRef.current, videoRef.current].filter(Boolean);
     els.forEach((el, i) => {
@@ -62,17 +62,14 @@ export default function About() {
     return () => els.forEach((el) => observer.unobserve(el!));
   }, []);
 
-  // Video play/pause on scroll
+  // Instant scroll-triggered video play/pause
   useEffect(() => {
     const video = videoElRef.current;
     if (!video) return;
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          if (video.getAttribute("preload") === "none") {
-            video.setAttribute("preload", "metadata");
-            video.load();
-          }
           video.play().catch(() => {});
         } else {
           video.pause();
@@ -80,6 +77,7 @@ export default function About() {
       },
       { threshold: 0.25 }
     );
+
     observer.observe(video);
     return () => observer.disconnect();
   }, [content.video]);
@@ -105,18 +103,19 @@ export default function About() {
           </div>
 
           <div ref={videoRef}>
-            <div className="relative mx-auto max-w-md overflow-hidden rounded-lg bg-navy">
+            <div className="relative mx-auto max-w-md overflow-hidden rounded-lg bg-navy shadow-xl">
               <video
                 ref={videoElRef}
-                muted
+                muted={isMuted}
                 loop
                 playsInline
-                preload="none"
+                preload="metadata"
                 poster={content.poster}
-                className="h-auto w-full"
+                className="h-auto w-full object-cover"
               >
                 <source src={content.video} type="video/mp4" />
               </video>
+
               <button
                 onClick={toggleSound}
                 aria-label={isMuted ? "Unmute video" : "Mute video"}

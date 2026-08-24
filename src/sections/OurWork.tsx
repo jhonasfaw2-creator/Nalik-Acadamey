@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Play } from "lucide-react";
 
 interface Project {
   id: string;
@@ -93,28 +94,7 @@ export default function OurWork() {
 }
 
 function VideoCard({ project }: { project: Project }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          if (video.getAttribute("preload") === "none") {
-            video.setAttribute("preload", "metadata");
-            video.load();
-          }
-          video.play().catch(() => {});
-        } else {
-          video.pause();
-        }
-      },
-      { threshold: 0.3 }
-    );
-    observer.observe(video);
-    return () => observer.disconnect();
-  }, [project.videoUrl]);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   if (!project.videoUrl) return null;
 
@@ -123,23 +103,47 @@ function VideoCard({ project }: { project: Project }) {
   return (
     <div className="card-hover overflow-hidden rounded-xl bg-white shadow-sm">
       <div className="relative aspect-video overflow-hidden bg-navy">
-        <video
-          ref={videoRef}
-          muted
-          loop
-          playsInline
-          preload="none"
-          poster={posterSrc}
-          className="h-full w-full object-cover"
-        >
-          <source src={project.videoUrl} type="video/mp4" />
-        </video>
-        {project.category && (
-          <span className="absolute left-3 top-3 rounded-full bg-navy/70 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
-            {project.category}
-          </span>
+        {!isPlaying ? (
+          <button
+            onClick={() => setIsPlaying(true)}
+            className="group relative h-full w-full cursor-pointer text-left focus:outline-none"
+            aria-label={`Play ${project.title}`}
+          >
+            {/* Instant loading poster image */}
+            <img
+              src={posterSrc}
+              alt={project.title}
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+              loading="lazy"
+            />
+
+            {/* Play Button Overlay */}
+            <div className="absolute inset-0 flex items-center justify-center bg-navy/30 transition-colors group-hover:bg-navy/10">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gold text-navy shadow-lg transition-transform duration-300 group-hover:scale-110">
+                <Play size={24} className="ml-1 fill-current" />
+              </div>
+            </div>
+
+            {project.category && (
+              <span className="absolute left-3 top-3 rounded-full bg-navy/80 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
+                {project.category}
+              </span>
+            )}
+          </button>
+        ) : (
+          /* Actual video mounts and streams ONLY after clicking */
+          <video
+            autoPlay
+            controls
+            playsInline
+            preload="auto"
+            className="h-full w-full object-cover"
+          >
+            <source src={project.videoUrl} type="video/mp4" />
+          </video>
         )}
       </div>
+
       <div className="p-5">
         <h3 className="text-lg font-bold text-navy">{project.title}</h3>
         <p className="mt-2 text-sm leading-relaxed text-gray-600">{project.description}</p>

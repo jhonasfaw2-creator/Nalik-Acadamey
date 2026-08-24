@@ -18,71 +18,45 @@ const DEFAULTS = {
 
 export default function Hero({ onApplyClick }: HeroProps) {
   const [content, setContent] = useState(DEFAULTS);
-  const [videoReady, setVideoReady] = useState(false);
-  const [videoError, setVideoError] = useState(false);
-  const sectionRef = useRef<HTMLElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     fetch("/api/content?section=hero")
       .then((r) => r.json())
       .then((d) => {
         if (d.badge || d.title || d.description) {
-          setContent({
-            badge: d.badge || DEFAULTS.badge,
-            title: d.title || DEFAULTS.title,
-            description: d.description || DEFAULTS.description,
-            video: d.video || DEFAULTS.video,
-            poster: d.poster || DEFAULTS.poster,
-          });
+          // Only update state if values actually changed to prevent video re-renders
+          setContent((prev) => ({
+            badge: d.badge || prev.badge,
+            title: d.title || prev.title,
+            description: d.description || prev.description,
+            video: d.video || prev.video,
+            poster: d.poster || prev.poster,
+          }));
         }
       })
       .catch(() => {});
   }, []);
 
+  // Force autoplay fallback if browser policy delays playback
   useEffect(() => {
-    const section = sectionRef.current;
-    if (!section) return;
-
-    const video = section.querySelector("video");
-    if (!video) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const preload = video.getAttribute("preload");
-            if (preload === "none") {
-              video.setAttribute("preload", "auto");
-              video.load();
-            }
-            video.play().catch(() => {});
-          } else {
-            video.pause();
-          }
-        });
-      },
-      { threshold: 0.1 }
-    );
-
-    observer.observe(section);
-    return () => observer.disconnect();
+    if (videoRef.current) {
+      videoRef.current.play().catch(() => {
+        // Autoplay policy fallback handling if muted fails
+      });
+    }
   }, [content.video]);
 
-  const handleVideoError = () => {
-    setVideoError(true);
-  };
-
   return (
-    <section id="home" ref={sectionRef} className="relative h-screen w-full overflow-hidden">
+    <section id="home" className="relative h-screen w-full overflow-hidden">
       <video
+        ref={videoRef}
         autoPlay
         muted
         loop
         playsInline
-        preload="metadata"
+        preload="auto"
         poster={content.poster}
-        onLoadedData={() => setVideoReady(true)}
-        onError={handleVideoError}
         className="absolute inset-0 h-full w-full object-cover"
       >
         <source src={content.video} type="video/mp4" />
@@ -97,7 +71,7 @@ export default function Hero({ onApplyClick }: HeroProps) {
             </p>
 
             <h1 className="hero-title text-4xl font-bold leading-tight text-white sm:text-5xl lg:text-6xl">
-              {content.title.split("Visual Storytelling").length > 1 ? (
+              {content.title.includes("Visual Storytelling") ? (
                 <>
                   {content.title.split("Visual Storytelling")[0]}
                   <span className="text-gold">Visual Storytelling</span>

@@ -26,6 +26,15 @@ export default function RootLayout({
       <head>
         {/* Performance: preconnect to self for API calls */}
         <link rel="preconnect" href="/" />
+
+        {/* Preload Hero background video assets for instant play */}
+        <link rel="preload" href="/assets/hero/poster.jpg" as="image" />
+        <link
+          rel="preload"
+          href="/assets/hero/hero.mp4"
+          as="video"
+          type="video/mp4"
+        />
       </head>
       <body className="min-h-screen bg-white text-navy antialiased">
         {children}
