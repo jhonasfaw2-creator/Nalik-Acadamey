@@ -1,19 +1,27 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { X, CheckCircle, Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { X, CheckCircle, Loader2, AlertCircle, Calendar } from "lucide-react";
 
 interface CourseOption {
   id: string;
   title: string;
-  price: string;
+  price: number;
+  discountPrice: number | null;
+  discountLabel: string | null;
 }
 
-const FALLBACK_COURSES: CourseOption[] = [
-  { id: "1", title: "Adobe Illustrator + Photoshop", price: "6,000 Birr" },
-  { id: "2", title: "DaVinci Resolve", price: "8,000 Birr" },
-  { id: "3", title: "Adobe Premiere", price: "8,000 Birr" },
-];
+interface ScheduleOption {
+  id: string;
+  batchName: string;
+  days: string;
+  startTime: string;
+  endTime: string;
+  startDate: string;
+  maxSeats: number;
+  enrolled: number;
+  course: { id: string; title: string; price: number; discountPrice: number | null; discountLabel: string | null };
+}
 
 interface ApplicationFormProps {
   open: boolean;
@@ -28,39 +36,83 @@ const EXPERIENCE_OPTIONS = [
   "Advanced — I have professional editing experience",
 ];
 
-export default function ApplicationForm({
-  open,
-  onClose,
-  preselectedCourse,
-}: ApplicationFormProps) {
+function formatBirr(amount: number) {
+  return amount.toLocaleString("en-ET") + " Birr";
+}
+
+export default function ApplicationForm({ open, onClose, preselectedCourse }: ApplicationFormProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [referenceId, setReferenceId] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState("");
-  const [networkError, setNetworkError] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
 
-  const [courseList, setCourseList] = useState<CourseOption[]>(FALLBACK_COURSES);
+  const [courses, setCourses] = useState<CourseOption[]>([]);
+  const [schedules, setSchedules] = useState<ScheduleOption[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState("");
+  const [selectedScheduleId, setSelectedScheduleId] = useState("");
   const [coursesLoaded, setCoursesLoaded] = useState(false);
 
   const fullNameRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const ageRef = useRef<HTMLInputElement>(null);
-  const courseRef = useRef<HTMLSelectElement>(null);
   const experienceRef = useRef<HTMLSelectElement>(null);
   const motivationRef = useRef<HTMLTextAreaElement>(null);
 
+  // Fetch courses + schedules
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+
+    Promise.all([
+      fetch("/api/courses").then((r) => r.json()),
+      fetch("/api/schedules").then((r) => r.json()),
+    ]).then(([courseData, scheduleData]) => {
+      if (cancelled) return;
+      if (Array.isArray(courseData) && courseData.length > 0) {
+        setCourses(courseData.map((c: CourseOption) => ({
+          id: c.id,
+          title: c.title,
+          price: c.price,
+          discountPrice: c.discountPrice,
+          discountLabel: c.discountLabel,
+        })));
+      }
+      if (Array.isArray(scheduleData)) {
+        setSchedules(scheduleData);
+      }
+      setCoursesLoaded(true);
+    }).catch(() => {
+      if (!cancelled) setCoursesLoaded(true);
+    });
+
+    return () => { cancelled = true; };
+  }, [open]);
+
+  // Preselect course
+  useEffect(() => {
+    if (open && preselectedCourse && courses.length > 0) {
+      const match = courses.find((c) => c.title === preselectedCourse || c.id === preselectedCourse);
+      if (match) setSelectedCourseId(match.id);
+    }
+  }, [open, preselectedCourse, courses]);
+
+  // Filter schedules for selected course
+  const filteredSchedules = schedules.filter((s) => s.course.id === selectedCourseId);
+  const selectedCourse = courses.find((c) => c.id === selectedCourseId);
+
+  useEffect(() => {
+    setSelectedScheduleId("");
+  }, [selectedCourseId]);
+
+  // Dialog management
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (open) {
-      dialog.showModal();
-    } else {
-      dialog.close();
-    }
+    if (open) dialog.showModal();
+    else dialog.close();
   }, [open]);
 
   useEffect(() => {
@@ -76,44 +128,17 @@ export default function ApplicationForm({
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    fetch("/api/courses")
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to load courses");
-        return r.json();
-      })
-      .then((d) => {
-        if (!cancelled && Array.isArray(d) && d.length > 0) {
-          setCourseList(d.map((c: { id: string; title: string; price: string }) => ({ id: c.id, title: c.title, price: c.price })));
-        }
-        setCoursesLoaded(true);
-      })
-      .catch(() => {
-        if (!cancelled) setCoursesLoaded(true);
-      });
-    return () => { cancelled = true; };
-  }, [open]);
-
-  useEffect(() => {
-    if (open && preselectedCourse && courseRef.current) {
-      courseRef.current.value = preselectedCourse;
-    }
-  }, [open, preselectedCourse]);
-
   const resetForm = () => {
     setSubmitted(false);
     setReferenceId("");
     setErrors({});
     setServerError("");
-    setNetworkError(false);
-    setRetryCount(0);
+    setSelectedCourseId("");
+    setSelectedScheduleId("");
     if (fullNameRef.current) fullNameRef.current.value = "";
     if (emailRef.current) emailRef.current.value = "";
     if (phoneRef.current) phoneRef.current.value = "";
     if (ageRef.current) ageRef.current.value = "";
-    if (courseRef.current) courseRef.current.value = "";
     if (experienceRef.current) experienceRef.current.value = "";
     if (motivationRef.current) motivationRef.current.value = "";
   };
@@ -124,45 +149,27 @@ export default function ApplicationForm({
   };
 
   const validate = (): Record<string, string> => {
-    const newErrors: Record<string, string> = {};
-
-    const fullName = fullNameRef.current?.value?.trim() || "";
-    if (!fullName || fullName.length < 2)
-      newErrors.fullName = "Full name must be at least 2 characters";
-
+    const e: Record<string, string> = {};
+    const name = fullNameRef.current?.value?.trim() || "";
+    if (!name || name.length < 2) e.fullName = "Full name must be at least 2 characters";
     const email = emailRef.current?.value?.trim() || "";
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      newErrors.email = "Please enter a valid email address";
-
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = "Please enter a valid email";
     const phone = phoneRef.current?.value?.trim() || "";
-    if (!phone || phone.length < 8)
-      newErrors.phone = "Phone number must be at least 8 digits";
-
-    const age = ageRef.current?.value?.trim() || "";
-    const ageNum = Number(age);
-    if (!age || isNaN(ageNum) || ageNum < 10 || ageNum > 99 || !Number.isInteger(ageNum))
-      newErrors.age = "Please enter a valid age (10-99)";
-
-    const courseSelection = courseRef.current?.value?.trim() || "";
-    if (!courseSelection) newErrors.courseSelection = "Please select a course";
-
-    const previousExperience = experienceRef.current?.value?.trim() || "";
-    if (!previousExperience)
-      newErrors.previousExperience = "Please describe your experience level";
-
-    const motivation = motivationRef.current?.value?.trim() || "";
-    if (motivation.length < 10)
-      newErrors.motivation = "Please tell us a bit more about your motivation";
-    if (motivation.length > 500)
-      newErrors.motivation = "Motivation must be at most 500 characters";
-
-    return newErrors;
+    if (!phone || phone.length < 8) e.phone = "Phone must be at least 8 digits";
+    const age = Number(ageRef.current?.value?.trim() || 0);
+    if (!age || isNaN(age) || age < 10 || age > 99 || !Number.isInteger(age)) e.age = "Enter a valid age (10–99)";
+    if (!selectedCourseId) e.course = "Please select a course";
+    const exp = experienceRef.current?.value?.trim() || "";
+    if (!exp) e.experience = "Please select your experience level";
+    const mot = motivationRef.current?.value?.trim() || "";
+    if (mot.length < 10) e.motivation = "Tell us a bit more about your motivation";
+    if (mot.length > 500) e.motivation = "Max 500 characters";
+    return e;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setServerError("");
-    setNetworkError(false);
     setErrors({});
 
     const validationErrors = validate();
@@ -171,86 +178,50 @@ export default function ApplicationForm({
 
     setSubmitting(true);
 
-    const values = {
-      fullName: fullNameRef.current?.value?.trim() || "",
-      email: emailRef.current?.value?.trim() || "",
-      phone: phoneRef.current?.value?.trim() || "",
-      age: Number(ageRef.current?.value?.trim() || 0),
-      courseSelection: courseRef.current?.value?.trim() || "",
-      previousExperience: experienceRef.current?.value?.trim() || "",
-      motivation: motivationRef.current?.value?.trim() || "",
-    };
-
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-      const res = await fetch("/api/applications", {
+      const res = await fetch("/api/registrations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-        signal: controller.signal,
+        body: JSON.stringify({
+          fullName: fullNameRef.current?.value?.trim(),
+          email: emailRef.current?.value?.trim(),
+          phone: phoneRef.current?.value?.trim(),
+          age: Number(ageRef.current?.value?.trim()),
+          courseId: selectedCourseId,
+          scheduleId: selectedScheduleId || undefined,
+          previousExperience: experienceRef.current?.value?.trim(),
+          motivation: motivationRef.current?.value?.trim(),
+        }),
       });
 
-      clearTimeout(timeoutId);
-
-      let data: { success?: boolean; referenceId?: string; error?: string } = {};
-      try {
-        data = await res.json();
-      } catch {
-        data = { error: "Invalid response from server" };
-      }
-
-      console.log("[ApplicationForm] status:", res.status, "data:", data);
+      const data = await res.json();
 
       if (res.ok && data.success) {
         setReferenceId(data.referenceId || "");
         setSubmitted(true);
       } else if (res.status === 409) {
-        setServerError(data.error || "You have already applied for this course.");
+        setServerError(data.error || "Already registered for this course.");
         if (data.referenceId) setReferenceId(data.referenceId);
-      } else if (res.status >= 500) {
-        setServerError(data.error || "Server error. Please try again later.");
       } else {
-        setServerError(data.error || `Something went wrong (status: ${res.status}). Please try again.`);
+        setServerError(data.error || "Something went wrong. Please try again.");
       }
-    } catch (err) {
-      console.error("[ApplicationForm] submission error:", err);
-      if (err instanceof Error && err.name === "AbortError") {
-        setServerError("Request timed out. Please check your connection and try again.");
-      } else {
-        setNetworkError(true);
-        setServerError("Network error. Please check your connection and try again.");
-      }
+    } catch {
+      setServerError("Network error. Please check your connection and try again.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleRetry = () => {
-    setServerError("");
-    setNetworkError(false);
-    setRetryCount((c) => c + 1);
-  };
-
-  const fieldClass =
-    "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy placeholder-gray-400 transition-colors focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20 disabled:bg-gray-50";
-
+  const fieldClass = "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy placeholder-gray-400 transition-colors focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20 disabled:bg-gray-50";
   const errorClass = "mt-1 text-xs text-red-500";
 
   return (
-    <dialog
-      ref={dialogRef}
-      className="backdrop:bg-black/60 rounded-xl p-0 max-w-lg w-full max-h-[90vh]"
-    >
+    <dialog ref={dialogRef} className="backdrop:bg-black/60 rounded-xl p-0 max-w-lg w-full max-h-[90vh]">
       <div className="bg-white rounded-xl overflow-hidden flex flex-col max-h-[90vh]">
+        {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h2 className="text-xl font-bold text-navy">Apply to Nalik Academy</h2>
-          <button
-            onClick={handleClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-            aria-label="Close"
-          >
+          <h2 className="text-xl font-bold text-navy">Register for Nalik Academy</h2>
+          <button onClick={handleClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -261,7 +232,7 @@ export default function ApplicationForm({
               <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-green-50">
                 <CheckCircle size={32} className="text-green-500" />
               </div>
-              <h3 className="text-lg font-bold text-navy">Application Submitted Successfully</h3>
+              <h3 className="text-lg font-bold text-navy">Registration Submitted</h3>
               {referenceId && (
                 <div className="mt-4 rounded-lg bg-warm-white px-4 py-3">
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Your Reference ID</p>
@@ -269,17 +240,14 @@ export default function ApplicationForm({
                 </div>
               )}
               <p className="mt-4 text-sm text-gray-500">
-                Please save your reference ID. We will contact you shortly to discuss next steps.
+                Please save your reference ID. Complete payment to confirm your spot. We&apos;ll contact you shortly.
               </p>
-              <button
-                onClick={handleClose}
-                className="mt-6 rounded-lg bg-navy px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-navy-light"
-              >
+              <button onClick={handleClose} className="mt-6 rounded-lg bg-navy px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-navy-light">
                 Close
               </button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} key={retryCount} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
               {serverError && (
                 <div className="rounded-lg bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600 flex items-start gap-2">
                   <AlertCircle size={16} className="mt-0.5 shrink-0" />
@@ -287,131 +255,138 @@ export default function ApplicationForm({
                 </div>
               )}
 
-              {networkError && (
-                <button
-                  type="button"
-                  onClick={handleRetry}
-                  className="inline-flex items-center gap-2 rounded-lg border border-gold/30 bg-gold/5 px-4 py-2 text-sm font-medium text-gold transition-colors hover:bg-gold/10"
-                >
-                  <RefreshCw size={14} /> Retry
-                </button>
+              {/* Course selection */}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Course <span className="text-gold">*</span>
+                </label>
+                {!coursesLoaded ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-gray-400">
+                    <Loader2 size={14} className="animate-spin" /> Loading courses...
+                  </div>
+                ) : (
+                  <select
+                    value={selectedCourseId}
+                    onChange={(e) => setSelectedCourseId(e.target.value)}
+                    className={fieldClass}
+                  >
+                    <option value="">Select a course</option>
+                    {courses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title} — {c.discountPrice ? `${formatBirr(c.discountPrice)} (${c.discountLabel})` : formatBirr(c.price)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {errors.course && <p className={errorClass}>{errors.course}</p>}
+                {selectedCourse && (
+                  <div className="mt-2 rounded-lg bg-warm-white px-3 py-2">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-lg font-bold text-gold">{formatBirr(selectedCourse.discountPrice ?? selectedCourse.price)}</span>
+                      {selectedCourse.discountPrice && (
+                        <span className="text-sm text-gray-400 line-through">{formatBirr(selectedCourse.price)}</span>
+                      )}
+                    </div>
+                    {selectedCourse.discountLabel && (
+                      <p className="mt-0.5 text-xs font-medium text-green-600">{selectedCourse.discountLabel}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Schedule selection */}
+              {filteredSchedules.length > 0 && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Class Schedule
+                  </label>
+                  <div className="space-y-2">
+                    {filteredSchedules.map((s) => {
+                      const spotsLeft = s.maxSeats - s.enrolled;
+                      const isFull = spotsLeft <= 0;
+                      return (
+                        <label
+                          key={s.id}
+                          className={`flex items-start gap-3 rounded-lg border p-3 transition-all cursor-pointer ${
+                            selectedScheduleId === s.id
+                              ? "border-gold bg-gold/5"
+                              : isFull
+                                ? "border-gray-100 bg-gray-50 opacity-60"
+                                : "border-gray-200 hover:border-gold/50"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="schedule"
+                            value={s.id}
+                            checked={selectedScheduleId === s.id}
+                            onChange={(e) => setSelectedScheduleId(e.target.value)}
+                            disabled={isFull}
+                            className="mt-0.5 accent-gold"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-semibold text-navy">{s.batchName}</p>
+                              {isFull ? (
+                                <span className="text-xs font-medium text-red-500">Full</span>
+                              ) : (
+                                <span className="text-xs text-gray-400">{spotsLeft} spots left</span>
+                              )}
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                              <span className="flex items-center gap-1"><Calendar size={11} /> {s.days}</span>
+                              <span>{s.startTime} – {s.endTime}</span>
+                              <span>Starts {new Date(s.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                            </div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
 
+              {/* Personal fields */}
               <div>
-                <label htmlFor="fullName" className="mb-1 block text-sm font-medium text-gray-700">
-                  Full Name <span className="text-gold">*</span>
-                </label>
-                <input
-                  ref={fullNameRef}
-                  id="fullName"
-                  name="fullName"
-                  type="text"
-                  placeholder="e.g. Daniel Kebede"
-                  autoComplete="name"
-                  className={fieldClass}
-                />
+                <label htmlFor="reg-name" className="mb-1 block text-sm font-medium text-gray-700">Full Name <span className="text-gold">*</span></label>
+                <input ref={fullNameRef} id="reg-name" type="text" placeholder="e.g. Daniel Kebede" autoComplete="name" className={fieldClass} />
                 {errors.fullName && <p className={errorClass}>{errors.fullName}</p>}
               </div>
 
-              <div>
-                <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">
-                  Email <span className="text-gold">*</span>
-                </label>
-                <input
-                  ref={emailRef}
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  className={fieldClass}
-                />
-                {errors.email && <p className={errorClass}>{errors.email}</p>}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="reg-email" className="mb-1 block text-sm font-medium text-gray-700">Email <span className="text-gold">*</span></label>
+                  <input ref={emailRef} id="reg-email" type="email" placeholder="you@example.com" autoComplete="email" className={fieldClass} />
+                  {errors.email && <p className={errorClass}>{errors.email}</p>}
+                </div>
+                <div>
+                  <label htmlFor="reg-phone" className="mb-1 block text-sm font-medium text-gray-700">Phone <span className="text-gold">*</span></label>
+                  <input ref={phoneRef} id="reg-phone" type="tel" placeholder="+251 9XX XXX XXX" autoComplete="tel" className={fieldClass} />
+                  {errors.phone && <p className={errorClass}>{errors.phone}</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="reg-age" className="mb-1 block text-sm font-medium text-gray-700">Age <span className="text-gold">*</span></label>
+                  <input ref={ageRef} id="reg-age" type="number" min={10} max={99} placeholder="e.g. 22" className={fieldClass} />
+                  {errors.age && <p className={errorClass}>{errors.age}</p>}
+                </div>
+                <div>
+                  <label htmlFor="reg-exp" className="mb-1 block text-sm font-medium text-gray-700">Experience <span className="text-gold">*</span></label>
+                  <select ref={experienceRef} id="reg-exp" className={fieldClass}>
+                    <option value="">Select level</option>
+                    {EXPERIENCE_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                  {errors.experience && <p className={errorClass}>{errors.experience}</p>}
+                </div>
               </div>
 
               <div>
-                <label htmlFor="phone" className="mb-1 block text-sm font-medium text-gray-700">
-                  Phone <span className="text-gold">*</span>
-                </label>
-                <input
-                  ref={phoneRef}
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  placeholder="+251 9XX XXX XXX"
-                  autoComplete="tel"
-                  className={fieldClass}
-                />
-                {errors.phone && <p className={errorClass}>{errors.phone}</p>}
-              </div>
-
-              <div className="sm:w-1/2">
-                <label htmlFor="age" className="mb-1 block text-sm font-medium text-gray-700">
-                  Age <span className="text-gold">*</span>
-                </label>
-                <input
-                  ref={ageRef}
-                  id="age"
-                  name="age"
-                  type="number"
-                  min={10}
-                  max={99}
-                  placeholder="e.g. 22"
-                  className={fieldClass}
-                />
-                {errors.age && <p className={errorClass}>{errors.age}</p>}
-              </div>
-
-              <div>
-                <label htmlFor="courseSelection" className="mb-1 block text-sm font-medium text-gray-700">
-                  Course Selection <span className="text-gold">*</span>
-                </label>
-                <select
-                  ref={courseRef}
-                  id="courseSelection"
-                  name="courseSelection"
-                  className={fieldClass}
-                  disabled={!coursesLoaded}
-                >
-                  <option value="">{coursesLoaded ? "Select a course" : "Loading courses..."}</option>
-                  {courseList.map((c) => (
-                    <option key={c.id} value={c.title}>{c.title} — {c.price}</option>
-                  ))}
-                </select>
-                {errors.courseSelection && <p className={errorClass}>{errors.courseSelection}</p>}
-              </div>
-
-              <div>
-                <label htmlFor="previousExperience" className="mb-1 block text-sm font-medium text-gray-700">
-                  Previous Experience <span className="text-gold">*</span>
-                </label>
-                <select
-                  ref={experienceRef}
-                  id="previousExperience"
-                  name="previousExperience"
-                  className={fieldClass}
-                >
-                  <option value="">Select your level</option>
-                  {EXPERIENCE_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-                {errors.previousExperience && <p className={errorClass}>{errors.previousExperience}</p>}
-              </div>
-
-              <div>
-                <label htmlFor="motivation" className="mb-1 block text-sm font-medium text-gray-700">
-                  Why do you want to join? <span className="text-gold">*</span>
-                </label>
-                <textarea
-                  ref={motivationRef}
-                  id="motivation"
-                  name="motivation"
-                  rows={3}
-                  maxLength={500}
-                  placeholder="Tell us why you're interested in this course..."
-                  className={fieldClass + " resize-none"}
-                />
+                <label htmlFor="reg-motivation" className="mb-1 block text-sm font-medium text-gray-700">Why do you want to join? <span className="text-gold">*</span></label>
+                <textarea ref={motivationRef} id="reg-motivation" rows={3} maxLength={500} placeholder="Tell us why you're interested..." className={fieldClass + " resize-none"} />
                 {errors.motivation && <p className={errorClass}>{errors.motivation}</p>}
               </div>
 
@@ -421,12 +396,9 @@ export default function ApplicationForm({
                 className="w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {submitting ? (
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 size={16} className="animate-spin" />
-                    Submitting...
-                  </span>
+                  <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Submitting...</span>
                 ) : (
-                  "Submit Application"
+                  "Submit Registration"
                 )}
               </button>
             </form>

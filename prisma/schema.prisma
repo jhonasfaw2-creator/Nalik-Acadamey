@@ -12,11 +12,11 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ── Website Content (CMS-like key-value store) ────────
+// ── Website Content (CMS key-value store, public read-only) ─
 model Content {
   id        String   @id @default(cuid())
-  section   String   // e.g. "hero", "about", "footer"
-  key       String   // e.g. "title", "description", "subtitle"
+  section   String
+  key       String
   value     String
   updatedAt DateTime @updatedAt
 
@@ -28,68 +28,79 @@ model Course {
   id            String   @id @default(cuid())
   title         String
   description   String
-  price         String   // e.g. "8,000 Birr"
-  discountPrice String?  // e.g. "6,500 Birr"
-  discountLabel String?  // e.g. "Opening Offer — 19% off"
-  videoUrl      String?
-  posterUrl     String?
+  price         Int      @default(0)       // price in Birr
+  discountPrice Int?                        // discounted price in Birr
+  discountLabel String?                     // e.g. "Opening Offer — 19% off"
+  active        Boolean  @default(true)     // shown in registration form
   sortOrder     Int      @default(0)
-  published     Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  schedules    Schedule[]
+  applications Application[]
 }
 
-// ── Founders ──────────────────────────────────────────
-model Founder {
-  id        String   @id @default(cuid())
-  name      String
-  title     String   // e.g. "CEO & Co-Founder"
-  bio       String
-  avatarUrl String?
-  videoUrl  String?
-  posterUrl String?
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-// ── Our Work (Portfolio / Projects) ───────────────────
-model Project {
+// ── Schedules (class batches) ─────────────────────────
+model Schedule {
   id          String   @id @default(cuid())
-  title       String
-  description String
-  videoUrl    String?
-  posterUrl   String?
-  category    String?  // e.g. "Film", "Commercial", "Music Video"
-  sortOrder   Int      @default(0)
-  published   Boolean  @default(false)
+  courseId     String
+  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  batchName   String   // e.g. "Morning Batch A", "Weekend Batch"
+  days        String   // e.g. "Mon, Wed, Fri" or "Sat, Sun"
+  startTime   String   // e.g. "09:00"
+  endTime     String   // e.g. "12:00"
+  startDate   DateTime
+  maxSeats    Int      @default(20)
+  enrolled    Int      @default(0)
+  active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  applications Application[]
 }
 
-// ── Applications ──────────────────────────────────────
+// ── Registrations (student applications) ──────────────
 model Application {
   id                 String   @id @default(cuid())
-  referenceId        String   @unique // e.g. NA-2026-0001
+  referenceId        String   @unique       // e.g. NA-2026-0001
   fullName           String
   email              String
   phone              String
   age                Int
-  courseSelection    String
-  previousExperience String
-  motivation         String
-  whatsappNumber     String   @default("")
-  status             String   @default("pending") // pending, reviewed, accepted, rejected
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  courseId            String
+  course              Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  scheduleId          String?
+  schedule            Schedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  previousExperience  String
+  motivation          String
+  status              String   @default("pending") // pending, reviewed, accepted, rejected
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  @@unique([email, courseSelection]) // prevent duplicate submissions
+  payment Payment?
+
+  @@unique([email, courseId])
 }
 
-// ── Contact Settings ──────────────────────────────────
-model ContactSetting {
+// ── Payments ──────────────────────────────────────────
+model Payment {
+  id              String   @id @default(cuid())
+  applicationId   String   @unique
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  amount          Int      // amount in Birr
+  method          String   @default("bank_transfer") // bank_transfer, cash, online
+  transactionRef  String?  // bank reference, transaction ID
+  status          String   @default("pending") // pending, confirmed, failed, refunded
+  notes           String?
+  confirmedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ── Settings (key-value store) ────────────────────────
+model Setting {
   id        String   @id @default(cuid())
-  key       String   @unique // e.g. "email", "phone", "address", "working_hours"
+  key       String   @unique
   value     String
   updatedAt DateTime @updatedAt
 }

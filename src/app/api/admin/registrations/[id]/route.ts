@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// PUT /api/admin/registrations/[id] — update registration status
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -17,11 +18,15 @@ export async function PUT(
     const application = await prisma.application.update({
       where: { id },
       data: { status },
+      include: {
+        course: { select: { title: true } },
+        payment: { select: { amount: true, status: true } },
+      },
     });
 
     return NextResponse.json(application);
   } catch (error) {
-    console.error("Admin application update error:", error);
-    return NextResponse.json({ error: "Failed to update application" }, { status: 500 });
+    console.error("Admin registration update error:", error);
+    return NextResponse.json({ error: "Failed to update registration" }, { status: 500 });
   }
 }

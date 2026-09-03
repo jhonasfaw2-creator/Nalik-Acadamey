@@ -49,7 +49,7 @@ export default function HomeClient() {
       <OurWork />
       <HowYouLearn />
       <Contact onApplyClick={openForm} />
-      <Footer />
+      <Footer onApplyClick={openForm} />
 
       <ApplicationForm
         open={formOpen}

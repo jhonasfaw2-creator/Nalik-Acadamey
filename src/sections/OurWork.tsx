@@ -95,10 +95,44 @@ export default function OurWork() {
 
 function VideoCard({ project }: { project: Project }) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   if (!project.videoUrl) return null;
 
   const posterSrc = project.posterUrl || "/assets/our works/cinmatic_vedio_poster.jpg";
+
+  if (!mounted) {
+    return (
+      <div className="card-hover overflow-hidden rounded-xl bg-white shadow-sm">
+        <div className="relative aspect-video overflow-hidden bg-navy">
+          <button
+            className="group relative h-full w-full cursor-pointer text-left focus:outline-none"
+            aria-label={`Play ${project.title}`}
+          >
+            <img src={posterSrc} alt={project.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
+            <div className="absolute inset-0 flex items-center justify-center bg-navy/30 transition-colors group-hover:bg-navy/10">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gold text-navy shadow-lg transition-transform duration-300 group-hover:scale-110">
+                <Play size={24} className="ml-1 fill-current" />
+              </div>
+            </div>
+            {project.category && (
+              <span className="absolute left-3 top-3 rounded-full bg-navy/80 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
+                {project.category}
+              </span>
+            )}
+          </button>
+        </div>
+        <div className="p-5">
+          <h3 className="text-lg font-bold text-navy">{project.title}</h3>
+          <p className="mt-2 text-sm leading-relaxed text-gray-600">{project.description}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="card-hover overflow-hidden rounded-xl bg-white shadow-sm">
@@ -109,21 +143,12 @@ function VideoCard({ project }: { project: Project }) {
             className="group relative h-full w-full cursor-pointer text-left focus:outline-none"
             aria-label={`Play ${project.title}`}
           >
-            {/* Instant loading poster image */}
-            <img
-              src={posterSrc}
-              alt={project.title}
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-              loading="lazy"
-            />
-
-            {/* Play Button Overlay */}
+            <img src={posterSrc} alt={project.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
             <div className="absolute inset-0 flex items-center justify-center bg-navy/30 transition-colors group-hover:bg-navy/10">
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gold text-navy shadow-lg transition-transform duration-300 group-hover:scale-110">
                 <Play size={24} className="ml-1 fill-current" />
               </div>
             </div>
-
             {project.category && (
               <span className="absolute left-3 top-3 rounded-full bg-navy/80 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
                 {project.category}
@@ -131,19 +156,11 @@ function VideoCard({ project }: { project: Project }) {
             )}
           </button>
         ) : (
-          /* Actual video mounts and streams ONLY after clicking */
-          <video
-            autoPlay
-            controls
-            playsInline
-            preload="auto"
-            className="h-full w-full object-cover"
-          >
+          <video autoPlay controls playsInline preload="auto" className="h-full w-full object-cover">
             <source src={project.videoUrl} type="video/mp4" />
           </video>
         )}
       </div>
-
       <div className="p-5">
         <h3 className="text-lg font-bold text-navy">{project.title}</h3>
         <p className="mt-2 text-sm leading-relaxed text-gray-600">{project.description}</p>

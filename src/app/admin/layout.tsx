@@ -3,28 +3,18 @@
 import { useState, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { LogOut, ExternalLink, Menu, LayoutDashboard, FileText, Palette, Film, BookOpen, GraduationCap, Rocket, Users, MonitorPlay, Lightbulb, Phone } from "lucide-react";
+import { LogOut, ExternalLink, Menu, LayoutDashboard, GraduationCap, Calendar, Users, DollarSign, Settings } from "lucide-react";
 
 const NAV_SECTIONS = [
-  { label: "Overview", href: "/admin", icon: LayoutDashboard },
-  { label: "Hero", href: "/admin/hero", icon: Film },
-  { label: "About", href: "/admin/about", icon: Users },
-  { label: "What We Teach", href: "/admin/what-we-teach", icon: Lightbulb },
+  { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { label: "Courses", href: "/admin/courses", icon: GraduationCap },
-  { label: "Our Programs", href: "/admin/our-programs", icon: BookOpen },
-  { label: "How It Works", href: "/admin/how-it-works", icon: Rocket },
-  { label: "Founders", href: "/admin/founders", icon: Users },
-  { label: "Our Work", href: "/admin/our-work", icon: MonitorPlay },
-  { label: "How You Learn", href: "/admin/how-you-learn", icon: Palette },
-  { label: "Contact", href: "/admin/contact", icon: Phone },
-  { label: "Applications", href: "/admin/applications", icon: FileText },
+  { label: "Schedules", href: "/admin/schedules", icon: Calendar },
+  { label: "Registrations", href: "/admin/registrations", icon: Users },
+  { label: "Payments", href: "/admin/payments", icon: DollarSign },
+  { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -35,7 +25,6 @@ export default function AdminLayout({
     router.refresh();
   }, [router]);
 
-  // Don't show sidebar on login page
   if (pathname === "/admin/login") {
     return <>{children}</>;
   }
@@ -44,20 +33,12 @@ export default function AdminLayout({
     <div className="flex min-h-screen bg-warm-white">
       {/* Mobile overlay */}
       <div
-        className={cn(
-          "fixed inset-0 z-30 bg-black/40 transition-opacity lg:hidden",
-          sidebarOpen ? "opacity-100" : "pointer-events-none opacity-0"
-        )}
+        className={cn("fixed inset-0 z-30 bg-black/40 transition-opacity lg:hidden", sidebarOpen ? "opacity-100" : "pointer-events-none opacity-0")}
         onClick={() => setSidebarOpen(false)}
       />
 
       {/* Sidebar */}
-      <aside
-        className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-navy transition-transform duration-200 lg:static lg:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
+      <aside className={cn("fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-navy transition-transform duration-200 lg:static lg:translate-x-0", sidebarOpen ? "translate-x-0" : "-translate-x-full")}>
         <div className="flex h-14 items-center gap-2.5 border-b border-white/10 px-5">
           <img src="/assets/logo.jpeg" alt="" className="h-7 w-7 rounded-lg object-cover" />
           <span className="text-sm font-bold text-white">Nalik Admin</span>
@@ -65,21 +46,13 @@ export default function AdminLayout({
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           {NAV_SECTIONS.map((item) => {
             const Icon = item.icon;
-            const isActive =
-              item.href === "/admin"
-                ? pathname === "/admin"
-                : pathname.startsWith(item.href);
+            const isActive = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
             return (
               <a
                 key={item.href}
                 href={item.href}
                 onClick={() => setSidebarOpen(false)}
-                className={cn(
-                  "mb-0.5 flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
-                  isActive
-                    ? "bg-gold/10 font-medium text-gold"
-                    : "text-white/60 hover:bg-white/5 hover:text-white"
-                )}
+                className={cn("mb-0.5 flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors", isActive ? "bg-gold/10 font-medium text-gold" : "text-white/60 hover:bg-white/5 hover:text-white")}
               >
                 <Icon size={16} className="shrink-0" />
                 {item.label}
@@ -88,37 +61,21 @@ export default function AdminLayout({
           })}
         </nav>
         <div className="border-t border-white/10 px-3 py-3 space-y-1">
-          <a
-            href="/"
-            className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-white/40 transition-colors hover:bg-white/5 hover:text-white/70"
-          >
-            <ExternalLink size={14} />
-            View Website
+          <a href="/" className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-white/40 transition-colors hover:bg-white/5 hover:text-white/70">
+            <ExternalLink size={14} /> View Website
           </a>
-          <button
-            onClick={handleLogout}
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-white/40 transition-colors hover:bg-white/5 hover:text-red-400"
-          >
-            <LogOut size={14} />
-            Sign Out
+          <button onClick={handleLogout} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-white/40 transition-colors hover:bg-white/5 hover:text-red-400">
+            <LogOut size={14} /> Sign Out
           </button>
         </div>
       </aside>
 
       {/* Main content */}
       <div className="flex flex-1 flex-col">
-        {/* Mobile top bar */}
         <div className="flex h-14 items-center border-b border-gray-200 bg-white px-4 lg:hidden">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-navy"
-            aria-label="Open menu"
-          >
-            <Menu size={22} />
-          </button>
+          <button onClick={() => setSidebarOpen(true)} className="text-navy" aria-label="Open menu"><Menu size={22} /></button>
           <span className="ml-3 text-sm font-bold text-navy">Nalik Admin</span>
         </div>
-
         <main className="flex-1 p-6 lg:p-8">{children}</main>
       </div>
     </div>

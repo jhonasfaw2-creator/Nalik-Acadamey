@@ -95,7 +95,6 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
                 alt="Nalik Academy"
                 className="h-10 w-10 rounded-xl object-cover shadow-sm transition-shadow duration-300 group-hover:shadow-md"
               />
-              <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-green-400" />
             </div>
             <div className="hidden sm:block">
               <span
@@ -105,14 +104,6 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
                 )}
               >
                 Nalik Academy
-              </span>
-              <span
-                className={cn(
-                  "block text-[10px] font-medium uppercase tracking-[0.15em] transition-colors duration-300",
-                  scrolled ? "text-gold" : "text-gold/70"
-                )}
-              >
-                Media Training
               </span>
             </div>
           </a>

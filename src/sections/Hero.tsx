@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { ArrowRight, Play } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 interface HeroProps {
   onApplyClick: () => void;
 }
 
 const DEFAULTS = {
-  badge: "Professional Media Training",
   title: "Master the Art of Visual Storytelling",
   description:
     "Learn filmmaking, video editing, and media production from industry professionals. Transform your creative passion into a career.",
@@ -24,10 +23,9 @@ export default function Hero({ onApplyClick }: HeroProps) {
     fetch("/api/content?section=hero")
       .then((r) => r.json())
       .then((d) => {
-        if (d.badge || d.title || d.description) {
+        if (d.title || d.description) {
           // Only update state if values actually changed to prevent video re-renders
           setContent((prev) => ({
-            badge: d.badge || prev.badge,
             title: d.title || prev.title,
             description: d.description || prev.description,
             video: d.video || prev.video,
@@ -66,10 +64,6 @@ export default function Hero({ onApplyClick }: HeroProps) {
       <div className="relative z-10 flex h-full items-center">
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
-            <p className="hero-badge mb-4 inline-flex items-center gap-2 rounded-full bg-gold/10 px-4 py-1.5 text-sm font-semibold uppercase tracking-widest text-gold">
-              <Play size={12} fill="currentColor" /> {content.badge}
-            </p>
-
             <h1 className="hero-title text-4xl font-bold leading-tight text-white sm:text-5xl lg:text-6xl">
               {content.title.includes("Visual Storytelling") ? (
                 <>
