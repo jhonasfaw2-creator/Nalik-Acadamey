@@ -56,7 +56,7 @@ export default function Founders() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="bg-white px-4 py-20 sm:px-6 lg:px-8">
+    <section id="founders" ref={sectionRef} className="bg-white px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">{data.badge}</p>
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">

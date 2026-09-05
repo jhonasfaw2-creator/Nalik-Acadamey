@@ -8,6 +8,7 @@ export async function GET() {
   try {
     const courses = await prisma.course.findMany({
       orderBy: { sortOrder: "asc" },
+      take: 100,
       include: { _count: { select: { schedules: true } } },
     });
     return NextResponse.json(courses);
@@ -99,7 +100,13 @@ export async function DELETE(request: NextRequest) {
       if (isNotFoundError(error)) {
         return NextResponse.json({ error: "Course not found" }, { status: 404 });
       }
-      throw error;
+      // Foreign key constraint: the course has dependent records (schedules,
+      // applications, payments) that must be removed first.
+      console.error("Admin course delete error:", error);
+      return NextResponse.json(
+        { error: "Cannot delete this course because it has active schedules or registrations. Remove those first." },
+        { status: 409 }
+      );
     }
     return NextResponse.json({ success: true });
   } catch (error) {

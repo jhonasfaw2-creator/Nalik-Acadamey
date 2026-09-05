@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Phone, Mail, MessageCircle, ArrowRight, MapPin } from "lucide-react";
+import { Phone, Mail, ArrowRight, MapPin } from "lucide-react";
 import { SOCIAL_LINKS } from "@/lib/socials";
 
 interface ContactProps {
@@ -10,7 +10,6 @@ interface ContactProps {
 
 const DEFAULTS = {
   phone: "+251 911 223 344",
-  whatsapp: "+251911223344",
   email: "info@nalikacademy.com",
   location: "Addis Ababa, Ethiopia",
   facebook: "https://facebook.com/nalikacademy",
@@ -31,7 +30,6 @@ export default function Contact({ onApplyClick }: ContactProps) {
         if (d.phone || d.email) {
           setContent({
             phone: d.phone || DEFAULTS.phone,
-            whatsapp: d.whatsapp || DEFAULTS.whatsapp,
             email: d.email || DEFAULTS.email,
             location: d.location || DEFAULTS.location,
             facebook: d.facebook || DEFAULTS.facebook,
@@ -71,13 +69,6 @@ export default function Contact({ onApplyClick }: ContactProps) {
       href: `tel:${content.phone.replace(/\s/g, "")}`,
       icon: Phone,
       color: "bg-blue-50 text-blue-600",
-    },
-    {
-      label: "WhatsApp",
-      value: "Message us",
-      href: `https://wa.me/${content.whatsapp.replace(/[^0-9]/g, "")}`,
-      icon: MessageCircle,
-      color: "bg-green-50 text-green-600",
     },
     {
       label: "Email",

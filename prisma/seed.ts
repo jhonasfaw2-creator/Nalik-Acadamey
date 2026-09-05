@@ -160,7 +160,6 @@ async function main() {
     { key: "academy_email", value: "info@nalikacademy.com" },
     { key: "academy_phone", value: "+251 911 223 344" },
     { key: "academy_address", value: "Addis Ababa, Ethiopia" },
-    { key: "whatsapp_number", value: "+251911223344" },
   ];
 
   for (const setting of academySettings) {

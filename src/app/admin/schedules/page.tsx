@@ -150,7 +150,7 @@ export default function AdminSchedules() {
               </div>
               <div className="flex items-center gap-3">
                 <label className="text-sm font-medium text-gray-700">Active</label>
-                <button type="button" onClick={() => setEditing({ ...editing, active: !editing.active })} className={`relative h-6 w-11 rounded-full transition-colors ${editing.active ? "bg-gold" : "bg-gray-300"}`}>
+                <button type="button" role="switch" aria-checked={editing.active} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditing({ ...editing, active: !editing.active }); } }} onClick={() => setEditing({ ...editing, active: !editing.active })} className={`relative h-6 w-11 rounded-full transition-colors ${editing.active ? "bg-gold" : "bg-gray-300"}`}>
                   <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${editing.active ? "left-[22px]" : "left-0.5"}`} />
                 </button>
               </div>

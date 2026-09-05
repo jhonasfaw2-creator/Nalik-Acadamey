@@ -23,6 +23,9 @@ export async function GET(request: NextRequest) {
       ];
     }
 
+    const skip = Math.max(0, parseInt(request.nextUrl.searchParams.get("skip") || "0", 10) || 0);
+    const take = Math.min(100, Math.max(1, parseInt(request.nextUrl.searchParams.get("take") || "100", 10) || 100));
+
     const [applications, counts] = await Promise.all([
       prisma.application.findMany({
         where,
@@ -44,8 +47,10 @@ export async function GET(request: NextRequest) {
           },
         },
         orderBy: { createdAt: "desc" },
+        skip,
+        take,
       }),
-      prisma.application.groupBy({ by: ["status"], _count: true }),
+      prisma.application.groupBy({ by: ["status"], _count: true, where }),
     ]);
 
     const statusCounts: Record<string, number> = {};

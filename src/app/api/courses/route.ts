@@ -7,10 +7,27 @@ export async function GET() {
     const courses = await prisma.course.findMany({
       where: { active: true },
       orderBy: { sortOrder: "asc" },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        price: true,
+        discountPrice: true,
+        discountLabel: true,
+        sortOrder: true,
         schedules: {
           where: { active: true },
           orderBy: { startDate: "asc" },
+          select: {
+            id: true,
+            batchName: true,
+            days: true,
+            startTime: true,
+            endTime: true,
+            startDate: true,
+            maxSeats: true,
+            enrolled: true,
+          },
         },
       },
     });

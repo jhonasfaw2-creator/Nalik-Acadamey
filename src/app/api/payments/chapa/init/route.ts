@@ -32,6 +32,12 @@ export async function POST(request: NextRequest) {
 
     const application = await prisma.application.findUnique({
       where: { referenceId },
+      select: {
+        referenceId: true,
+        fullName: true,
+        email: true,
+        phone: true,
+      },
     });
     if (!application) {
       return NextResponse.json({ error: "Registration not found" }, { status: 404 });
@@ -39,6 +45,14 @@ export async function POST(request: NextRequest) {
 
     const payment = await prisma.payment.findUnique({
       where: { applicationId: application.id },
+      select: {
+        id: true,
+        amount: true,
+        currency: true,
+        status: true,
+        merchantReference: true,
+        chapaReference: true,
+      },
     });
     if (!payment) {
       return NextResponse.json({ error: "Payment record not found" }, { status: 404 });
@@ -67,6 +81,17 @@ export async function POST(request: NextRequest) {
 
     // Record the attempt. Re-initializing resets a failed/cancelled attempt
     // back to PENDING with the new references.
+    //
+    // Re-check the current payment status right before writing. Between the
+    // early SUCCESS guard above and this update, a webhook (or another
+    // concurrent request) may have already marked the payment as SUCCESS.
+    // Overwriting SUCCESS → PENDING here would break the student's confirmed
+    // payment, so we refuse to downgrade.
+    const current = await prisma.payment.findUnique({ where: { id: payment.id } });
+    if (!current || current.status === "SUCCESS") {
+      return NextResponse.json({ success: true, alreadyPaid: true, status: "SUCCESS" });
+    }
+
     await prisma.payment.update({
       where: { id: payment.id },
       data: {

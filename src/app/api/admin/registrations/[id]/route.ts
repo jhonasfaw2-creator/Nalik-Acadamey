@@ -39,13 +39,28 @@ export async function PUT(
     }
 
     // Marking a registration PAID manually should also settle the payment.
+    // applyChapaPaymentResult is idempotent and internally transactional, so
+    // calling it here is safe even if a concurrent webhook already settled
+    // the same payment.
     if (status === "PAID" && application.payment && application.payment.status !== "SUCCESS") {
-      await applyChapaPaymentResult(application.payment.id, {
+      const result = await applyChapaPaymentResult(application.payment.id, {
         status: "SUCCESS",
         amount: application.payment.amount,
         currency: application.payment.currency,
       });
-      application.payment.status = "SUCCESS";
+
+      // If the payment was just settled, refresh the application to reflect
+      // the new payment status in the response.
+      if (result?.changed) {
+        application = await prisma.application.findUnique({
+          where: { id: application.id },
+          include: {
+            course: { select: { title: true } },
+            schedule: { select: { id: true, batchName: true } },
+            payment: { select: { id: true, amount: true, currency: true, status: true, merchantReference: true } },
+          },
+        });
+      }
     }
 
     return NextResponse.json(application);

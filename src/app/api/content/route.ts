@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     const items = await prisma.content.findMany({
       where: { section },
       orderBy: { key: "asc" },
+      select: { key: true, value: true },
     });
 
     // Return as a flat object { key: value }

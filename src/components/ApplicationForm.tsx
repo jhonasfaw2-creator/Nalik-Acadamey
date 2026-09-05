@@ -77,7 +77,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const fullNameRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
-  const whatsappRef = useRef<HTMLInputElement>(null);
   const ageRef = useRef<HTMLInputElement>(null);
 
   // Payment / result state
@@ -221,7 +220,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     if (fullNameRef.current) fullNameRef.current.value = "";
     if (emailRef.current) emailRef.current.value = "";
     if (phoneRef.current) phoneRef.current.value = "";
-    if (whatsappRef.current) whatsappRef.current.value = "";
     if (ageRef.current) ageRef.current.value = "";
   };
 
@@ -246,8 +244,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = "Please enter a valid email";
     const phone = phoneRef.current?.value?.trim() || "";
     if (!phone || phone.length < 8) e.phone = "Phone must be at least 8 digits";
-    const whatsapp = whatsappRef.current?.value?.trim() || "";
-    if (whatsapp && whatsapp.length < 8) e.whatsapp = "WhatsApp must be at least 8 digits";
     const age = Number(ageRef.current?.value?.trim() || 0);
     if (!age || isNaN(age) || age < 10 || age > 99 || !Number.isInteger(age)) e.age = "Enter a valid age (10–99)";
     return e;
@@ -272,7 +268,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
           fullName: fullNameRef.current?.value?.trim(),
           email: emailRef.current?.value?.trim(),
           phone: phoneRef.current?.value?.trim(),
-          whatsapp: whatsappRef.current?.value?.trim() || undefined,
           age: Number(ageRef.current?.value?.trim()),
           courseId: selectedCourseId,
           scheduleId: selectedScheduleId || undefined,
@@ -574,11 +569,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="reg-whatsapp" className="mb-1 block text-sm font-medium text-gray-700">WhatsApp Number</label>
-                  <input ref={whatsappRef} id="reg-whatsapp" type="tel" placeholder="+251 9XX XXX XXX" autoComplete="tel" className={fieldClass} />
-                  {errors.whatsapp && <p className={errorClass}>{errors.whatsapp}</p>}
-                </div>
                 <div>
                   <label htmlFor="reg-age" className="mb-1 block text-sm font-medium text-gray-700">Age <span className="text-gold">*</span></label>
                   <input ref={ageRef} id="reg-age" type="number" min={10} max={99} placeholder="e.g. 22" className={fieldClass} />

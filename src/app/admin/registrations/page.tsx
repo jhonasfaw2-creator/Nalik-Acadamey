@@ -9,7 +9,6 @@ interface Registration {
   fullName: string;
   email: string;
   phone: string;
-  whatsapp: string | null;
   age: number;
   previousExperience: string;
   motivation: string;

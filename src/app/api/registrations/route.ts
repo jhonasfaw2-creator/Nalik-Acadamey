@@ -100,24 +100,40 @@ export async function POST(request: NextRequest) {
       attempts++;
     }
 
-    // Create registration + PENDING payment. Seats are not consumed until the
-    // payment is verified (see applyChapaPaymentResult).
-    let application;
+    // Create registration + PENDING payment atomically. If either fails,
+    // neither is written so we never leave an orphaned application or
+    // an application without a payment record.
+    let application: { id: string; referenceId: string };
     try {
-      application = await prisma.application.create({
-        data: {
-          referenceId,
-          fullName,
-          email: normalizedEmail,
-          phone,
-          age,
-          courseId,
-          scheduleId: scheduleId || null,
-          previousExperience: previousExperience || "",
-          motivation: motivation || "",
-          status: "PENDING_PAYMENT",
-        },
+      const result = await prisma.$transaction(async (tx) => {
+        const createdApp = await (tx as any).application.create({
+          data: {
+            referenceId,
+            fullName,
+            email: normalizedEmail,
+            phone,
+            age,
+            courseId,
+            scheduleId: scheduleId || null,
+            previousExperience: previousExperience || "",
+            motivation: motivation || "",
+            status: "PENDING_PAYMENT",
+          },
+        });
+
+        await (tx as any).payment.create({
+          data: {
+            applicationId: createdApp.id,
+            amount: paymentAmount,
+            currency: "ETB",
+            status: "PENDING",
+          },
+        });
+
+        return createdApp;
       });
+
+      application = result;
     } catch (error) {
       // Two concurrent submissions can both pass the findUnique check above;
       // the (email, courseId) unique index is the authoritative guard.
@@ -135,15 +151,6 @@ export async function POST(request: NextRequest) {
       }
       throw error;
     }
-
-    await prisma.payment.create({
-      data: {
-        applicationId: application.id,
-        amount: paymentAmount,
-        currency: "ETB",
-        status: "PENDING",
-      },
-    });
 
     return NextResponse.json(
       {

@@ -75,7 +75,7 @@ export default function OurPrograms() {
   }, [content.programs]);
 
   return (
-    <section className="bg-warm-white px-4 py-20 sm:px-6 lg:px-8">
+    <section id="our-programs" className="bg-warm-white px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <div ref={headingRef}>
           <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">{content.badge}</p>

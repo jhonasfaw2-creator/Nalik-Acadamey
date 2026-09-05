@@ -46,6 +46,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
 
   const handleNavClick = useCallback((href: string) => {
     setMobileOpen(false);
+    setActiveSection(href);
     const id = href.replace("#", "");
     const el = document.getElementById(id);
     if (el) {

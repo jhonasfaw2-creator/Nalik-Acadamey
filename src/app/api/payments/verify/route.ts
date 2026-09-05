@@ -26,7 +26,15 @@ async function handle(request: NextRequest) {
 
     const application = await prisma.application.findUnique({
       where: { referenceId },
-      include: { course: true, schedule: true },
+      select: {
+        referenceId: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        status: true,
+        course: { select: { title: true, price: true, discountPrice: true, discountLabel: true } },
+        schedule: { select: { batchName: true, days: true, startTime: true, endTime: true, startDate: true } },
+      },
     });
     if (!application) {
       return NextResponse.json({ error: "Registration not found" }, { status: 404 });

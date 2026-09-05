@@ -10,6 +10,9 @@ export async function GET(request: NextRequest) {
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
 
+    const skip = Math.max(0, parseInt(request.nextUrl.searchParams.get("skip") || "0", 10) || 0);
+    const take = Math.min(100, Math.max(1, parseInt(request.nextUrl.searchParams.get("take") || "100", 10) || 100));
+
     const payments = await prisma.payment.findMany({
       where,
       include: {
@@ -29,6 +32,8 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: { createdAt: "desc" },
+      skip,
+      take,
     });
 
     return NextResponse.json(payments);

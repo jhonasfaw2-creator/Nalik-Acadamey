@@ -79,13 +79,49 @@ export async function POST(request: NextRequest) {
     if (chapaReference) {
       payment = await prisma.payment.findFirst({
         where: { chapaReference },
-        include: { application: true },
+        select: {
+          id: true,
+          applicationId: true,
+          amount: true,
+          currency: true,
+          status: true,
+          merchantReference: true,
+          chapaReference: true,
+          method: true,
+          application: {
+            select: {
+              id: true,
+              referenceId: true,
+              fullName: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
       });
     }
     if (!payment && merchantReference) {
       payment = await prisma.payment.findUnique({
         where: { merchantReference },
-        include: { application: true },
+        select: {
+          id: true,
+          applicationId: true,
+          amount: true,
+          currency: true,
+          status: true,
+          merchantReference: true,
+          chapaReference: true,
+          method: true,
+          application: {
+            select: {
+              id: true,
+              referenceId: true,
+              fullName: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
       });
     }
     if (!payment) {

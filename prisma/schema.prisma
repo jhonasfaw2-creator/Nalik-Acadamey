@@ -69,7 +69,6 @@ model Application {
   fullName           String
   email              String
   phone              String
-  whatsapp           String? // WhatsApp number (optional)
   age                Int
   courseId            String
   course             Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)

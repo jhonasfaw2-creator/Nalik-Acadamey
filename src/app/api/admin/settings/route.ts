@@ -4,7 +4,9 @@ import { prisma } from "@/lib/prisma";
 // GET /api/admin/settings
 export async function GET() {
   try {
-    const settings = await prisma.setting.findMany();
+    const settings = await prisma.setting.findMany({
+      select: { key: true, value: true },
+    });
     const data: Record<string, string> = {};
     for (const s of settings) data[s.key] = s.value;
     return NextResponse.json(data);

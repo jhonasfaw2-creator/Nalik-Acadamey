@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
       where,
       include: { course: { select: { id: true, title: true } } },
       orderBy: { createdAt: "desc" },
+      take: 100,
     });
 
     return NextResponse.json(schedules);
@@ -131,7 +132,13 @@ export async function DELETE(request: NextRequest) {
       if (isNotFoundError(error)) {
         return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
       }
-      throw error;
+      // Foreign key constraint: the schedule has dependent registrations
+      // that must be removed or reassigned first.
+      console.error("Admin schedule delete error:", error);
+      return NextResponse.json(
+        { error: "Cannot delete this schedule because it has registrations. Remove or reassign them first." },
+        { status: 409 }
+      );
     }
     return NextResponse.json({ success: true });
   } catch (error) {
