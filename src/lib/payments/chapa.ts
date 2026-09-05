@@ -103,6 +103,8 @@ export async function initializeChapaPayment(input: ChapaInitInput): Promise<Cha
       meta: input.meta,
     }),
     cache: "no-store",
+    // Never let a hung Chapa request tie up the route indefinitely.
+    signal: AbortSignal.timeout(10_000),
   });
   const data: unknown = await res.json().catch(() => null);
 
@@ -147,6 +149,8 @@ export async function verifyChapaPayment(reference: string): Promise<ChapaVerifi
     method: "GET",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     cache: "no-store",
+    // Never let a hung verification tie up the route indefinitely.
+    signal: AbortSignal.timeout(10_000),
   });
   const data: unknown = await res.json().catch(() => null);
 

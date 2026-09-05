@@ -74,47 +74,54 @@ export async function POST(request: NextRequest) {
 
   // Find the payment by Chapa's ids — our saved attempt data or the student's
   // stored reference.
-  let payment = null;
-  if (chapaReference) {
-    payment = await prisma.payment.findFirst({
-      where: { chapaReference },
-      include: { application: true },
+  try {
+    let payment = null;
+    if (chapaReference) {
+      payment = await prisma.payment.findFirst({
+        where: { chapaReference },
+        include: { application: true },
+      });
+    }
+    if (!payment && merchantReference) {
+      payment = await prisma.payment.findUnique({
+        where: { merchantReference },
+        include: { application: true },
+      });
+    }
+    if (!payment) {
+      console.warn(`[chapa-webhook] no payment matched for ${merchantReference || chapaReference || event}`);
+      // Acknowledge to stop retries — the reference belongs to another system or
+      // the attempt was overwritten by a retry (late signal for a stale attempt).
+      return NextResponse.json({ success: true });
+    }
+
+    const verification: ChapaVerification = {
+      status,
+      chapaReference: chapaReference || "",
+      merchantReference: merchantReference || "",
+      amount: amount ?? 0,
+      currency: currency || "ETB",
+      method,
+      serviceFee,
+      customer: null,
+    };
+
+    await applyChapaPaymentResult(payment.id, {
+      status,
+      chapaReference,
+      merchantReference,
+      amount,
+      currency,
+      method,
+      serviceFee,
+      raw: payload,
     });
-  }
-  if (!payment && merchantReference) {
-    payment = await prisma.payment.findUnique({
-      where: { merchantReference },
-      include: { application: true },
-    });
-  }
-  if (!payment) {
-    console.warn(`[chapa-webhook] no payment matched for ${merchantReference || chapaReference || event}`);
-    // Acknowledge to stop retries — the reference belongs to another system or
-    // the attempt was overwritten by a retry (late signal for a stale attempt).
+
     return NextResponse.json({ success: true });
+  } catch (error) {
+    // A transient DB failure here must surface as a non-2xx so Chapa retries
+    // the delivery; otherwise the payment could be stuck in PENDING forever.
+    console.error("[chapa-webhook] processing failed:", error);
+    return NextResponse.json({ success: false }, { status: 500 });
   }
-
-  const verification: ChapaVerification = {
-    status,
-    chapaReference: chapaReference || "",
-    merchantReference: merchantReference || "",
-    amount: amount ?? 0,
-    currency: currency || "ETB",
-    method,
-    serviceFee,
-    customer: null,
-  };
-
-  await applyChapaPaymentResult(payment.id, {
-    status,
-    chapaReference,
-    merchantReference,
-    amount,
-    currency,
-    method,
-    serviceFee,
-    raw: payload,
-  });
-
-  return NextResponse.json({ success: true });
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { readJson, isUniqueConstraintError } from "@/lib/http";
 import { registrationSchema } from "@/lib/validators";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,10 @@ function generateReferenceId(): string {
 // never sends a price.
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await readJson(request);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
     const parsed = registrationSchema.safeParse(body);
     if (!parsed.success) {
       const fieldErrors = parsed.error.flatten().fieldErrors;
@@ -45,9 +49,13 @@ export async function POST(request: NextRequest) {
       motivation,
     } = parsed.data;
 
+    // Normalize so the same student registering with different casing is
+    // caught by the (email, courseId) duplicate guard.
+    const normalizedEmail = email.toLowerCase();
+
     // Check duplicate
     const existing = await prisma.application.findUnique({
-      where: { email_courseId: { email, courseId } },
+      where: { email_courseId: { email: normalizedEmail, courseId } },
     });
 
     if (existing) {
@@ -94,20 +102,39 @@ export async function POST(request: NextRequest) {
 
     // Create registration + PENDING payment. Seats are not consumed until the
     // payment is verified (see applyChapaPaymentResult).
-    const application = await prisma.application.create({
-      data: {
-        referenceId,
-        fullName,
-        email,
-        phone,
-        age,
-        courseId,
-        scheduleId: scheduleId || null,
-        previousExperience: previousExperience || "",
-        motivation: motivation || "",
-        status: "PENDING_PAYMENT",
-      },
-    });
+    let application;
+    try {
+      application = await prisma.application.create({
+        data: {
+          referenceId,
+          fullName,
+          email: normalizedEmail,
+          phone,
+          age,
+          courseId,
+          scheduleId: scheduleId || null,
+          previousExperience: previousExperience || "",
+          motivation: motivation || "",
+          status: "PENDING_PAYMENT",
+        },
+      });
+    } catch (error) {
+      // Two concurrent submissions can both pass the findUnique check above;
+      // the (email, courseId) unique index is the authoritative guard.
+      if (isUniqueConstraintError(error)) {
+        const duplicate = await prisma.application.findUnique({
+          where: { email_courseId: { email: normalizedEmail, courseId } },
+        });
+        return NextResponse.json(
+          {
+            error: "You have already registered for this course.",
+            referenceId: duplicate?.referenceId,
+          },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
 
     await prisma.payment.create({
       data: {

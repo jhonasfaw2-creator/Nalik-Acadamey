@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { readJson, isNotFoundError } from "@/lib/http";
 import { courseSchema } from "@/lib/validators";
 
 // GET /api/admin/courses — list all courses
@@ -19,7 +20,10 @@ export async function GET() {
 // POST /api/admin/courses — create course
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await readJson(request);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
     const parsed = courseSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
@@ -51,9 +55,12 @@ export async function POST(request: NextRequest) {
 // PUT /api/admin/courses — update course
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { id, ...data } = body;
-    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+    const body = await readJson(request);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const { id, ...data } = body as Record<string, unknown>;
+    if (typeof id !== "string" || !id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
     // Validate + strip unknown keys. The admin UI sends the full course row
     // back (including _count), which Prisma would otherwise reject as an
@@ -66,8 +73,15 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const course = await prisma.course.update({ where: { id }, data: parsed.data });
-    return NextResponse.json(course);
+    try {
+      const course = await prisma.course.update({ where: { id }, data: parsed.data });
+      return NextResponse.json(course);
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return NextResponse.json({ error: "Course not found" }, { status: 404 });
+      }
+      throw error;
+    }
   } catch (error) {
     console.error("Admin course update error:", error);
     return NextResponse.json({ error: "Failed to update course" }, { status: 500 });
@@ -79,7 +93,14 @@ export async function DELETE(request: NextRequest) {
   try {
     const id = request.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-    await prisma.course.delete({ where: { id } });
+    try {
+      await prisma.course.delete({ where: { id } });
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return NextResponse.json({ error: "Course not found" }, { status: 404 });
+      }
+      throw error;
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Admin course delete error:", error);

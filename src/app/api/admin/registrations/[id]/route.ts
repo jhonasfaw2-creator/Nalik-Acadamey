@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { readJson, isNotFoundError } from "@/lib/http";
 import { applyChapaPaymentResult } from "@/lib/payments/apply";
 
 // PUT /api/admin/registrations/[id] — update registration status
@@ -9,22 +10,33 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const body = await request.json();
-    const { status } = body;
+    const body = await readJson(request);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const { status } = body as { status?: unknown };
 
-    if (!status || !["PENDING_PAYMENT", "PAID", "CONFIRMED"].includes(status)) {
+    if (typeof status !== "string" || !["PENDING_PAYMENT", "PAID", "CONFIRMED"].includes(status)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
 
-    const application = await prisma.application.update({
-      where: { id },
-      data: { status },
-      include: {
-        course: { select: { title: true } },
-        schedule: { select: { id: true, batchName: true } },
-        payment: { select: { id: true, amount: true, currency: true, status: true, merchantReference: true } },
-      },
-    });
+    let application;
+    try {
+      application = await prisma.application.update({
+        where: { id },
+        data: { status },
+        include: {
+          course: { select: { title: true } },
+          schedule: { select: { id: true, batchName: true } },
+          payment: { select: { id: true, amount: true, currency: true, status: true, merchantReference: true } },
+        },
+      });
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return NextResponse.json({ error: "Registration not found" }, { status: 404 });
+      }
+      throw error;
+    }
 
     // Marking a registration PAID manually should also settle the payment.
     if (status === "PAID" && application.payment && application.payment.status !== "SUCCESS") {

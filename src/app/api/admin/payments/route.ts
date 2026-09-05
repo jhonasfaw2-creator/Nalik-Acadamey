@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { readJson } from "@/lib/http";
 import { applyChapaPaymentResult } from "@/lib/payments/apply";
 
 // GET /api/admin/payments — list all payments with registration info
@@ -40,13 +41,26 @@ export async function GET(request: NextRequest) {
 // PUT /api/admin/payments — update payment status (manual override)
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { id, status, notes } = body;
-    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+    const body = await readJson(request);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const { id, status, notes, chapaReference, merchantReference, method } = body as {
+      id?: unknown;
+      status?: unknown;
+      notes?: unknown;
+      chapaReference?: unknown;
+      merchantReference?: unknown;
+      method?: unknown;
+    };
+    if (typeof id !== "string" || !id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
     const VALID_STATUSES = ["PENDING", "SUCCESS", "FAILED", "CANCELLED", "INCOMPLETE"];
-    if (status && !VALID_STATUSES.includes(status)) {
+    if (status !== undefined && (typeof status !== "string" || !VALID_STATUSES.includes(status))) {
       return NextResponse.json({ error: "Invalid payment status" }, { status: 400 });
+    }
+    if (notes !== undefined && typeof notes !== "string") {
+      return NextResponse.json({ error: "notes must be a string" }, { status: 400 });
     }
 
     let payment = await prisma.payment.findUnique({ where: { id } });
@@ -65,15 +79,16 @@ export async function PUT(request: NextRequest) {
         status,
         amount: payment.amount,
         currency: payment.currency,
-        chapaReference: typeof body.chapaReference === "string" ? body.chapaReference : payment.chapaReference || undefined,
-        merchantReference: typeof body.merchantReference === "string" ? body.merchantReference : payment.merchantReference || undefined,
-        method: typeof body.method === "string" ? body.method : payment.method || undefined,
+        chapaReference: typeof chapaReference === "string" ? chapaReference : payment.chapaReference || undefined,
+        merchantReference: typeof merchantReference === "string" ? merchantReference : payment.merchantReference || undefined,
+        method: typeof method === "string" ? method : payment.method || undefined,
       });
-      payment = (await prisma.payment.findUnique({
+      const updated = await prisma.payment.findUnique({
         where: { id },
         include: { application: { select: { referenceId: true, fullName: true, email: true } } },
-      }))!;
-      if (!result) return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+      });
+      if (!result || !updated) return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+      payment = updated;
     }
 
     return NextResponse.json(payment);

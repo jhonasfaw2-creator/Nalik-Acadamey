@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { readJson, isNotFoundError } from "@/lib/http";
+import { scheduleSchema } from "@/lib/validators";
 
 // GET /api/admin/schedules — list all schedules with course info
 export async function GET(request: NextRequest) {
@@ -24,23 +26,31 @@ export async function GET(request: NextRequest) {
 // POST /api/admin/schedules — create a schedule
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { courseId, batchName, days, startTime, endTime, startDate, maxSeats, active } = body;
+    const body = await readJson(request);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
 
-    if (!courseId || !batchName || !days || !startTime || !endTime || !startDate) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    // Strips unknown keys (e.g. `enrolled` / nested `course` from the admin UI)
+    // and rejects invalid dates, times, and seat counts with a clean 400.
+    const parsed = scheduleSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || "Invalid schedule data" },
+        { status: 400 }
+      );
     }
 
     const schedule = await prisma.schedule.create({
       data: {
-        courseId,
-        batchName,
-        days,
-        startTime,
-        endTime,
-        startDate: new Date(startDate),
-        maxSeats: maxSeats ?? 20,
-        active: active ?? true,
+        courseId: parsed.data.courseId,
+        batchName: parsed.data.batchName,
+        days: parsed.data.days,
+        startTime: parsed.data.startTime,
+        endTime: parsed.data.endTime,
+        startDate: new Date(parsed.data.startDate),
+        maxSeats: parsed.data.maxSeats,
+        active: parsed.data.active,
       },
       include: { course: { select: { id: true, title: true } } },
     });
@@ -55,14 +65,24 @@ export async function POST(request: NextRequest) {
 // PUT /api/admin/schedules — update a schedule
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { id, ...data } = body;
-    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+    const body = await readJson(request);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const { id, ...data } = body as Record<string, unknown>;
+    if (typeof id !== "string" || !id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-    // Pick only editable fields. The admin UI sends the full schedule row back
-    // (including the nested `course` object and `enrolled`), which Prisma
-    // rejects as an unknown argument — edit was broken before.
-    const dataOut: {
+    const parsed = scheduleSchema.partial().safeParse(data);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || "Invalid schedule data" },
+        { status: 400 }
+      );
+    }
+
+    // Rebuild only the editable fields (schema already stripped `enrolled` and
+    // the nested `course` object the admin UI sends back).
+    const updateData: {
       courseId?: string;
       batchName?: string;
       days?: string;
@@ -72,22 +92,28 @@ export async function PUT(request: NextRequest) {
       maxSeats?: number;
       active?: boolean;
     } = {};
-    if (typeof data.courseId === "string") dataOut.courseId = data.courseId;
-    if (typeof data.batchName === "string") dataOut.batchName = data.batchName;
-    if (typeof data.days === "string") dataOut.days = data.days;
-    if (typeof data.startTime === "string") dataOut.startTime = data.startTime;
-    if (typeof data.endTime === "string") dataOut.endTime = data.endTime;
-    if (data.startDate) dataOut.startDate = new Date(data.startDate as string);
-    if (typeof data.maxSeats === "number") dataOut.maxSeats = data.maxSeats;
-    if (typeof data.active === "boolean") dataOut.active = data.active;
+    if (parsed.data.courseId !== undefined) updateData.courseId = parsed.data.courseId;
+    if (parsed.data.batchName !== undefined) updateData.batchName = parsed.data.batchName;
+    if (parsed.data.days !== undefined) updateData.days = parsed.data.days;
+    if (parsed.data.startTime !== undefined) updateData.startTime = parsed.data.startTime;
+    if (parsed.data.endTime !== undefined) updateData.endTime = parsed.data.endTime;
+    if (parsed.data.startDate !== undefined) updateData.startDate = new Date(parsed.data.startDate);
+    if (parsed.data.maxSeats !== undefined) updateData.maxSeats = parsed.data.maxSeats;
+    if (parsed.data.active !== undefined) updateData.active = parsed.data.active;
 
-    const schedule = await prisma.schedule.update({
-      where: { id },
-      data: dataOut,
-      include: { course: { select: { id: true, title: true } } },
-    });
-
-    return NextResponse.json(schedule);
+    try {
+      const schedule = await prisma.schedule.update({
+        where: { id },
+        data: updateData,
+        include: { course: { select: { id: true, title: true } } },
+      });
+      return NextResponse.json(schedule);
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+      }
+      throw error;
+    }
   } catch (error) {
     console.error("Admin schedule update error:", error);
     return NextResponse.json({ error: "Failed to update schedule" }, { status: 500 });
@@ -99,7 +125,14 @@ export async function DELETE(request: NextRequest) {
   try {
     const id = request.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-    await prisma.schedule.delete({ where: { id } });
+    try {
+      await prisma.schedule.delete({ where: { id } });
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+      }
+      throw error;
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Admin schedule delete error:", error);

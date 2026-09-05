@@ -56,30 +56,15 @@ export default function Courses({ onApplyWithCourse }: CoursesProps) {
     setLoading(true);
     setError(false);
 
-    // Courses are required; schedules are optional decoration — a failure of
-    // either must never blank out the section or claim there are no courses.
+    // Courses are required; a failure must never blank out the section or
+    // claim there are no courses. Schedules come embedded in the /api/courses
+    // payload, so no second request is needed.
     fetch("/api/courses")
       .then((r) => r.json())
-      .then(async (courseData) => {
+      .then((courseData) => {
         if (!Array.isArray(courseData)) throw new Error("invalid courses payload");
-        let scheduleMap: Record<string, Schedule[]> = {};
-        try {
-          const scheduleData = await fetch("/api/schedules").then((r) => r.json());
-          if (Array.isArray(scheduleData)) {
-            scheduleMap = {};
-            for (const s of scheduleData as (Schedule & { course: { id: string } })[]) {
-              if (!scheduleMap[s.course.id]) scheduleMap[s.course.id] = [];
-              scheduleMap[s.course.id].push(s);
-            }
-          }
-        } catch {
-          // schedules are optional — courses still render
-        }
         if (cancelled) return;
-        setCourses(courseData.map((c: Omit<Course, "schedules">) => ({
-          ...c,
-          schedules: scheduleMap[c.id] || [],
-        })));
+        setCourses(courseData as Course[]);
         setLoading(false);
       })
       .catch(() => {
