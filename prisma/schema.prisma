@@ -18,9 +18,11 @@ model Content {
   section   String
   key       String
   value     String
+  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([section, key])
+  @@index([section])
 }
 
 // ── Courses ───────────────────────────────────────────
@@ -36,6 +38,7 @@ model Course {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  @@index([active])
   schedules    Schedule[]
   applications Application[]
 }
@@ -56,45 +59,56 @@ model Schedule {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([active])
   applications Application[]
-}
-
-// ── Registrations (student applications) ──────────────
+}// ── Registrations (student applications) ──────────────
+// Registration lifecycle: PENDING_PAYMENT → PAID → CONFIRMED
 model Application {
   id                 String   @id @default(cuid())
-  referenceId        String   @unique       // e.g. NA-2026-0001
+  referenceId        String   @unique // e.g. NA-2026-0001
   fullName           String
   email              String
   phone              String
+  whatsapp           String? // WhatsApp number (optional)
   age                Int
   courseId            String
-  course              Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course             Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   scheduleId          String?
   schedule            Schedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
-  previousExperience  String
-  motivation          String
-  status              String   @default("pending") // pending, reviewed, accepted, rejected
+  previousExperience  String   @default("")
+  motivation          String   @default("")
+  status              String   @default("PENDING_PAYMENT") // PENDING_PAYMENT, PAID, CONFIRMED
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   payment Payment?
 
   @@unique([email, courseId])
+  @@index([status])
 }
 
-// ── Payments ──────────────────────────────────────────
+// ── Payments (Chapa) ───────────────────────────────────
+// Payment lifecycle: PENDING → SUCCESS / FAILED / CANCELLED
+// (also INCOMPLETE / BLOCKED / AUTH_NEEDED from Chapa)
 model Payment {
-  id              String   @id @default(cuid())
-  applicationId   String   @unique
-  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  amount          Int      // amount in Birr
-  method          String   @default("bank_transfer") // bank_transfer, cash, online
-  transactionRef  String?  // bank reference, transaction ID
-  status          String   @default("pending") // pending, confirmed, failed, refunded
-  notes           String?
-  confirmedAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                String    @id @default(cuid())
+  applicationId     String    @unique
+  application       Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  amount            Int       // amount in Birr, calculated server-side from the course
+  currency          String    @default("ETB")
+  merchantReference String?   @unique // Chapa merchant_reference (our unique tx_ref per attempt)
+  chapaReference    String?   // Chapa payment reference (from checkout URL / webhook / verify)
+  status            String    @default("PENDING") // PENDING, SUCCESS, FAILED, CANCELLED, INCOMPLETE, BLOCKED, AUTH_NEEDED
+  method            String?   // payment method reported by Chapa (telebirr, card, …)
+  serviceFee        Int?      // Chapa service fee (Birr)
+  rawWebhook        Json?     // last webhook payload, for audit
+  notes             String?
+  paidAt            DateTime? // set when payment reaches SUCCESS
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([status])
+  @@index([chapaReference])
 }
 
 // ── Settings (key-value store) ────────────────────────
@@ -102,5 +116,6 @@ model Setting {
   id        String   @id @default(cuid())
   key       String   @unique
   value     String
+  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

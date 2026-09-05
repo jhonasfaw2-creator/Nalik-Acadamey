@@ -1,8 +1,19 @@
 import { jwtVerify } from "jose";
 
-const SESSION_SECRET = new TextEncoder().encode(
-  process.env.SESSION_SECRET || "fallback-secret-change-me"
-);
+// Never fall back to a hardcoded secret in production — that would let anyone
+// forge admin sessions. Local development keeps a convenience fallback so the
+// app boots without env config; production fails loudly instead.
+function getSessionSecret(): Uint8Array {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("SESSION_SECRET is not set — refusing to start in production");
+    }
+    console.warn("[auth] SESSION_SECRET not set — using insecure dev fallback. Set it in .env for real sessions.");
+    return new TextEncoder().encode("dev-only-insecure-secret");
+  }
+  return new TextEncoder().encode(secret);
+}
 
 const COOKIE_NAME = "nalik_admin_session";
 
@@ -14,11 +25,11 @@ export async function verifySession(
   if (!token) return false;
 
   try {
-    await jwtVerify(token, SESSION_SECRET);
+    await jwtVerify(token, getSessionSecret());
     return true;
   } catch {
     return false;
   }
 }
 
-export { SESSION_SECRET, COOKIE_NAME };
+export { getSessionSecret, COOKIE_NAME };

@@ -27,14 +27,11 @@ export default function RootLayout({
         {/* Performance: preconnect to self for API calls */}
         <link rel="preconnect" href="/" />
 
-        {/* Preload Hero background video assets for instant play */}
+        {/* Poster preload is supported everywhere. The hero <video> element
+            already uses preload="auto", so a <link rel=preload as=video> is
+            redundant AND unsupported in Chrome (it logs a console warning
+            and is ignored). */}
         <link rel="preload" href="/assets/hero/poster.jpg" as="image" />
-        <link
-          rel="preload"
-          href="/assets/hero/hero.mp4"
-          as="video"
-          type="video/mp4"
-        />
       </head>
       <body className="min-h-screen bg-white text-navy antialiased">
         {children}

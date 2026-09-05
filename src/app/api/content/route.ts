@@ -8,16 +8,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "section param required" }, { status: 400 });
   }
 
-  const items = await prisma.content.findMany({
-    where: { section },
-    orderBy: { key: "asc" },
-  });
+  try {
+    const items = await prisma.content.findMany({
+      where: { section },
+      orderBy: { key: "asc" },
+    });
 
-  // Return as a flat object { key: value }
-  const data: Record<string, string> = {};
-  for (const item of items) {
-    data[item.key] = item.value;
+    // Return as a flat object { key: value }
+    const data: Record<string, string> = {};
+    for (const item of items) {
+      data[item.key] = item.value;
+    }
+
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error("Content fetch error:", error);
+    return NextResponse.json({ error: "Failed to load content" }, { status: 500 });
   }
-
-  return NextResponse.json(data);
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { applyChapaPaymentResult } from "@/lib/payments/apply";
 
 // GET /api/admin/payments — list all payments with registration info
 export async function GET(request: NextRequest) {
@@ -19,7 +20,10 @@ export async function GET(request: NextRequest) {
             email: true,
             phone: true,
             courseId: true,
+            scheduleId: true,
             status: true,
+            course: { select: { title: true } },
+            schedule: { select: { batchName: true, days: true } },
           },
         },
       },
@@ -33,28 +37,44 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PUT /api/admin/payments — update payment status
+// PUT /api/admin/payments — update payment status (manual override)
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, status, transactionRef, notes } = body;
+    const { id, status, notes } = body;
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-    const updateData: Record<string, unknown> = {};
-    if (status) updateData.status = status;
-    if (transactionRef !== undefined) updateData.transactionRef = transactionRef;
-    if (notes !== undefined) updateData.notes = notes;
-    if (status === "confirmed") updateData.confirmedAt = new Date();
+    const VALID_STATUSES = ["PENDING", "SUCCESS", "FAILED", "CANCELLED", "INCOMPLETE"];
+    if (status && !VALID_STATUSES.includes(status)) {
+      return NextResponse.json({ error: "Invalid payment status" }, { status: 400 });
+    }
 
-    const payment = await prisma.payment.update({
-      where: { id },
-      data: updateData,
-      include: {
-        application: {
-          select: { referenceId: true, fullName: true, email: true },
-        },
-      },
-    });
+    let payment = await prisma.payment.findUnique({ where: { id } });
+    if (!payment) return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+
+    if (notes !== undefined) {
+      payment = await prisma.payment.update({
+        where: { id },
+        data: { notes },
+        include: { application: { select: { referenceId: true, fullName: true, email: true } } },
+      });
+    }
+
+    if (status) {
+      const result = await applyChapaPaymentResult(payment.id, {
+        status,
+        amount: payment.amount,
+        currency: payment.currency,
+        chapaReference: typeof body.chapaReference === "string" ? body.chapaReference : payment.chapaReference || undefined,
+        merchantReference: typeof body.merchantReference === "string" ? body.merchantReference : payment.merchantReference || undefined,
+        method: typeof body.method === "string" ? body.method : payment.method || undefined,
+      });
+      payment = (await prisma.payment.findUnique({
+        where: { id },
+        include: { application: { select: { referenceId: true, fullName: true, email: true } } },
+      }))!;
+      if (!result) return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+    }
 
     return NextResponse.json(payment);
   } catch (error) {

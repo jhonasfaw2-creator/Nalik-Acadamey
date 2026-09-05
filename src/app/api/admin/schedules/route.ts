@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
         startTime,
         endTime,
         startDate: new Date(startDate),
-        maxSeats: maxSeats || 20,
+        maxSeats: maxSeats ?? 20,
         active: active ?? true,
       },
       include: { course: { select: { id: true, title: true } } },
@@ -59,11 +59,31 @@ export async function PUT(request: NextRequest) {
     const { id, ...data } = body;
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-    if (data.startDate) data.startDate = new Date(data.startDate);
+    // Pick only editable fields. The admin UI sends the full schedule row back
+    // (including the nested `course` object and `enrolled`), which Prisma
+    // rejects as an unknown argument — edit was broken before.
+    const dataOut: {
+      courseId?: string;
+      batchName?: string;
+      days?: string;
+      startTime?: string;
+      endTime?: string;
+      startDate?: Date;
+      maxSeats?: number;
+      active?: boolean;
+    } = {};
+    if (typeof data.courseId === "string") dataOut.courseId = data.courseId;
+    if (typeof data.batchName === "string") dataOut.batchName = data.batchName;
+    if (typeof data.days === "string") dataOut.days = data.days;
+    if (typeof data.startTime === "string") dataOut.startTime = data.startTime;
+    if (typeof data.endTime === "string") dataOut.endTime = data.endTime;
+    if (data.startDate) dataOut.startDate = new Date(data.startDate as string);
+    if (typeof data.maxSeats === "number") dataOut.maxSeats = data.maxSeats;
+    if (typeof data.active === "boolean") dataOut.active = data.active;
 
     const schedule = await prisma.schedule.update({
       where: { id },
-      data,
+      data: dataOut,
       include: { course: { select: { id: true, title: true } } },
     });
 

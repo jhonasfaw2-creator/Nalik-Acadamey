@@ -1,35 +1,39 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Users, DollarSign, Clock, BookOpen } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { Users, DollarSign, Clock, BookOpen, CheckCircle } from "lucide-react";
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
     totalRegistrations: 0,
-    pending: 0,
-    accepted: 0,
+    pendingPayment: 0,
+    paid: 0,
+    confirmed: 0,
     totalPayments: 0,
-    confirmedPayments: 0,
+    paidPayments: 0,
     totalRevenue: 0,
     activeCourses: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
 
-  useEffect(() => {
+  const loadStats = useCallback(() => {
+    setError("");
     Promise.all([
-      fetch("/api/admin/registrations").then((r) => r.json()),
-      fetch("/api/admin/payments").then((r) => r.json()),
-      fetch("/api/admin/courses").then((r) => r.json()),
+      fetch("/api/admin/registrations").then((r) => { if (!r.ok) throw new Error("Failed to load registrations"); return r.json(); }),
+      fetch("/api/admin/payments").then((r) => { if (!r.ok) throw new Error("Failed to load payments"); return r.json(); }),
+      fetch("/api/admin/courses").then((r) => { if (!r.ok) throw new Error("Failed to load courses"); return r.json(); }),
     ]).then(([regData, payData, courses]) => {
-      const confirmed = (payData || []).filter((p: { status: string }) => p.status === "confirmed");
+      const paid = (payData || []).filter((p: { status: string }) => p.status === "SUCCESS");
       setStats({
         totalRegistrations: regData.applications?.length || 0,
-        pending: regData.statusCounts?.pending || 0,
-        accepted: regData.statusCounts?.accepted || 0,
+        pendingPayment: regData.statusCounts?.PENDING_PAYMENT || 0,
+        paid: regData.statusCounts?.PAID || 0,
+        confirmed: regData.statusCounts?.CONFIRMED || 0,
         totalPayments: (payData || []).length,
-        confirmedPayments: confirmed.length,
-        totalRevenue: confirmed.reduce((sum: number, p: { amount: number }) => sum + p.amount, 0),
+        paidPayments: paid.length,
+        totalRevenue: paid.reduce((sum: number, p: { amount: number }) => sum + p.amount, 0),
         activeCourses: (courses || []).filter((c: { active: boolean }) => c.active).length,
       });
       setLoading(false);
@@ -39,12 +43,15 @@ export default function AdminDashboard() {
     });
   }, []);
 
+  useEffect(() => { loadStats(); }, [loadStats]);
+
   const formatBirr = (n: number) => n.toLocaleString("en-ET") + " Birr";
 
   const cards = [
     { label: "Total Registrations", value: stats.totalRegistrations, icon: Users, color: "bg-blue-50 text-blue-600" },
-    { label: "Pending Review", value: stats.pending, icon: Clock, color: "bg-amber-50 text-amber-600" },
-    { label: "Accepted", value: stats.accepted, icon: Users, color: "bg-green-50 text-green-600" },
+    { label: "Pending Payment", value: stats.pendingPayment, icon: Clock, color: "bg-amber-50 text-amber-600" },
+    { label: "Paid", value: stats.paid, icon: CheckCircle, color: "bg-blue-100 text-blue-600" },
+    { label: "Confirmed", value: stats.confirmed, icon: Users, color: "bg-green-50 text-green-600" },
     { label: "Active Courses", value: stats.activeCourses, icon: BookOpen, color: "bg-purple-50 text-purple-600" },
   ];
 
@@ -56,7 +63,7 @@ export default function AdminDashboard() {
       {error && (
         <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 flex items-center justify-between">
           <span>{error}</span>
-          <button onClick={() => window.location.reload()} className="rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200">Retry</button>
+          <button onClick={loadStats} className="rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200">Retry</button>
         </div>
       )}
 
@@ -67,7 +74,7 @@ export default function AdminDashboard() {
       ) : (
         <>
           {/* Stat cards */}
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {cards.map((card) => {
               const Icon = card.icon;
               return (
@@ -88,9 +95,9 @@ export default function AdminDashboard() {
           <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Confirmed Revenue</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Paid Revenue</p>
                 <p className="mt-1 text-2xl font-bold text-gold">{formatBirr(stats.totalRevenue)}</p>
-                <p className="mt-0.5 text-xs text-gray-400">{stats.confirmedPayments} of {stats.totalPayments} payments confirmed</p>
+                <p className="mt-0.5 text-xs text-gray-400">{stats.paidPayments} of {stats.totalPayments} payments successful</p>
               </div>
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gold/10">
                 <DollarSign size={22} className="text-gold" />
@@ -106,7 +113,7 @@ export default function AdminDashboard() {
             </a>
             <a href="/admin/payments" className="rounded-xl border border-gray-200 bg-white p-5 transition-shadow hover:shadow-md">
               <h3 className="font-semibold text-navy">Payments</h3>
-              <p className="mt-1 text-sm text-gray-500">Track payment status and amounts.</p>
+              <p className="mt-1 text-sm text-gray-500">Track Chapa payment status and references.</p>
             </a>
             <a href="/admin/courses" className="rounded-xl border border-gray-200 bg-white p-5 transition-shadow hover:shadow-md">
               <h3 className="font-semibold text-navy">Courses</h3>

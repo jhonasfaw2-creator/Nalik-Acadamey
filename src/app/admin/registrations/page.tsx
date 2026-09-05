@@ -9,35 +9,46 @@ interface Registration {
   fullName: string;
   email: string;
   phone: string;
+  whatsapp: string | null;
   age: number;
-  courseSelection: string;
   previousExperience: string;
   motivation: string;
   status: string;
   createdAt: string;
   course: { id: string; title: string } | null;
-  payment: { amount: number; status: string } | null;
+  schedule: { id: string; batchName: string; days: string; startTime: string; endTime: string } | null;
+  payment: {
+    amount: number;
+    currency: string;
+    status: string;
+    method: string | null;
+    merchantReference: string | null;
+    chapaReference: string | null;
+    paidAt: string | null;
+  } | null;
 }
 
 const STATUS_OPTIONS = [
   { value: "", label: "All" },
-  { value: "pending", label: "Pending" },
-  { value: "reviewed", label: "Reviewed" },
-  { value: "accepted", label: "Accepted" },
-  { value: "rejected", label: "Rejected" },
+  { value: "PENDING_PAYMENT", label: "Pending Payment" },
+  { value: "PAID", label: "Paid" },
+  { value: "CONFIRMED", label: "Confirmed" },
 ];
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-700",
-  reviewed: "bg-blue-100 text-blue-700",
-  accepted: "bg-green-100 text-green-700",
-  rejected: "bg-red-100 text-red-700",
+  PENDING_PAYMENT: "bg-yellow-100 text-yellow-700",
+  PAID: "bg-blue-100 text-blue-700",
+  CONFIRMED: "bg-green-100 text-green-700",
 };
 
 const PAYMENT_COLORS: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-700",
-  confirmed: "bg-green-100 text-green-700",
-  failed: "bg-red-100 text-red-700",
+  PENDING: "bg-yellow-100 text-yellow-700",
+  SUCCESS: "bg-green-100 text-green-700",
+  FAILED: "bg-red-100 text-red-700",
+  CANCELLED: "bg-gray-200 text-gray-600",
+  INCOMPLETE: "bg-orange-100 text-orange-700",
+  BLOCKED: "bg-red-100 text-red-700",
+  AUTH_NEEDED: "bg-blue-100 text-blue-700",
 };
 
 export default function AdminRegistrations() {
@@ -46,20 +57,24 @@ export default function AdminRegistrations() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [updating, setUpdating] = useState<string | null>(null);
 
   const load = useCallback(() => {
+    setLoading(true);
+    setError("");
     const params = new URLSearchParams();
     if (search) params.set("search", search);
     if (statusFilter) params.set("status", statusFilter);
 
     fetch(`/api/admin/registrations?${params}`)
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error("Failed to load registrations"); return r.json(); })
       .then((d) => {
         setRegistrations(d.applications || []);
         setStatusCounts(d.statusCounts || {});
         setLoading(false);
-      });
+      })
+      .catch((err) => { setError(err.message); setLoading(false); });
   }, [search, statusFilter]);
 
   useEffect(() => { load(); }, [load]);
@@ -92,13 +107,20 @@ export default function AdminRegistrations() {
       </div>
 
       {/* Filters */}
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+      {error && (
+        <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={load} className="rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200">Retry</button>
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search by name, email, reference ID, or phone..."
+            placeholder="Search by name, email, reference ID, phone, or tx ref..."
             className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-4 text-sm text-navy placeholder-gray-400 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
           />
         </div>
@@ -144,6 +166,7 @@ export default function AdminRegistrations() {
               <tr>
                 <th className="px-4 py-3 font-medium text-gray-500">Student</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Course</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Schedule</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Payment</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Status</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Date</th>
@@ -159,13 +182,26 @@ export default function AdminRegistrations() {
                     <p className="text-xs text-gray-400">{reg.referenceId}</p>
                   </td>
                   <td className="px-4 py-3">
-                    <p className="text-sm text-navy">{reg.course?.title || reg.courseSelection}</p>
+                    <p className="text-sm text-navy">{reg.course?.title || "—"}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    {reg.schedule ? (
+                      <div>
+                        <p className="text-sm text-navy">{reg.schedule.batchName}</p>
+                        <p className="text-xs text-gray-400">{reg.schedule.days} · {reg.schedule.startTime}–{reg.schedule.endTime}</p>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {reg.payment ? (
                       <div>
                         <p className="text-sm font-medium text-navy">{formatBirr(reg.payment.amount)}</p>
-                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${PAYMENT_COLORS[reg.payment.status] || ""}`}>
+                        {reg.payment.merchantReference && (
+                          <p className="text-xs text-gray-400">Ref: {reg.payment.merchantReference}</p>
+                        )}
+                        <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${PAYMENT_COLORS[reg.payment.status] || ""}`}>
                           {reg.payment.status}
                         </span>
                       </div>

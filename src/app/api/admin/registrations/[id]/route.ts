@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { applyChapaPaymentResult } from "@/lib/payments/apply";
 
 // PUT /api/admin/registrations/[id] — update registration status
 export async function PUT(
@@ -11,7 +12,7 @@ export async function PUT(
     const body = await request.json();
     const { status } = body;
 
-    if (!status || !["pending", "reviewed", "accepted", "rejected"].includes(status)) {
+    if (!status || !["PENDING_PAYMENT", "PAID", "CONFIRMED"].includes(status)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
 
@@ -20,9 +21,20 @@ export async function PUT(
       data: { status },
       include: {
         course: { select: { title: true } },
-        payment: { select: { amount: true, status: true } },
+        schedule: { select: { id: true, batchName: true } },
+        payment: { select: { id: true, amount: true, currency: true, status: true, merchantReference: true } },
       },
     });
+
+    // Marking a registration PAID manually should also settle the payment.
+    if (status === "PAID" && application.payment && application.payment.status !== "SUCCESS") {
+      await applyChapaPaymentResult(application.payment.id, {
+        status: "SUCCESS",
+        amount: application.payment.amount,
+        currency: application.payment.currency,
+      });
+      application.payment.status = "SUCCESS";
+    }
 
     return NextResponse.json(application);
   } catch (error) {

@@ -22,23 +22,20 @@ const DEFAULTS: Project[] = [
 export default function OurWork() {
   const headingRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
-  const [projects, setProjects] = useState<Project[]>(DEFAULTS);
+  const [projects] = useState<Project[]>(DEFAULTS);
+  const [mounted, setMounted] = useState(false);
 
+  // Projects are currently hardcoded (DEFAULTS) — there is no /api/projects
+  // route or Project model, and fetching one 404s on every page load.
+  // (When a projects API + data model exist, wire it up here.)
   useEffect(() => {
-    fetch("/api/projects")
-      .then((r) => r.json())
-      .then((d) => {
-        if (Array.isArray(d) && d.length > 0) {
-          setProjects(d);
-        }
-      })
-      .catch(() => {});
+    setMounted(true);
   }, []);
 
   // Scroll reveal for heading
   useEffect(() => {
     const el = headingRef.current;
-    if (!el) return;
+    if (!el || !mounted) return;
     el.classList.add("reveal");
     const observer = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) { el.classList.add("visible"); observer.unobserve(el); } },
@@ -46,10 +43,11 @@ export default function OurWork() {
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [mounted]);
 
   // Staggered card reveal
   useEffect(() => {
+    if (!mounted) return;
     const grid = gridRef.current;
     if (!grid) return;
 
@@ -68,7 +66,7 @@ export default function OurWork() {
     );
     observer.observe(grid);
     return () => observer.disconnect();
-  }, [projects]);
+  }, [mounted]);
 
   return (
     <section id="our-work" className="bg-warm-white px-4 py-20 sm:px-6 lg:px-8">

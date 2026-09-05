@@ -97,37 +97,31 @@ async function main() {
   // ── Courses ──────────────────────────────────────────
   const courses = [
     {
-      id: "adobe-illustrator-photoshop",
-      title: "Adobe Illustrator + Photoshop",
-      description: "Learn to create logos, thumbnails, social media assets, and print-ready designs from scratch.",
-      price: "6,000 Birr",
-      discountPrice: "4,800 Birr",
-      discountLabel: "Opening Offer — 20% off",
-      syllabus: "Week 1-2: Photoshop fundamentals & layer management\nWeek 3-4: Selection tools, masking, and retouching\nWeek 5-6: Illustrator basics & vector shapes\nWeek 7-8: Logo design, typography, and branding assets\nWeek 9-10: Social media graphics & print-ready exports",
+      id: "adobe-premiere-pro",
+      title: "Adobe Premiere Pro",
+      description: "Professional video editing — from timeline basics to advanced multicam workflows and export settings.",
+      price: 10000,
+      discountPrice: null,
+      discountLabel: null,
       sortOrder: 1,
-      published: true,
     },
     {
       id: "davinci-resolve",
       title: "DaVinci Resolve",
       description: "Professional color grading, editing, and audio finishing used on Hollywood productions.",
-      price: "8,000 Birr",
-      discountPrice: "6,500 Birr",
-      discountLabel: "Opening Offer — 19% off",
-      syllabus: "Week 1-2: Interface orientation & media import\nWeek 3-4: Cut page editing & timeline workflow\nWeek 5-6: Color page — primary & secondary corrections\nWeek 7-8: Color grading wheels, curves & qualifiers\nWeek 9-10: Fairlight audio & delivery/export settings",
+      price: 14000,
+      discountPrice: null,
+      discountLabel: null,
       sortOrder: 2,
-      published: true,
     },
     {
-      id: "adobe-premiere",
-      title: "Adobe Premiere",
-      description: "Master professional video editing from timeline basics to advanced multicam workflows and export settings.",
-      price: "8,000 Birr",
-      discountPrice: "6,500 Birr",
-      discountLabel: "Opening Offer — 19% off",
-      syllabus: "Week 1-2: Project setup, imports & basic timeline editing\nWeek 3-4: Trimming, transitions, and audio sync\nWeek 5-6: Color correction & Lumetri scopes\nWeek 7-8: Multicam editing & nested sequences\nWeek 9-10: Effects, keyframes, and final export settings",
+      id: "graphic-design",
+      title: "Graphic Design",
+      description: "Create professional logos, thumbnails, social media assets, and print-ready designs from scratch.",
+      price: 6000,
+      discountPrice: null,
+      discountLabel: null,
       sortOrder: 3,
-      published: true,
     },
   ];
 
@@ -139,19 +133,41 @@ async function main() {
     });
   }
 
-  // ── Projects (Our Work) ──────────────────────────────
-  const projects = [
-    { id: "promo-reel-2024", title: "Promo Reel 2024", description: "A showcase of our academy's promotional content.", category: "Promotional", sortOrder: 1, published: true },
-    { id: "student-showcase", title: "Student Showcase", description: "Highlighting the best work from our students.", category: "Documentary", sortOrder: 2, published: true },
-    { id: "brand-story", title: "Brand Story", description: "Visual storytelling for brand identity.", category: "Commercial", sortOrder: 3, published: true },
-    { id: "behind-the-scenes", title: "Behind the Scenes", description: "A look inside the Nalik Academy experience.", category: "Behind the Scenes", sortOrder: 4, published: true },
+  // ── Schedules (class batches) ────────────────────────
+  const schedules = [
+    // Adobe Premiere Pro
+    { id: "app-morning-a", courseId: "adobe-premiere-pro", batchName: "Morning Batch A", days: "Mon, Wed, Fri", startTime: "09:00", endTime: "11:00", startDate: new Date("2026-09-14T09:00:00Z"), maxSeats: 20 },
+    { id: "app-evening-b", courseId: "adobe-premiere-pro", batchName: "Evening Batch B", days: "Tue, Thu", startTime: "18:00", endTime: "20:00", startDate: new Date("2026-09-15T18:00:00Z"), maxSeats: 15 },
+    // DaVinci Resolve
+    { id: "dr-morning", courseId: "davinci-resolve", batchName: "Morning Batch", days: "Mon, Wed, Fri", startTime: "09:00", endTime: "11:00", startDate: new Date("2026-09-14T09:00:00Z"), maxSeats: 20 },
+    { id: "dr-weekend", courseId: "davinci-resolve", batchName: "Weekend Batch", days: "Sat, Sun", startTime: "10:00", endTime: "13:00", startDate: new Date("2026-09-19T10:00:00Z"), maxSeats: 20 },
+    // Graphic Design
+    { id: "gd-morning", courseId: "graphic-design", batchName: "Morning Batch", days: "Mon, Wed, Fri", startTime: "08:00", endTime: "10:00", startDate: new Date("2026-09-14T08:00:00Z"), maxSeats: 20 },
+    { id: "gd-evening", courseId: "graphic-design", batchName: "Evening Batch", days: "Tue, Thu", startTime: "18:00", endTime: "20:00", startDate: new Date("2026-09-15T18:00:00Z"), maxSeats: 15 },
   ];
 
-  for (const project of projects) {
-    await prisma.project.upsert({
-      where: { id: project.id },
-      update: project,
-      create: project,
+  for (const schedule of schedules) {
+    await prisma.schedule.upsert({
+      where: { id: schedule.id },
+      update: schedule,
+      create: schedule,
+    });
+  }
+
+  // ── Academy settings (editable via Admin → Settings) ──
+  const academySettings: { key: string; value: string }[] = [
+    { key: "academy_name", value: "Nalik Academy" },
+    { key: "academy_email", value: "info@nalikacademy.com" },
+    { key: "academy_phone", value: "+251 911 223 344" },
+    { key: "academy_address", value: "Addis Ababa, Ethiopia" },
+    { key: "whatsapp_number", value: "+251911223344" },
+  ];
+
+  for (const setting of academySettings) {
+    await prisma.setting.upsert({
+      where: { key: setting.key },
+      update: { value: setting.value },
+      create: setting,
     });
   }
 

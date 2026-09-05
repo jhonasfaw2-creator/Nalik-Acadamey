@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { courseSchema } from "@/lib/validators";
 
 // GET /api/admin/courses — list all courses
 export async function GET() {
@@ -19,21 +20,24 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, description, price, discountPrice, discountLabel, active, sortOrder } = body;
-
-    if (!title || !description || price === undefined) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    const parsed = courseSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || "Invalid course data" },
+        { status: 400 }
+      );
     }
+    const { title, description, price, discountPrice, discountLabel, active, sortOrder } = parsed.data;
 
     const course = await prisma.course.create({
       data: {
         title,
         description,
-        price: Number(price),
-        discountPrice: discountPrice ? Number(discountPrice) : null,
+        price,
+        discountPrice: discountPrice ?? null,
         discountLabel: discountLabel || null,
         active: active ?? true,
-        sortOrder: sortOrder || 0,
+        sortOrder: sortOrder ?? 0,
       },
     });
 
@@ -51,11 +55,18 @@ export async function PUT(request: NextRequest) {
     const { id, ...data } = body;
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-    if (data.price !== undefined) data.price = Number(data.price);
-    if (data.discountPrice !== undefined) data.discountPrice = data.discountPrice ? Number(data.discountPrice) : null;
-    if (data.sortOrder !== undefined) data.sortOrder = Number(data.sortOrder);
+    // Validate + strip unknown keys. The admin UI sends the full course row
+    // back (including _count), which Prisma would otherwise reject as an
+    // unknown argument and turn into a 500 — edit was broken.
+    const parsed = courseSchema.partial().safeParse(data);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || "Invalid course data" },
+        { status: 400 }
+      );
+    }
 
-    const course = await prisma.course.update({ where: { id }, data });
+    const course = await prisma.course.update({ where: { id }, data: parsed.data });
     return NextResponse.json(course);
   } catch (error) {
     console.error("Admin course update error:", error);

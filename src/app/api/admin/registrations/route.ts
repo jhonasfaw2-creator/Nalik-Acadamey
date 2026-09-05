@@ -17,8 +17,9 @@ export async function GET(request: NextRequest) {
       where.OR = [
         { fullName: { contains: search } },
         { email: { contains: search } },
-        { referenceId: { contains: search } },
         { phone: { contains: search } },
+        { referenceId: { contains: search } },
+        { payment: { is: { merchantReference: { contains: search } } } },
       ];
     }
 
@@ -27,7 +28,20 @@ export async function GET(request: NextRequest) {
         where,
         include: {
           course: { select: { id: true, title: true } },
-          payment: { select: { amount: true, status: true } },
+          schedule: {
+            select: { id: true, batchName: true, days: true, startTime: true, endTime: true },
+          },
+          payment: {
+            select: {
+              amount: true,
+              currency: true,
+              status: true,
+              method: true,
+              merchantReference: true,
+              chapaReference: true,
+              paidAt: true,
+            },
+          },
         },
         orderBy: { createdAt: "desc" },
       }),

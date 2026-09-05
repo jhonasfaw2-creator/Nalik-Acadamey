@@ -71,23 +71,9 @@ img {
   }
 }
 
-@keyframes hero-badge-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
 @keyframes gold-line-grow {
   from { transform: scaleX(0); }
   to { transform: scaleX(1); }
-}
-
-@keyframes subtle-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-
-.hero-badge {
-  animation: hero-fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
 }
 
 .hero-title {
@@ -149,20 +135,6 @@ img {
   box-shadow: 0 20px 40px -12px rgba(21, 27, 41, 0.12);
 }
 
-/* ── Social link hover ───────────────────────── */
-.social-link {
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.social-link:hover {
-  transform: translateY(-2px) scale(1.05);
-}
-
-/* ── Smooth section divider ──────────────────── */
-.section-divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(226, 160, 51, 0.3), transparent);
-}
-
 /* ── Reduced motion ──────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .reveal, .reveal-child {
@@ -170,7 +142,7 @@ img {
     opacity: 1;
     transform: none;
   }
-  .hero-badge, .hero-title, .hero-desc, .hero-cta {
+  .hero-title, .hero-desc, .hero-cta {
     animation: none;
     opacity: 1;
   }
@@ -178,7 +150,7 @@ img {
     animation: none;
     transform: scaleX(1);
   }
-  .btn-gold, .btn-navy, .btn-outline-white, .card-hover, .social-link {
+  .btn-gold, .btn-navy, .btn-outline-white, .card-hover {
     transition: none;
   }
   html {

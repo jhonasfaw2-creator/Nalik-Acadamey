@@ -24,18 +24,24 @@ export default function AdminSchedules() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [editing, setEditing] = useState<Partial<Schedule> | null>(null);
   const [saving, setSaving] = useState(false);
   const [filterCourse, setFilterCourse] = useState("");
 
   const load = useCallback(() => {
+    setLoading(true);
+    setError("");
     const url = filterCourse ? `/api/admin/schedules?courseId=${filterCourse}` : "/api/admin/schedules";
     Promise.all([
-      fetch(url).then((r) => r.json()),
-      fetch("/api/admin/courses").then((r) => r.json()),
+      fetch(url).then((r) => { if (!r.ok) throw new Error("Failed to load schedules"); return r.json(); }),
+      fetch("/api/admin/courses").then((r) => { if (!r.ok) throw new Error("Failed to load courses"); return r.json(); }),
     ]).then(([schedData, courseData]) => {
-      setSchedules(schedData);
-      setCourses(courseData);
+      if (Array.isArray(schedData)) setSchedules(schedData);
+      if (Array.isArray(courseData)) setCourses(courseData);
+      setLoading(false);
+    }).catch((err) => {
+      setError(err.message);
       setLoading(false);
     });
   }, [filterCourse]);
@@ -63,6 +69,15 @@ export default function AdminSchedules() {
 
   if (loading) {
     return <div className="flex items-center justify-center py-12"><div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gold border-t-transparent" /></div>;
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <p className="text-sm text-red-600">{error}</p>
+        <button onClick={load} className="mt-3 rounded-md bg-red-100 px-4 py-2 text-xs font-medium text-red-700 hover:bg-red-200">Retry</button>
+      </div>
+    );
   }
 
   return (
