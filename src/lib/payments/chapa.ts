@@ -93,7 +93,8 @@ export async function initializeChapaPayment(input: ChapaInitInput): Promise<Cha
   const key = chapaSecretKey();
   if (!key) throw new Error("Chapa is not configured (CHAPA_SECRET_KEY missing)");
 
-  // Always enforce a clean, normalized phone string inside the customer object
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "http://localhost:3000";
+
   const formattedPhone = normalizePhoneForChapa(input.customer?.phone_number);
 
   const payload = {
@@ -107,6 +108,8 @@ export async function initializeChapaPayment(input: ChapaInitInput): Promise<Cha
       phone_number: formattedPhone,
     },
     meta: input.meta || {},
+    return_url: `${appUrl}/payment/return`,
+    callback_url: `${appUrl}/api/webhooks/chapa`,
   };
 
   const res = await fetch(`${CHAPA_BASE_URL}/v2/payments/hosted`, {
