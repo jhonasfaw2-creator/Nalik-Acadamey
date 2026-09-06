@@ -32,10 +32,7 @@ export function isChapaConfigured(): boolean {
  * Unique server-side transaction reference (Chapa merchant_reference).
  *
  * Chapa's v2 API rejects merchant_reference values longer than ~20 characters
- * with HTTP 500 PROCESSING_FAILED (verified against the sandbox), so this is
- * kept compact: NALIK + base36 millisecond timestamp + random + the last 4
- * digits of the registration referenceId for traceability. Unique per attempt
- * (retries always get a fresh value).
+ * with HTTP 500 PROCESSING_FAILED, so this is kept compact: NALIK + base36 timestamp + random.
  */
 export function generateTxRef(referenceId: string): string {
   const stamp = Date.now().toString(36);
@@ -45,17 +42,21 @@ export function generateTxRef(referenceId: string): string {
 }
 
 /**
- * Chapa requires international phone format (e.g. +251960724272). Normalize
- * common Ethiopian numbers (09… / 07… / 251…) and leave anything else as-is.
+ * Normalizes Ethiopian phone numbers to international format (+251...).
+ * Guarantees a fallback valid test phone (+251911000000) if phone is missing or malformed
+ * to prevent Chapa hosted checkout session/CSRF failures.
  */
-export function normalizePhoneForChapa(phone: string): string | undefined {
+export function normalizePhoneForChapa(phone?: string): string {
+  if (!phone) return "+251911000000";
   const digits = phone.replace(/\D/g, "");
   if (digits.length === 12 && digits.startsWith("251")) return `+${digits}`;
   if (digits.length === 10 && (digits.startsWith("09") || digits.startsWith("07"))) {
     return `+251${digits.slice(1)}`;
   }
-  if (digits.length > 9 && digits.startsWith("251")) return `+${digits}`;
-  return undefined;
+  if (digits.length === 9 && (digits.startsWith("9") || digits.startsWith("7"))) {
+    return `+251${digits}`;
+  }
+  return "+251911000000";
 }
 
 /** Extract the Chapa payment reference (slug) from a hosted checkout URL. */
@@ -92,20 +93,33 @@ export async function initializeChapaPayment(input: ChapaInitInput): Promise<Cha
   const key = chapaSecretKey();
   if (!key) throw new Error("Chapa is not configured (CHAPA_SECRET_KEY missing)");
 
+  // Always enforce a clean, normalized phone string inside the customer object
+  const formattedPhone = normalizePhoneForChapa(input.customer?.phone_number);
+
+  const payload = {
+    amount: input.amount,
+    currency: input.currency || "ETB",
+    merchant_reference: input.merchantReference,
+    customer: {
+      first_name: input.customer?.first_name || "Student",
+      last_name: input.customer?.last_name || "Nalik",
+      email: input.customer?.email,
+      phone_number: formattedPhone,
+    },
+    meta: input.meta || {},
+  };
+
   const res = await fetch(`${CHAPA_BASE_URL}/v2/payments/hosted`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      amount: input.amount,
-      currency: input.currency,
-      merchant_reference: input.merchantReference,
-      customer: input.customer,
-      meta: input.meta,
-    }),
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify(payload),
     cache: "no-store",
-    // Never let a hung Chapa request tie up the route indefinitely.
     signal: AbortSignal.timeout(10_000),
   });
+
   const data: unknown = await res.json().catch(() => null);
 
   if (!res.ok || !data || (data as { status?: string }).status !== "success") {
@@ -149,7 +163,6 @@ export async function verifyChapaPayment(reference: string): Promise<ChapaVerifi
     method: "GET",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     cache: "no-store",
-    // Never let a hung verification tie up the route indefinitely.
     signal: AbortSignal.timeout(10_000),
   });
   const data: unknown = await res.json().catch(() => null);

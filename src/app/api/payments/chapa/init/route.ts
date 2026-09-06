@@ -6,6 +6,7 @@ import {
   initializeChapaPayment,
   normalizePhoneForChapa,
 } from "@/lib/payments/chapa";
+import { ensurePaymentForApplication } from "@/lib/payments/record";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
     const application = await prisma.application.findUnique({
       where: { referenceId },
       select: {
+        id: true,
         referenceId: true,
         fullName: true,
         email: true,
@@ -43,19 +45,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Registration not found" }, { status: 404 });
     }
 
-    const payment = await prisma.payment.findUnique({
-      where: { applicationId: application.id },
-      select: {
-        id: true,
-        amount: true,
-        currency: true,
-        status: true,
-        merchantReference: true,
-        chapaReference: true,
-      },
-    });
+    // Legacy registrations (pre-online-payments) have no Payment row — create
+    // the missing PENDING payment on the spot so they become payable.
+    const payment = await ensurePaymentForApplication(application.id);
     if (!payment) {
-      return NextResponse.json({ error: "Payment record not found" }, { status: 404 });
+      return NextResponse.json({ error: "Registration not found" }, { status: 404 });
     }
     if (payment.status === "SUCCESS") {
       return NextResponse.json({ success: true, alreadyPaid: true, status: "SUCCESS" });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isChapaConfigured, verifyChapaPayment, PaymentNotFoundError } from "@/lib/payments/chapa";
 import { applyChapaPaymentResult, mapChapaStatus } from "@/lib/payments/apply";
+import { ensurePaymentForApplication } from "@/lib/payments/record";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ async function handle(request: NextRequest) {
     const application = await prisma.application.findUnique({
       where: { referenceId },
       select: {
+        id: true,
         referenceId: true,
         fullName: true,
         email: true,
@@ -40,11 +42,11 @@ async function handle(request: NextRequest) {
       return NextResponse.json({ error: "Registration not found" }, { status: 404 });
     }
 
-    const payment = await prisma.payment.findUnique({
-      where: { applicationId: application.id },
-    });
+    // Legacy registrations (pre-online-payments) have no Payment row — create
+    // the missing PENDING payment on the spot so status checks work for them.
+    const payment = await ensurePaymentForApplication(application.id);
     if (!payment) {
-      return NextResponse.json({ error: "Payment record not found" }, { status: 404 });
+      return NextResponse.json({ error: "Registration not found" }, { status: 404 });
     }
 
     // Already confirmed — short-circuit with the summary.
@@ -62,9 +64,17 @@ async function handle(request: NextRequest) {
       verification = await verifyChapaPayment(payment.chapaReference);
     } catch (error) {
       if (error instanceof PaymentNotFoundError) {
-        // Chapa doesn't know this reference yet — payment may still be in
-        // progress. Keep pending; the webhook will resolve it.
-        return NextResponse.json(buildSummary(application, payment));
+        // Chapa doesn't know this reference. Right after init it may simply not
+        // have propagated yet — keep pending for a grace period. But if the
+        // checkout was minted a while ago and Chapa has forgotten it (expired /
+        // invalidated session), the student would otherwise spin on PENDING
+        // forever. Surface that so the client mints a fresh checkout.
+        const ageMs = payment.updatedAt ? Date.now() - new Date(payment.updatedAt).getTime() : 0;
+        const summary = buildSummary(application, payment);
+        if (payment.chapaReference && ageMs > 60_000) {
+          return NextResponse.json({ ...summary, sessionExpired: true });
+        }
+        return NextResponse.json(summary);
       }
       console.error("Chapa verify error:", error);
       return NextResponse.json(
@@ -84,9 +94,15 @@ async function handle(request: NextRequest) {
       raw: verification,
     });
 
-    // Re-read to return fresh state.
-    const updated = await prisma.payment.findUnique({ where: { id: payment.id } });
-    return NextResponse.json(buildSummary(application, updated ?? payment));
+    // Re-read to return fresh state (payment AND application status — the
+    // application may have just flipped PENDING_PAYMENT → PAID above).
+    const [updated, updatedApplication] = await Promise.all([
+      prisma.payment.findUnique({ where: { id: payment.id } }),
+      prisma.application.findUnique({ where: { id: application.id }, select: { status: true } }),
+    ]);
+    return NextResponse.json(
+      buildSummary({ ...application, status: updatedApplication?.status ?? application.status }, updated ?? payment)
+    );
   } catch (error) {
     console.error("Payment verify error:", error);
     return NextResponse.json({ error: "Failed to verify payment" }, { status: 500 });

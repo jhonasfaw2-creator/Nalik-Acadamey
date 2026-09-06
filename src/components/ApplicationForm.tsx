@@ -32,6 +32,8 @@ interface ApplicationFormProps {
 interface VerifyResponse {
   status: string; // PENDING / SUCCESS / FAILED / CANCELLED / INCOMPLETE / BLOCKED / AUTH_NEEDED
   error?: string;
+  /** true when Chapa no longer recognizes the stored checkout (expired/invalid) */
+  sessionExpired?: boolean;
   registration?: {
     referenceId: string;
     fullName: string;
@@ -55,8 +57,9 @@ function formatBirr(amount: number) {
 
 export default function ApplicationForm({ open, onClose, preselectedCourse }: ApplicationFormProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const popupRef = useRef<Window | null>(null);
-  const [popupBlocked, setPopupBlocked] = useState(false);
+  // Guards the automatic "open a fresh checkout" recovery so it fires once per
+  // registration (not on every re-render while the payment is pending).
+  const autoStartRef = useRef<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState("");
@@ -83,8 +86,10 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const [referenceId, setReferenceId] = useState("");
   const [amount, setAmount] = useState(0);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState("");
+  const [expiredNotice, setExpiredNotice] = useState("");
   const [result, setResult] = useState<VerifyResponse | null>(null);
   const [pollingStopped, setPollingStopped] = useState(false);
   const [forceOpen, setForceOpen] = useState(false);
@@ -208,10 +213,10 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     setReferenceId("");
     setAmount(0);
     setCheckoutUrl(null);
-    setPopupBlocked(false);
-    if (popupRef.current) { try { popupRef.current.close(); } catch { /* ignore */ } popupRef.current = null; }
+    setIframeLoaded(false);
     setPaying(false);
     setPayError("");
+    setExpiredNotice("");
     setResult(null);
     setPollingStopped(false);
     setPendingSummary(null);
@@ -221,7 +226,19 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     if (emailRef.current) emailRef.current.value = "";
     if (phoneRef.current) phoneRef.current.value = "";
     if (ageRef.current) ageRef.current.value = "";
+    autoStartRef.current = null;
   };
+
+  // If the student lands back on the payment step without a live checkout URL
+  // (page reload while paying, or resuming an "already registered" payment),
+  // mint a fresh Chapa session automatically so the embedded payment window
+  // opens again without them hunting for a button.
+  useEffect(() => {
+    if (step !== "processing" || !referenceId || checkoutUrl || paying) return;
+    if (autoStartRef.current === referenceId) return; // already attempted
+    autoStartRef.current = referenceId;
+    startPayment();
+  }, [step, referenceId, checkoutUrl, paying]);
 
   const handleClose = () => {
     // Keep pending state if the student hasn't finished paying, so returning
@@ -303,23 +320,17 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   };
 
   // ── Chapa payment ─────────────────────────────────────────
-  const startPayment = async () => {
+  const startPayment = async (opts?: { expired?: boolean }) => {
     if (!referenceId) return;
+    // When this call is the recovery from an expired checkout, keep an
+    // explanatory note visible above the fresh payment window.
+    if (opts?.expired) {
+      setExpiredNotice("Your previous payment link expired before you finished, so we opened a fresh one below — the old link was never charged.");
+    } else {
+      setExpiredNotice("");
+    }
     setPayError("");
     setPaying(true);
-
-    // Open a blank popup immediately under the user gesture. Browsers only
-    // allow popups from a direct click, so we must open it here and then
-    // navigate it to Chapa once the init API responds.
-    const popup = window.open("about:blank", "chapa_payment", "popup=yes,width=470,height=740,scrollbars=yes");
-    if (popup) {
-      popupRef.current = popup;
-      popup.document.write("<p style='font-family:sans-serif;text-align:center;margin-top:40px;color:#666'>Loading secure payment…</p>");
-      setPopupBlocked(false);
-    } else {
-      popupRef.current = null;
-      setPopupBlocked(true);
-    }
 
     try {
       const res = await fetch("/api/payments/chapa/init", {
@@ -329,6 +340,14 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
       });
       const data = await res.json();
 
+      // Already paid (e.g. a webhook confirmed it while the student was on
+      // this step) — jump to processing; the verifier resolves it to SUCCESS
+      // and shows the result immediately.
+      if (res.ok && data.alreadyPaid) {
+        setStep("processing");
+        return;
+      }
+
       if (res.ok && data.checkoutUrl) {
         sessionStorage.setItem(PENDING_KEY, JSON.stringify({
           referenceId,
@@ -337,27 +356,14 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
           scheduleText: pendingSummary?.scheduleText || "",
         }));
         setCheckoutUrl(data.checkoutUrl);
+        setIframeLoaded(false);
         setPayError("");
         setStep("processing");
-
-        // Navigate the popup to Chapa's checkout page.
-        if (popupRef.current && !popupRef.current.closed) {
-          popupRef.current.location.href = data.checkoutUrl;
-        }
         return;
       }
 
-      // Init failed — close the empty popup and show the error on the summary step.
-      if (popupRef.current && !popupRef.current.closed) {
-        popupRef.current.close();
-      }
-      popupRef.current = null;
       setPayError(data.error || "Unable to start payment. Please try again.");
     } catch {
-      if (popupRef.current && !popupRef.current.closed) {
-        popupRef.current.close();
-      }
-      popupRef.current = null;
       setPayError("Network error. Please check your connection and try again.");
     } finally {
       setPaying(false);
@@ -380,10 +386,14 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     setResult(data);
     if (data.status === "SUCCESS") {
       sessionStorage.removeItem(PENDING_KEY);
-      if (popupRef.current) { try { popupRef.current.close(); } catch { /* ignore */ } popupRef.current = null; }
       setStep("result");
+    } else if (data.sessionExpired) {
+      // Chapa forgot this checkout (expired/invalidated). Don't leave the
+      // student spinning — mint a fresh checkout automatically.
+      setPayError("");
+      setPollingStopped(false);
+      startPayment({ expired: true });
     } else if (["FAILED", "CANCELLED", "INCOMPLETE", "BLOCKED"].includes(data.status)) {
-      if (popupRef.current) { try { popupRef.current.close(); } catch { /* ignore */ } popupRef.current = null; }
       setStep("result");
     } else {
       // PENDING — keep waiting
@@ -406,10 +416,8 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
       if (data?.status === "SUCCESS") {
         setResult(data);
         sessionStorage.removeItem(PENDING_KEY);
-        if (popupRef.current) { try { popupRef.current.close(); } catch { /* ignore */ } popupRef.current = null; }
         setStep("result");
       } else if (data && ["FAILED", "CANCELLED", "INCOMPLETE", "BLOCKED"].includes(data.status)) {
-        if (popupRef.current) { try { popupRef.current.close(); } catch { /* ignore */ } popupRef.current = null; }
         setResult(data);
         setStep("result");
       } else if (attempts >= 120) {
@@ -650,7 +658,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                   <CreditCard size={16} className="text-gold" /> Pay Securely with Chapa
                 </p>
                 <p className="mt-1 text-xs text-gray-600">
-                  You&apos;ll pay in a secure Chapa window that opens over this page — this page stays open, and your registration is verified and confirmed automatically. Telebirr, CBE Birr, cards and more are supported.
+                  You&apos;ll pay securely right here on this page — Chapa&apos;s checkout opens below and your registration is verified and confirmed automatically. Telebirr, CBE Birr, cards and more are supported.
                 </p>
               </div>
               <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-white/70 px-3 py-2 text-xs text-gray-500">
@@ -666,7 +674,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
               )}
 
               <button
-                onClick={startPayment}
+                onClick={() => startPayment()}
                 disabled={paying}
                 className="mt-5 w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -679,7 +687,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
             </div>
           )}
 
-          {/* STEP: processing — Chapa payment popup + live verification */}
+          {/* STEP: processing — Chapa checkout embedded in the page */}
           {step === "processing" && (
             <div>
               <div className="text-center">
@@ -688,37 +696,56 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                 </div>
                 <h3 className="text-lg font-bold text-navy">Complete your payment</h3>
                 <p className="mx-auto mt-2 max-w-sm text-sm text-gray-500">
-                  {checkoutUrl && !popupBlocked
-                    ? "Pay in the window that opened — this page confirms your registration automatically when payment succeeds."
-                    : "Click the link below to open Chapa's secure payment window. This page will confirm your registration automatically when payment succeeds."}
+                  {checkoutUrl
+                    ? "Pay securely in the window below — you never leave this page, and your registration is confirmed automatically when payment succeeds."
+                    : "Your payment is being checked. If you haven't paid yet, you can start it again below."}
                 </p>
+                {expiredNotice && (
+                  <div className="mx-auto mt-3 flex max-w-sm items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800">
+                    <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                    <span>{expiredNotice}</span>
+                  </div>
+                )}
               </div>
 
-              {checkoutUrl && (
-                <div className="mt-4 space-y-2">
-                  {popupBlocked ? (
-                    <a
-                      href={checkoutUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => setPopupBlocked(false)}
-                      className="block w-full rounded-lg bg-gold px-5 py-3 text-center text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md"
-                    >
-                      Open Chapa Payment Window
-                    </a>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        const w = window.open(checkoutUrl, "chapa_payment", "popup=yes,width=470,height=740");
-                        if (w) { popupRef.current = w; setPopupBlocked(false); }
-                        else { popupRef.current = null; setPopupBlocked(true); }
-                      }}
-                      className="w-full rounded-lg border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
-                    >
-                      Reopen Payment Window
-                    </button>
+              {checkoutUrl ? (
+                <div className="relative mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white">
+                  <iframe
+                    key={checkoutUrl}
+                    src={checkoutUrl}
+                    title="Chapa secure payment"
+                    className="h-[520px] w-full border-0"
+                    onLoad={() => setIframeLoaded(true)}
+                  />
+                  {!iframeLoaded && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white text-sm text-gray-500">
+                      <Loader2 size={18} className="animate-spin text-gold" />
+                      Loading secure payment…
+                    </div>
                   )}
                 </div>
+              ) : (
+                <button
+                  onClick={() => startPayment()}
+                  disabled={paying}
+                  className="mt-5 w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md disabled:opacity-50"
+                >
+                  {paying ? (
+                    <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Starting secure payment...</span>
+                  ) : (
+                    "Continue to Payment"
+                  )}
+                </button>
+              )}
+
+              {checkoutUrl && (
+                <p className="mt-3 text-center text-xs text-gray-400">
+                  Having trouble?{" "}
+                  <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-gold underline underline-offset-2">
+                    Open payment in a new tab
+                  </a>{" "}
+                  — this page keeps verifying either way.
+                </p>
               )}
 
               <div className="mx-auto mt-5 max-w-xs rounded-lg bg-warm-white px-4 py-3 text-left">
@@ -804,7 +831,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                     <p className="mt-0.5 text-sm font-bold text-gold">{referenceId}</p>
                   </div>
                   <div className="mt-5">
-                    <button onClick={startPayment} disabled={paying} className="w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md disabled:opacity-50">
+                    <button onClick={() => startPayment()} disabled={paying} className="w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md disabled:opacity-50">
                       {paying ? (<span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Starting...</span>) : "Try Again"}
                     </button>
                   </div>
