@@ -9,7 +9,7 @@ const DEFAULTS = {
   badge: "What We Teach",
   title: "Practical skills. Professional tools. Real projects.",
   description:
-    "Every course at Nalik Academy is built around the software professionals actually use. You learn by doing — not by watching lectures.",
+    "Every course at Nalik Academy is built around the software professionals actually use. You learn by doing, not by watching lectures.",
   tools: [
     { name: "Adobe Premiere Pro", description: "Industry-standard video editing. From timeline basics to advanced multicam workflows, color correction, and export settings for any platform." },
     { name: "Adobe Photoshop", description: "Essential for thumbnail design, title cards, image retouching, and visual assets that complement your video projects." },

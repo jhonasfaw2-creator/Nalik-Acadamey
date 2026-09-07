@@ -10,8 +10,8 @@ const DEFAULTS = {
   title: "A learning experience built around practice, not theory.",
   description: "From day one, you are editing, designing, and creating. That is how real skills are built.",
   steps: [
-    { title: "Learn by Doing", text: "No long lectures. Every class is hands-on — you edit footage, design graphics, and build projects from the first session." },
-    { title: "Work on Real Projects", text: "Practice with the same types of content professionals create daily — promos, social media videos, title sequences, and more." },
+    { title: "Learn by Doing", text: "No long lectures. Every class is hands-on: you edit footage, design graphics, and build projects from the first session." },
+    { title: "Work on Real Projects", text: "Practice with the same types of content professionals create daily: promos, social media videos, title sequences, and more." },
     { title: "Get Personal Feedback", text: "Instructors review your work one-on-one, point out what to improve, and guide you toward professional-level output." },
     { title: "Build Your Portfolio", text: "Leave the academy with a collection of polished projects ready to show employers, clients, or use for freelancing." },
   ],

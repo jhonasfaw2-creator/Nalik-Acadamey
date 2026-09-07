@@ -6,7 +6,7 @@ const DEFAULTS = {
   badge: "About Us",
   title: "Nalik Academy is where aspiring editors become professionals.",
   paragraph1:
-    "We are a hands-on media production academy based in Ethiopia, focused on training the next generation of video editors, graphic designers, and visual storytellers. Our courses are built around real-world projects — not theory alone.",
+    "We are a hands-on media production academy based in Ethiopia, focused on training the next generation of video editors, graphic designers, and visual storytellers. Our courses are built around real-world projects, not theory alone.",
   paragraph2:
     "Whether you are a complete beginner or looking to sharpen your skills, our structured programs take you from fundamentals to professional-level output using the same tools the industry relies on every day.",
   video: "/assets/About/about.mp4",

@@ -3,28 +3,40 @@ import { prisma } from "@/lib/prisma";
 import { readJson, isNotFoundError } from "@/lib/http";
 import { scheduleSchema } from "@/lib/validators";
 
-// GET /api/admin/schedules — list all schedules with course info
+// Sessions are fixed per group; days are derived from the group.
+const DAYS_BY_GROUP: Record<string, string> = {
+  A: "Monday, Wednesday, Friday",
+  B: "Tuesday, Thursday, Saturday",
+};
+
+// GET /api/admin/schedules — list all schedule sessions with live availability
 export async function GET(request: NextRequest) {
   try {
-    const courseId = request.nextUrl.searchParams.get("courseId");
+    const group = request.nextUrl.searchParams.get("group");
     const where: Record<string, unknown> = {};
-    if (courseId) where.courseId = courseId;
+    if (group) where.group = group;
 
     const schedules = await prisma.schedule.findMany({
       where,
-      include: { course: { select: { id: true, title: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 100,
+      orderBy: [{ group: "asc" }, { startTime: "asc" }],
     });
+    type ScheduleRow = (typeof schedules)[number];
 
-    return NextResponse.json(schedules);
+    return NextResponse.json(
+      schedules.map((s: ScheduleRow) => ({
+        ...s,
+        days: DAYS_BY_GROUP[s.group] || s.days,
+        seatsAvailable: Math.max(0, s.maxSeats - s.enrolled),
+        isFull: s.enrolled >= s.maxSeats,
+      }))
+    );
   } catch (error) {
     console.error("Admin schedules fetch error:", error);
     return NextResponse.json({ error: "Failed to load schedules" }, { status: 500 });
   }
 }
 
-// POST /api/admin/schedules — create a schedule
+// POST /api/admin/schedules — create a schedule session
 export async function POST(request: NextRequest) {
   try {
     const body = await readJson(request);
@@ -32,8 +44,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    // Strips unknown keys (e.g. `enrolled` / nested `course` from the admin UI)
-    // and rejects invalid dates, times, and seat counts with a clean 400.
+    // Strips unknown keys (e.g. `enrolled` from the admin UI) and rejects
+    // invalid times/seat counts with a clean 400.
     const parsed = scheduleSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
@@ -42,28 +54,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const days = DAYS_BY_GROUP[parsed.data.group] || parsed.data.group;
+
     const schedule = await prisma.schedule.create({
       data: {
-        courseId: parsed.data.courseId,
-        batchName: parsed.data.batchName,
-        days: parsed.data.days,
+        group: parsed.data.group,
+        session: parsed.data.session,
+        days,
         startTime: parsed.data.startTime,
         endTime: parsed.data.endTime,
-        startDate: new Date(parsed.data.startDate),
         maxSeats: parsed.data.maxSeats,
         active: parsed.data.active,
       },
-      include: { course: { select: { id: true, title: true } } },
     });
 
     return NextResponse.json(schedule, { status: 201 });
   } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      return NextResponse.json(
+        { error: "A session with this name already exists in this schedule group." },
+        { status: 409 }
+      );
+    }
     console.error("Admin schedule create error:", error);
     return NextResponse.json({ error: "Failed to create schedule" }, { status: 500 });
   }
 }
 
-// PUT /api/admin/schedules — update a schedule
+// PUT /api/admin/schedules — update a schedule session
 export async function PUT(request: NextRequest) {
   try {
     const body = await readJson(request);
@@ -81,24 +99,23 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Rebuild only the editable fields (schema already stripped `enrolled` and
-    // the nested `course` object the admin UI sends back).
+    // Rebuild only the editable fields (schema already stripped `enrolled`).
     const updateData: {
-      courseId?: string;
-      batchName?: string;
+      group?: string;
+      session?: string;
       days?: string;
       startTime?: string;
       endTime?: string;
-      startDate?: Date;
       maxSeats?: number;
       active?: boolean;
     } = {};
-    if (parsed.data.courseId !== undefined) updateData.courseId = parsed.data.courseId;
-    if (parsed.data.batchName !== undefined) updateData.batchName = parsed.data.batchName;
-    if (parsed.data.days !== undefined) updateData.days = parsed.data.days;
+    if (parsed.data.group !== undefined) {
+      updateData.group = parsed.data.group;
+      updateData.days = DAYS_BY_GROUP[parsed.data.group] || parsed.data.group;
+    }
+    if (parsed.data.session !== undefined) updateData.session = parsed.data.session;
     if (parsed.data.startTime !== undefined) updateData.startTime = parsed.data.startTime;
     if (parsed.data.endTime !== undefined) updateData.endTime = parsed.data.endTime;
-    if (parsed.data.startDate !== undefined) updateData.startDate = new Date(parsed.data.startDate);
     if (parsed.data.maxSeats !== undefined) updateData.maxSeats = parsed.data.maxSeats;
     if (parsed.data.active !== undefined) updateData.active = parsed.data.active;
 
@@ -106,7 +123,6 @@ export async function PUT(request: NextRequest) {
       const schedule = await prisma.schedule.update({
         where: { id },
         data: updateData,
-        include: { course: { select: { id: true, title: true } } },
       });
       return NextResponse.json(schedule);
     } catch (error) {
@@ -116,6 +132,12 @@ export async function PUT(request: NextRequest) {
       throw error;
     }
   } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      return NextResponse.json(
+        { error: "A session with this name already exists in this schedule group." },
+        { status: 409 }
+      );
+    }
     console.error("Admin schedule update error:", error);
     return NextResponse.json({ error: "Failed to update schedule" }, { status: 500 });
   }
@@ -136,7 +158,7 @@ export async function DELETE(request: NextRequest) {
       // that must be removed or reassigned first.
       console.error("Admin schedule delete error:", error);
       return NextResponse.json(
-        { error: "Cannot delete this schedule because it has registrations. Remove or reassign them first." },
+        { error: "Cannot delete this session because it has registrations. Remove or reassign them first." },
         { status: 409 }
       );
     }
@@ -145,4 +167,13 @@ export async function DELETE(request: NextRequest) {
     console.error("Admin schedule delete error:", error);
     return NextResponse.json({ error: "Failed to delete schedule" }, { status: 500 });
   }
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2002"
+  );
 }

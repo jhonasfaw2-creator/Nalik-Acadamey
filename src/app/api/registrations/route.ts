@@ -74,18 +74,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "This course is not available" }, { status: 400 });
     }
 
-    // Only allow schedules that still have seats and belong to this course.
-    if (scheduleId) {
-      const schedule = await prisma.schedule.findFirst({
-        where: { id: scheduleId, courseId, active: true },
-      });
-      if (!schedule) {
-        return NextResponse.json({ error: "Schedule not found" }, { status: 400 });
-      }
-      const spotsLeft = schedule.maxSeats - schedule.enrolled;
-      if (spotsLeft <= 0) {
-        return NextResponse.json({ error: "This schedule is full. Please choose another." }, { status: 400 });
-      }
+    // A schedule (group + session) is REQUIRED. The session must be active
+    // and still have at least one free seat.
+    if (!scheduleId) {
+      return NextResponse.json({ error: "Please select a schedule group and session." }, { status: 400 });
+    }
+    const schedule = await prisma.schedule.findFirst({
+      where: { id: scheduleId, active: true },
+    });
+    if (!schedule) {
+      return NextResponse.json({ error: "Schedule not found" }, { status: 400 });
+    }
+    if (schedule.enrolled >= schedule.maxSeats) {
+      return NextResponse.json({ error: "This session is full. Please choose another session." }, { status: 400 });
     }
 
     const paymentAmount = course.discountPrice ?? course.price;
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
             phone,
             age,
             courseId,
-            scheduleId: scheduleId || null,
+            scheduleId,
             previousExperience: previousExperience || "",
             motivation: motivation || "",
             status: "PENDING_PAYMENT",

@@ -94,12 +94,12 @@ export default function AdminSettings() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Payment Settings</h2>
           <p className="text-sm text-gray-600">
             Student payments are processed securely through Chapa (ETB). Chapa connection settings are
-            configured with environment variables on the server — they are never stored in this database.
+            configured with environment variables on the server; they are never stored in this database.
           </p>
           <ul className="mt-3 space-y-1 text-xs text-gray-500">
-            <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">CHAPA_SECRET_KEY</code> — secret API key (CHAPA_TEST_... in test mode, CHAPA_LIVE_... in production)</li>
-            <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">CHAPA_WEBHOOK_SECRET</code> — secret used to verify webhook signatures</li>
-            <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">NEXT_PUBLIC_APP_URL</code> — public app URL</li>
+            <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">CHAPA_SECRET_KEY</code>: secret API key (CHAPA_TEST_... in test mode, CHAPA_LIVE_... in production)</li>
+            <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">CHAPA_WEBHOOK_SECRET</code>: secret used to verify webhook signatures</li>
+            <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">NEXT_PUBLIC_APP_URL</code>: public app URL</li>
           </ul>
           <p className="mt-3 text-xs text-gray-400">
             Payments are confirmed automatically (webhook + server-side verification). No manual confirmation is required.

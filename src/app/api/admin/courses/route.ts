@@ -9,7 +9,6 @@ export async function GET() {
     const courses = await prisma.course.findMany({
       orderBy: { sortOrder: "asc" },
       take: 100,
-      include: { _count: { select: { schedules: true } } },
     });
     return NextResponse.json(courses);
   } catch (error) {

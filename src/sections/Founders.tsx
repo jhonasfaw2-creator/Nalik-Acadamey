@@ -10,7 +10,7 @@ const DEFAULTS = {
   portraitUrl: "/assets/founder-portrait.jpg",
   bioShort: "Ethiopian video editor and creative professional with experience editing social-media content for established Ethiopian creators and influencers, including Loft Haron Shirobaie.",
   bioLong:
-    "I built Nalik Academy from a background in editing for social-media and creator content. Working with established Ethiopian creators and influencers shaped how I think about pacing, hooks, captions, sound design, colour grading, motion graphics, and the difference between a good cut and an edit that holds attention. This academy is my attempt to pass that practice on — not as theory, but as the kind of hands-on editing work that shows up in real projects.",
+    "I built Nalik Academy from a background in editing for social-media and creator content. Working with established Ethiopian creators and influencers shaped how I think about pacing, hooks, captions, sound design, colour grading, motion graphics, and the difference between a good cut and an edit that holds attention. This academy is my attempt to pass that practice on, not as theory but as the kind of hands-on editing work that shows up in real projects.",
   specialties: [
     "Storytelling",
     "Pacing",
@@ -117,7 +117,7 @@ export default function Founders() {
             >
               <img
                 src={data.portraitUrl}
-                alt={`${data.name} — founder portrait`}
+                alt={`${data.name}, founder portrait`}
                 className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
                 loading="lazy"
                 decoding="async"

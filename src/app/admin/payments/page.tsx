@@ -22,7 +22,7 @@ interface Payment {
     phone: string;
     courseId: string;
     course: { title: string } | null;
-    schedule: { batchName: string; days: string } | null;
+    schedule: { group: string; session: string; days: string } | null;
     status: string;
   };
 }
@@ -156,7 +156,7 @@ export default function AdminPayments() {
               <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
                 <h2 className="text-lg font-bold text-navy mb-4">Update Payment</h2>
                 <p className="text-sm text-gray-500 mb-4">
-                  {editingPayment.application.fullName} — {editingPayment.application.referenceId}
+                  {editingPayment.application.fullName} · {editingPayment.application.referenceId}
                   <span className="block text-xs text-gray-400">Ref: {editingPayment.merchantReference}</span>
                 </p>
                 <div className="space-y-3">
@@ -194,7 +194,7 @@ export default function AdminPayments() {
                       <span className="text-xs text-gray-400">{p.application.referenceId}</span>
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500">
-                      <span>{p.application.course?.title || "—"} · {p.application.schedule?.batchName || "No schedule"}</span>
+                      <span>{p.application.course?.title || "No course"} · {p.application.schedule ? `SCHEDULE ${p.application.schedule.group}: ${p.application.schedule.session}` : "No schedule"}</span>
                       {p.merchantReference && <span>Ref: {p.merchantReference}</span>}
                       {p.chapaReference && <span>Chapa: {p.chapaReference}</span>}
                       {p.method && <span>Method: {p.method}</span>}

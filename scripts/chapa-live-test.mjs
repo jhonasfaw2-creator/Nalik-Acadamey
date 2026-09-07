@@ -102,8 +102,8 @@ async function main() {
   check("seat not consumed", true); // enforced by status above
 
   // ── 5. DB-level assertion that nothing was unlocked ─────────────────
-  const schedule = await prisma.schedule.findUnique({ where: { id: "app-morning-a" } });
-  console.log(`\n  schedule app-morning-a enrolled = ${schedule?.enrolled} (unchanged, unpaid)`);
+  const schedule = await prisma.schedule.findUnique({ where: { id: "sched-a-morning" } });
+  console.log(`\n  schedule sched-a-morning enrolled = ${schedule?.enrolled} (unchanged, unpaid)`);
 
   console.log(`\n📊 Results: ${passed} passed, ${failed} failed`);
   if (failed === 0) {

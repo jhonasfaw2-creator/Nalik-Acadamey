@@ -8,11 +8,11 @@ const ICONS = [Film, Palette, SlidersHorizontal, Award];
 const DEFAULTS = {
   badge: "Our Programs",
   title: "What you get when you join Nalik Academy.",
-  description: "Every program is designed to take you from beginner to confident creator — with practical skills you can use immediately.",
+  description: "Every program is designed to take you from beginner to confident creator, with practical skills you can use immediately.",
   programs: [
     { title: "Hands-On Video Editing", text: "Edit real projects from day one. Learn timeline workflow, transitions, multicam editing, and export settings for YouTube, TV, and cinema using Adobe Premiere Pro and DaVinci Resolve." },
     { title: "Graphic Design Foundations", text: "Create professional thumbnails, title cards, logos, and social media assets. Master Adobe Photoshop for image editing and Illustrator for scalable vector design." },
-    { title: "Color Grading & Finishing", text: "Go beyond basic corrections. Learn professional color grading workflows in DaVinci Resolve — the same tool used on major Hollywood productions." },
+    { title: "Color Grading & Finishing", text: "Go beyond basic corrections. Learn professional color grading workflows in DaVinci Resolve, the same tool used on major Hollywood productions." },
     { title: "Portfolio-Ready Output", text: "Every course ends with a portfolio project. You graduate with real work to show employers or clients, not just a certificate of attendance." },
   ],
 };

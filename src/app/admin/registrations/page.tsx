@@ -15,7 +15,7 @@ interface Registration {
   status: string;
   createdAt: string;
   course: { id: string; title: string } | null;
-  schedule: { id: string; batchName: string; days: string; startTime: string; endTime: string } | null;
+  schedule: { id: string; group: string; session: string; days: string; startTime: string; endTime: string } | null;
   payment: {
     amount: number;
     currency: string;
@@ -181,16 +181,16 @@ export default function AdminRegistrations() {
                     <p className="text-xs text-gray-400">{reg.referenceId}</p>
                   </td>
                   <td className="px-4 py-3">
-                    <p className="text-sm text-navy">{reg.course?.title || "—"}</p>
+                    <p className="text-sm text-navy">{reg.course?.title || "No course"}</p>
                   </td>
                   <td className="px-4 py-3">
                     {reg.schedule ? (
                       <div>
-                        <p className="text-sm text-navy">{reg.schedule.batchName}</p>
+                        <p className="text-sm text-navy">SCHEDULE {reg.schedule.group}: {reg.schedule.session}</p>
                         <p className="text-xs text-gray-400">{reg.schedule.days} · {reg.schedule.startTime}–{reg.schedule.endTime}</p>
                       </div>
                     ) : (
-                      <span className="text-xs text-gray-400">—</span>
+                      <span className="text-xs text-gray-400">No schedule</span>
                     )}
                   </td>
                   <td className="px-4 py-3">
@@ -205,7 +205,7 @@ export default function AdminRegistrations() {
                         </span>
                       </div>
                     ) : (
-                      <span className="text-xs text-gray-400">—</span>
+                      <span className="text-xs text-gray-400">No payment</span>
                     )}
                   </td>
                   <td className="px-4 py-3">

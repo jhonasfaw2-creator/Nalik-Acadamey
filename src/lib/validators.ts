@@ -20,25 +20,24 @@ export const registrationSchema = z.object({
   phone: z.string().trim().min(8, "Phone must be at least 8 digits").max(30),
   age: z.coerce.number().int("Age must be a whole number").min(10, "Age must be 10–99").max(99, "Age must be 10–99"),
   courseId: z.string().min(1, "Course is required"),
-  scheduleId: z.string().min(1).optional().nullable(),
+  scheduleId: z.string().min(1, "Schedule group and session are required"),
   previousExperience: z.string().max(2000).optional(),
   motivation: z.string().max(2000).optional(),
 });
 
-// Server-side validation for admin schedule create/update. The admin UI sends
-// the full row back (including `enrolled` and the nested `course` object),
-// which this schema strips; invalid dates/times/seats are rejected with a
-// clean 400 instead of a Prisma 500.
+// Server-side validation for admin schedule create/update. Sessions are
+// shared across courses, so the admin picks a group (A/B) and a session name;
+// days are derived from the group and seats are fixed at 15 per session.
 export const scheduleSchema = z.object({
   id: z.string().optional(),
-  courseId: z.string().min(1, "Course is required"),
-  batchName: z.string().trim().min(1, "Batch name is required").max(120),
-  days: z.string().trim().min(1, "Days are required").max(60),
+  group: z.enum(["A", "B"], { message: "Schedule group must be A or B" }),
+  session: z
+    .enum(["Morning Session", "Afternoon Session", "Evening Session"], {
+      message: "Session must be Morning, Afternoon, or Evening",
+    })
+    .or(z.string().trim().min(1, "Session is required").max(120)),
   startTime: z.string().regex(/^\d{2}:\d{2}$/, "Start time must be HH:MM"),
   endTime: z.string().regex(/^\d{2}:\d{2}$/, "End time must be HH:MM"),
-  startDate: z
-    .string()
-    .refine((v) => !Number.isNaN(new Date(v).getTime()), "Invalid start date"),
-  maxSeats: z.number().int("Max seats must be a whole number").min(1).max(1000).default(20),
+  maxSeats: z.number().int("Max seats must be a whole number").min(1).max(1000).default(15),
   active: z.boolean().default(true),
 });

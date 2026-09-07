@@ -62,9 +62,9 @@ async function main() {
   const course = await prisma.course.findUnique({ where: { id: "adobe-premiere-pro" } });
   if (!course) { console.log("  ✗ course adobe-premiere-pro not found in DB — run seed"); process.exit(1); }
   const chargeAmount = course.discountPrice ?? course.price;
-  const schedule = await prisma.schedule.findUnique({ where: { id: "app-morning-a" } });
+  const schedule = await prisma.schedule.findUnique({ where: { id: "sched-a-morning" } });
   const enrolledBefore = schedule ? schedule.enrolled : 0;
-  restoreSchedule = { id: "app-morning-a", enrolled: enrolledBefore };
+  restoreSchedule = { id: "sched-a-morning", enrolled: enrolledBefore };
 
   const cleanupIds = [];
 
@@ -79,7 +79,7 @@ async function main() {
         whatsapp: "+251911000000",
         age: 22,
         courseId: "adobe-premiere-pro",
-        scheduleId: "app-morning-a",
+        scheduleId: "sched-a-morning",
       }),
     });
     return { res, email };
@@ -95,7 +95,7 @@ async function main() {
   const appA = await prisma.application.findUnique({ where: { referenceId: refA }, include: { payment: true } });
   check("application.status = PENDING_PAYMENT", appA?.status === "PENDING_PAYMENT");
   check("payment.status = PENDING, currency ETB", appA?.payment?.status === "PENDING" && appA?.payment?.currency === "ETB");
-  check("schedule enrolled NOT incremented at registration", (await prisma.schedule.findUnique({ where: { id: "app-morning-a" } }))?.enrolled === enrolledBefore);
+  check("schedule enrolled NOT incremented at registration", (await prisma.schedule.findUnique({ where: { id: "sched-a-morning" } }))?.enrolled === enrolledBefore);
 
   // ── 2. Simulated init (write the refs the /init endpoint would set) ─
   console.log("\n2) Simulated Chapa init (checkout_url returned by init stores these refs)");
@@ -121,7 +121,7 @@ async function main() {
     v1.data?.registration?.course && v1.data?.registration?.amount === chargeAmount);
   const afterA = await prisma.application.findUnique({ where: { referenceId: refA }, include: { payment: true } });
   check("payment.merchantReference + chapaReference stored", afterA?.payment?.merchantReference === merchantA && afterA?.payment?.chapaReference === chapaA);
-  check("schedule enrolled incremented exactly once", (await prisma.schedule.findUnique({ where: { id: "app-morning-a" } }))?.enrolled === enrolledBefore + 1);
+  check("schedule enrolled incremented exactly once", (await prisma.schedule.findUnique({ where: { id: "sched-a-morning" } }))?.enrolled === enrolledBefore + 1);
 
   // ── 4. Duplicate webhook (idempotency) ─────────────────────────────
   console.log("\n4) Duplicate payment.success delivery (idempotency)");
@@ -131,7 +131,7 @@ async function main() {
     payment_method: "telebirr", customer: { first_name: "Test", last_name: "A", email: regA.email },
   });
   check("duplicate accepted (200)", w1dup.status === 200);
-  check("enrolled still +1 (not double-counted)", (await prisma.schedule.findUnique({ where: { id: "app-morning-a" } }))?.enrolled === enrolledBefore + 1);
+  check("enrolled still +1 (not double-counted)", (await prisma.schedule.findUnique({ where: { id: "sched-a-morning" } }))?.enrolled === enrolledBefore + 1);
   check("payment still SUCCESS", (await prisma.application.findUnique({ where: { referenceId: refA }, include: { payment: true } }))?.payment?.status === "SUCCESS");
 
   // ── 5. Bad signature rejected ───────────────────────────────────────

@@ -11,16 +11,22 @@ interface CourseOption {
   discountLabel: string | null;
 }
 
-interface ScheduleOption {
+interface ScheduleSession {
   id: string;
-  batchName: string;
-  days: string;
+  session: string;
   startTime: string;
   endTime: string;
-  startDate: string;
   maxSeats: number;
   enrolled: number;
-  course: { id: string; title: string; price: number; discountPrice: number | null; discountLabel: string | null };
+  seatsAvailable: number;
+  isFull: boolean;
+}
+
+interface ScheduleGroup {
+  group: "A" | "B";
+  days: string;
+  sessions: ScheduleSession[];
+  isFull: boolean;
 }
 
 interface ApplicationFormProps {
@@ -65,7 +71,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const [serverError, setServerError] = useState("");
 
   const [courses, setCourses] = useState<CourseOption[]>([]);
-  const [schedules, setSchedules] = useState<ScheduleOption[]>([]);
+  const [scheduleGroups, setScheduleGroups] = useState<ScheduleGroup[]>([]);
   const [coursesLoaded, setCoursesLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
@@ -73,7 +79,8 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   // Wizard state
   const [step, setStep] = useState<"course" | "schedule" | "info" | "summary" | "processing" | "result">("course");
   const [selectedCourseId, setSelectedCourseId] = useState("");
-  const [selectedScheduleId, setSelectedScheduleId] = useState("");
+  const [selectedGroupId, setSelectedGroupId] = useState("");
+  const [selectedSessionId, setSelectedSessionId] = useState("");
   const [stepErrors, setStepErrors] = useState<string>("");
 
   // Student info
@@ -160,10 +167,10 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
       .then((r) => r.json())
       .then((scheduleData) => {
         if (cancelled) return;
-        if (Array.isArray(scheduleData)) setSchedules(scheduleData);
+        if (scheduleData && Array.isArray(scheduleData.groups)) setScheduleGroups(scheduleData.groups);
       })
       .catch(() => {
-        // schedules are optional — the student can still pick a course
+        // schedules are optional until the student reaches that step
       });
 
     return () => { cancelled = true; };
@@ -201,15 +208,16 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     return () => { document.body.style.overflow = ""; };
   }, [isOpen]);
 
-  const filteredSchedules = schedules.filter((s) => s.course.id === selectedCourseId && s.maxSeats - s.enrolled > 0);
+  const selectedGroup = scheduleGroups.find((g) => g.group === selectedGroupId) as ScheduleGroup | undefined;
+  const selectedSession = selectedGroup?.sessions.find((s) => s.id === selectedSessionId);
   const selectedCourse = courses.find((c) => c.id === selectedCourseId);
-  const selectedSchedule = filteredSchedules.find((s) => s.id === selectedScheduleId) as ScheduleOption | undefined;
 
   const resetForm = () => {
     setStep("course");
     setStepErrors("");
     setSelectedCourseId("");
-    setSelectedScheduleId("");
+    setSelectedGroupId("");
+    setSelectedSessionId("");
     setReferenceId("");
     setAmount(0);
     setCheckoutUrl(null);
@@ -274,7 +282,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     if (Object.keys(validationErrors).length > 0) return;
 
     if (!selectedCourse) { setStepErrors("Please select a course."); return; }
-    if (filteredSchedules.length > 0 && !selectedScheduleId) { setStepErrors("Please choose a class schedule."); return; }
+    if (!selectedSessionId) { setStepErrors("Please choose a schedule group and session."); return; }
 
     setSubmitting(true);
     try {
@@ -287,20 +295,22 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
           phone: phoneRef.current?.value?.trim(),
           age: Number(ageRef.current?.value?.trim()),
           courseId: selectedCourseId,
-          scheduleId: selectedScheduleId || undefined,
+          scheduleId: selectedSessionId,
         }),
       });
       const data = await res.json();
 
       if (res.ok && data.success) {
-        const schedule = selectedSchedule;
+        const group = selectedGroup;
+        const session = selectedSession;
         setReferenceId(data.referenceId);
         setAmount(data.amount || 0);
         setPendingSummary({
           courseTitle: selectedCourse.title,
-          scheduleText: schedule
-            ? `${schedule.batchName} — ${schedule.days}, ${schedule.startTime}–${schedule.endTime} (starts ${new Date(schedule.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })})`
-            : "To be confirmed",
+          scheduleText:
+            group && session
+              ? `SCHEDULE ${group.group}: ${session.session} (${group.days}, ${session.startTime}–${session.endTime})`
+              : "To be confirmed",
         });
         setStep("summary");
       } else if (res.status === 409) {
@@ -325,7 +335,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     // When this call is the recovery from an expired checkout, keep an
     // explanatory note visible above the fresh payment window.
     if (opts?.expired) {
-      setExpiredNotice("Your previous payment link expired before you finished, so we opened a fresh one below — the old link was never charged.");
+      setExpiredNotice("Your previous payment link expired before you finished, so we opened a fresh one below; the old link was never charged.");
     } else {
       setExpiredNotice("");
     }
@@ -458,7 +468,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
           {/* Progress indicator */}
           {step !== "result" && (
             <p className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-400">
-              {step === "processing" ? "Payment" : `Step ${["course", "schedule", "info", "summary"].indexOf(step) + 1} of 4 — ${stepTitles[step]}`}
+              {step === "processing" ? "Payment" : `Step ${["course", "schedule", "info", "summary"].indexOf(step) + 1} of 4: ${stepTitles[step]}`}
               {step !== "processing" && step !== "course" && (
                 <button onClick={() => goTo(step === "schedule" ? "course" : step === "info" ? "schedule" : step === "summary" ? "info" : "summary")} className="ml-2 normal-case tracking-normal text-gold underline-offset-2 hover:underline">
                   ← Back
@@ -497,7 +507,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                           name="course"
                           value={c.id}
                           checked={isSelected}
-                          onChange={(e) => { setSelectedCourseId(e.target.value); setSelectedScheduleId(""); setStepErrors(""); }}
+                          onChange={(e) => { setSelectedCourseId(e.target.value); setSelectedGroupId(""); setSelectedSessionId(""); setStepErrors(""); }}
                           className="accent-gold"
                         />
                         <span className="flex-1">
@@ -528,47 +538,86 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
           {step === "schedule" && (
             <div>
               {stepErrors && <p className="mb-3 rounded-lg bg-red-50 border border-red-100 px-4 py-2.5 text-sm text-red-600">{stepErrors}</p>}
-              {filteredSchedules.length === 0 ? (
+              {scheduleGroups.length === 0 ? (
                 <div className="rounded-lg bg-warm-white px-4 py-3 text-sm text-gray-500">
-                  No open batches for {selectedCourse?.title} right now. Pick another course, or continue without a schedule.
+                  No schedule groups are open right now. Please try again later.
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {filteredSchedules.map((s) => {
-                    const spotsLeft = s.maxSeats - s.enrolled;
-                    const isFull = spotsLeft <= 0;
+                <div className="space-y-4">
+                  {scheduleGroups.map((g) => {
+                    const groupSelected = selectedGroupId === g.group;
                     return (
-                      <label key={s.id} className={`flex items-start gap-3 rounded-lg border p-3.5 transition-all ${selectedScheduleId === s.id ? "border-gold bg-gold/5" : "border-gray-200 hover:border-gold/50"}`}>
-                        <input
-                          type="radio"
-                          name="schedule"
-                          value={s.id}
-                          checked={selectedScheduleId === s.id}
-                          onChange={() => setSelectedScheduleId(s.id)}
-                          disabled={isFull}
-                          className="mt-0.5 accent-gold"
-                        />
-                        <span className="flex-1">
-                          <span className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-navy">{s.batchName}</span>
-                            {isFull ? (
-                              <span className="text-xs font-medium text-red-500">Full</span>
-                            ) : (
-                              <span className="text-xs text-gray-400">{spotsLeft} spots left</span>
-                            )}
+                      <div key={g.group} className={`rounded-xl border p-4 transition-all ${groupSelected ? "border-gold bg-gold/5" : "border-gray-200"}`}>
+                        {/* Schedule group header */}
+                        <label className="flex cursor-pointer items-start gap-3">
+                          <input
+                            type="radio"
+                            name="schedule-group"
+                            value={g.group}
+                            checked={groupSelected}
+                            onChange={() => {
+                              setSelectedGroupId(g.group);
+                              setSelectedSessionId("");
+                              setStepErrors("");
+                            }}
+                            className="mt-0.5 accent-gold"
+                          />
+                          <span className="flex-1">
+                            <span className="flex items-center justify-between">
+                              <span className="text-sm font-bold text-navy">SCHEDULE {g.group}</span>
+                              {g.isFull ? (
+                                <span className="text-xs font-medium text-red-500">FULL</span>
+                              ) : (
+                                <span className="text-xs text-gray-400">Open</span>
+                              )}
+                            </span>
+                            <span className="mt-1 flex items-center gap-1 text-xs text-gray-500">
+                              <Calendar size={11} /> {g.days}
+                            </span>
                           </span>
-                          <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
-                            <span className="flex items-center gap-1"><Calendar size={11} /> {s.days}</span>
-                            <span>{s.startTime} – {s.endTime}</span>
-                            <span>Starts {new Date(s.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-                          </span>
-                        </span>
-                      </label>
+                        </label>
+
+                        {/* Sessions (visible once the group is selected) */}
+                        {groupSelected && (
+                          <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
+                            {g.sessions.map((s) => {
+                              const isFull = s.isFull;
+                              return (
+                                <label key={s.id} className={`flex items-start gap-3 rounded-lg border p-3 transition-all ${selectedSessionId === s.id ? "border-gold bg-gold/5" : "border-gray-200 hover:border-gold/50"}`}>
+                                  <input
+                                    type="radio"
+                                    name="schedule-session"
+                                    value={s.id}
+                                    checked={selectedSessionId === s.id}
+                                    onChange={() => { setSelectedSessionId(s.id); setStepErrors(""); }}
+                                    disabled={isFull}
+                                    className="mt-0.5 accent-gold"
+                                  />
+                                  <span className="flex-1">
+                                    <span className="flex items-center justify-between">
+                                      <span className="text-sm font-semibold text-navy">{s.session}</span>
+                                      {isFull ? (
+                                        <span className="text-xs font-bold text-red-500">FULL</span>
+                                      ) : (
+                                        <span className="text-xs font-medium text-gray-500">{s.seatsAvailable} Seats Available</span>
+                                      )}
+                                    </span>
+                                    <span className="mt-1 flex items-center gap-3 text-xs text-gray-500">
+                                      <span>{s.startTime} – {s.endTime}</span>
+                                      <span>Max {s.maxSeats} students</span>
+                                    </span>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
               )}
-              <button onClick={() => { if (filteredSchedules.length > 0 && !selectedScheduleId) { setStepErrors("Please choose a schedule, or go back and pick 'no schedule'."); return; } goTo("info"); }} className="mt-5 w-full rounded-lg bg-navy px-5 py-3 text-sm font-bold text-white transition-all duration-200 hover:bg-navy/90 hover:shadow-md">
+              <button onClick={() => { if (!selectedGroupId || !selectedSessionId) { setStepErrors("Please select a schedule group and a session to continue."); return; } goTo("info"); }} className="mt-5 w-full rounded-lg bg-navy px-5 py-3 text-sm font-bold text-white transition-all duration-200 hover:bg-navy/90 hover:shadow-md">
                 Register Now
               </button>
             </div>
@@ -610,7 +659,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
 
               <div className="rounded-lg bg-warm-white px-4 py-3 text-xs text-gray-500">
                 <p className="font-medium text-navy">{selectedCourse?.title}</p>
-                {selectedSchedule && <p>{selectedSchedule.batchName} — {selectedSchedule.days}, {selectedSchedule.startTime}–{selectedSchedule.endTime}</p>}
+                {selectedGroup && selectedSession && <p>SCHEDULE {selectedGroup.group}: {selectedSession.session} · {selectedGroup.days}, {selectedSession.startTime}–{selectedSession.endTime}</p>}
                 <p className="mt-1">You&apos;ll pay <span className="font-semibold text-gold">{formatBirr(amount || (selectedCourse?.discountPrice ?? selectedCourse?.price) || 0)}</span> via Chapa after review.</p>
               </div>
 
@@ -658,12 +707,12 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                   <CreditCard size={16} className="text-gold" /> Pay Securely with Chapa
                 </p>
                 <p className="mt-1 text-xs text-gray-600">
-                  You&apos;ll pay securely right here on this page — Chapa&apos;s checkout opens below and your registration is verified and confirmed automatically. Telebirr, CBE Birr, cards and more are supported.
+                  You&apos;ll pay securely right here on this page: Chapa&apos;s checkout opens below and your registration is verified and confirmed automatically. Telebirr, CBE Birr, cards and more are supported.
                 </p>
               </div>
               <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-white/70 px-3 py-2 text-xs text-gray-500">
                 <Info size={13} className="mt-0.5 shrink-0 text-gold" />
-                Your reference ID: <span className="font-semibold text-navy">{referenceId}</span>. Keep it — you can check your payment status with it anytime.
+                Your reference ID: <span className="font-semibold text-navy">{referenceId}</span>. Keep it: you can check your payment status with it anytime.
               </p>
 
               {payError && (
@@ -681,7 +730,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                 {paying ? (
                   <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Starting secure payment...</span>
                 ) : (
-                  `Pay ${formatBirr(amount || (selectedCourse?.discountPrice ?? selectedCourse?.price) || 0)} — Register Now`
+                  `Pay ${formatBirr(amount || (selectedCourse?.discountPrice ?? selectedCourse?.price) || 0)} · Register Now`
                 )}
               </button>
             </div>
@@ -697,7 +746,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                 <h3 className="text-lg font-bold text-navy">Complete your payment</h3>
                 <p className="mx-auto mt-2 max-w-sm text-sm text-gray-500">
                   {checkoutUrl
-                    ? "Pay securely in the window below — you never leave this page, and your registration is confirmed automatically when payment succeeds."
+                    ? "Pay securely in the window below: you never leave this page, and your registration is confirmed automatically when payment succeeds."
                     : "Your payment is being checked. If you haven't paid yet, you can start it again below."}
                 </p>
                 {expiredNotice && (
@@ -744,7 +793,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                   <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-gold underline underline-offset-2">
                     Open payment in a new tab
                   </a>{" "}
-                  — this page keeps verifying either way.
+                  ; this page keeps verifying either way.
                 </p>
               )}
 
@@ -766,7 +815,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                 </button>
               </div>
               <p className="mt-3 text-center text-xs text-gray-400">
-                Status checks automatically every few seconds. You can close this page and return later — your registration is saved.
+                Status checks automatically every few seconds. You can close this page and return later; your registration is saved.
               </p>
             </div>
           )}
@@ -789,7 +838,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <dt className="text-gray-500">Course</dt>
-                      <dd className="font-medium text-navy">{result.registration?.course || "—"}</dd>
+                      <dd className="font-medium text-navy">{result.registration?.course || "N/A"}</dd>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <dt className="text-gray-500">Schedule</dt>
@@ -821,9 +870,9 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                   </h3>
                   <p className="mx-auto mt-1 max-w-xs text-sm text-gray-500">
                     {result.status === "FAILED"
-                      ? "Your payment was not completed. You can try again — no charge is made until the payment is confirmed."
+                      ? "Your payment was not completed. You can try again; no charge is made until the payment is confirmed."
                       : result.status === "CANCELLED"
-                        ? "You cancelled the payment. Your registration is still saved — you can pay anytime."
+                        ? "You cancelled the payment. Your registration is still saved; you can pay anytime."
                         : "Your payment did not complete (timeout or was abandoned). You can retry below."}
                   </p>
                   <div className="mx-auto mt-4 max-w-xs rounded-lg bg-warm-white px-4 py-3 text-left">

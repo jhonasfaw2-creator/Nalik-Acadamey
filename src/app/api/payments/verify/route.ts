@@ -35,7 +35,7 @@ async function handle(request: NextRequest) {
         phone: true,
         status: true,
         course: { select: { title: true, price: true, discountPrice: true, discountLabel: true } },
-        schedule: { select: { batchName: true, days: true, startTime: true, endTime: true, startDate: true } },
+        schedule: { select: { group: true, session: true, days: true, startTime: true, endTime: true } },
       },
     });
     if (!application) {
@@ -125,7 +125,7 @@ function buildSummary(
     phone: string;
     status: string;
     course: { title: string; price: number; discountPrice: number | null; discountLabel: string | null } | null;
-    schedule: { batchName: string; days: string; startTime: string; endTime: string; startDate: Date } | null;
+    schedule: { group: string; session: string; days: string; startTime: string; endTime: string } | null;
   },
   payment: { amount: number; currency: string; status: string; merchantReference: string | null; chapaReference: string | null; method: string | null; paidAt: Date | null }
 ): Record<string, unknown> {
@@ -139,7 +139,7 @@ function buildSummary(
       registrationStatus: application.status,
       course: application.course?.title || null,
       schedule: application.schedule
-        ? `${application.schedule.batchName} — ${application.schedule.days}, ${application.schedule.startTime}–${application.schedule.endTime} (starts ${application.schedule.startDate.toISOString().slice(0, 10)})`
+        ? `SCHEDULE ${application.schedule.group}: ${application.schedule.session} (${application.schedule.days}, ${application.schedule.startTime}–${application.schedule.endTime})`
         : null,
       amount: payment.amount,
       currency: payment.currency,

@@ -9,7 +9,7 @@ const DEFAULTS = {
   badge: "How It Works",
   title: "Four simple steps to get started.",
   steps: [
-    { title: "Choose Your Course", text: "Browse our programs and pick the one that matches your goals — video editing, graphic design, or color grading." },
+    { title: "Choose Your Course", text: "Browse our programs and pick the one that matches your goals: video editing, graphic design, or color grading." },
     { title: "Submit Your Application", text: "Fill out the short application form with your details, experience level, and motivation. Takes less than two minutes." },
     { title: "Get Contacted", text: "Our team reviews your application and reaches out to discuss next steps, scheduling, and any questions you have." },
     { title: "Start Learning", text: "Jump into hands-on classes with real projects. Build your skills week by week and leave with a professional portfolio." },

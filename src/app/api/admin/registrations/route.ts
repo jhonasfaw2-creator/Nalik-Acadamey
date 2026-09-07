@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
         include: {
           course: { select: { id: true, title: true } },
           schedule: {
-            select: { id: true, batchName: true, days: true, startTime: true, endTime: true },
+            select: { id: true, group: true, session: true, days: true, startTime: true, endTime: true },
           },
           payment: {
             select: {

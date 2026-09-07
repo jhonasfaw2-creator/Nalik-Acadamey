@@ -32,33 +32,34 @@ model Course {
   description   String
   price         Int      @default(0)       // price in Birr
   discountPrice Int?                        // discounted price in Birr
-  discountLabel String?                     // e.g. "Opening Offer — 19% off"
+  discountLabel String?                     // e.g. "Opening Offer, 19% off"
   active        Boolean  @default(true)     // shown in registration form
   sortOrder     Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@index([active])
-  schedules    Schedule[]
   applications Application[]
 }
 
-// ── Schedules (class batches) ─────────────────────────
+// ── Schedules (shared schedule groups + sessions) ─────
+// Two fixed schedule groups (A and B) each with three sessions (Morning,
+// Afternoon, Evening). Sessions are shared across all courses: a student
+// books a seat in one session of one group for their chosen course.
 model Schedule {
   id          String   @id @default(cuid())
-  courseId     String
-  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  batchName   String   // e.g. "Morning Batch A", "Weekend Batch"
-  days        String   // e.g. "Mon, Wed, Fri" or "Sat, Sun"
-  startTime   String   // e.g. "09:00"
-  endTime     String   // e.g. "12:00"
-  startDate   DateTime
-  maxSeats    Int      @default(20)
+  group       String   // "A" or "B"
+  days        String   // "Monday, Wednesday, Friday" or "Tuesday, Thursday, Saturday"
+  session     String   // "Morning Session", "Afternoon Session", "Evening Session"
+  startTime   String   // e.g. "08:00"
+  endTime     String   // e.g. "10:00"
+  maxSeats    Int      @default(15)
   enrolled    Int      @default(0)
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@unique([group, session])
   @@index([active])
   applications Application[]
 }// ── Registrations (student applications) ──────────────

@@ -10,18 +10,6 @@ interface Course {
   price: number;
   discountPrice: number | null;
   discountLabel: string | null;
-  schedules: Schedule[];
-}
-
-interface Schedule {
-  id: string;
-  batchName: string;
-  days: string;
-  startTime: string;
-  endTime: string;
-  startDate: string;
-  maxSeats: number;
-  enrolled: number;
 }
 
 interface CoursesProps {
@@ -29,7 +17,7 @@ interface CoursesProps {
 }
 
 const PROGRAMME = {
-  title: "8-Month Professional Programme",
+  title: "2-Month Professional Programme",
   facts: [
     { label: "Duration", value: "3 days per week" },
     { label: "Session", value: "2 hours per day" },
@@ -37,7 +25,7 @@ const PROGRAMME = {
     { label: "Outcome", value: "Real-world editing projects" },
   ],
   description:
-    "The programme is built around hands-on projects and real production workflows. Students develop practical editing skills by working through actual editorial problems — pacing, sound selection, caption timing, colour, and finishing — rather than only watching tutorials.",
+    "The programme is built around hands-on projects and real production workflows. Students develop practical editing skills by working through actual editorial problems: pacing, sound selection, caption timing, colour, and finishing, rather than only watching tutorials.",
   opportunity:
     "Top-performing students may have opportunities to connect with creators, influencers, and production projects through the academy.",
 };
@@ -284,7 +272,7 @@ export default function Courses({ onApplyWithCourse }: CoursesProps) {
             Start your creative career with hands-on training.
           </h2>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-gray-600">
-            Fixed prices, practical training, and a schedule that fits your week. Every course is project-based — you leave
+            Fixed prices and practical training. Every course is project-based, and you leave
             with work you can show, not just a certificate.
           </p>
         </div>
@@ -314,8 +302,6 @@ export default function Courses({ onApplyWithCourse }: CoursesProps) {
         <div ref={gridRef} className="mt-10 grid gap-6 sm:grid-cols-3">
           {courses.map((course) => {
             const price = course.discountPrice ?? course.price;
-            const openSchedules = course.schedules.filter((s) => s.maxSeats - s.enrolled > 0);
-            const fullSchedules = course.schedules.filter((s) => s.maxSeats - s.enrolled <= 0);
 
             return (
               <article key={course.id} className="card-hover flex flex-col rounded-xl border border-gray-200 bg-white p-6 text-left">
@@ -351,29 +337,6 @@ export default function Courses({ onApplyWithCourse }: CoursesProps) {
                     );
                   })}
                 </ul>
-
-                <div className="mt-5 rounded-lg bg-warm-white p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Available Schedules
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {openSchedules.slice(0, 3).map((s) => (
-                      <span key={s.id} className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-1 text-xs font-medium text-navy">
-                        <Users size={10} className="text-gold" />
-                        {s.batchName}
-                        <span className="text-gray-400">({s.maxSeats - s.enrolled} left)</span>
-                      </span>
-                    ))}
-                    {fullSchedules.map((s) => (
-                      <span key={s.id} className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-500">
-                        {s.batchName} — Full
-                      </span>
-                    ))}
-                    {course.schedules.length === 0 && (
-                      <span className="text-xs text-gray-400">Schedules coming soon</span>
-                    )}
-                  </div>
-                </div>
 
                 <button
                   onClick={() => onApplyWithCourse(course.title)}

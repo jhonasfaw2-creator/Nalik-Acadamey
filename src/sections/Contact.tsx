@@ -111,7 +111,7 @@ export default function Contact({ onApplyClick }: ContactProps) {
               Let&apos;s create something <span className="text-gold">together</span>
             </h2>
             <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-white/50">
-              For course enquiries, business collaborations, or production work — reach out through any channel below.
+              For course enquiries, business collaborations, or production work, reach out through any channel below.
             </p>
           </div>
 

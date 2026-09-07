@@ -61,7 +61,7 @@ export default function SelectedWork() {
             Editing, by format.
           </h2>
           <p className="mt-4 hero-desc text-base leading-relaxed text-gray-600">
-            A curated split of long-form and short-form work — each project is a full cut, not a highlight
+            A curated split of long-form and short-form work. Each project is a full cut, not a highlight
             reel. Thumbnails only; the player loads on demand.
           </p>
         </div>
@@ -130,53 +130,43 @@ interface PortfolioProject {
   skills: string[];
   thumbnailUrl: string;
   videoUrl?: string;
+  youtubeId?: string;
   linkUrl: string;
 }
 
 const LONG_FORM_PROJECTS: PortfolioProject[] = [
   {
     id: "lf-1",
-    title: "The Edit That Held Attention",
+    title: "በ 17 አመቴ የራሴን ብራንድ መሰረትኩ 🤩 / Clothing Brand",
     platform: "YouTube",
     description:
-      "A documentary-style piece that uses pacing and sound design to keep viewers on the story rather than the spectacle.",
-    skills: ["Storytelling", "Pacing", "Sound Design", "Colour Grading", "Audience Retention"],
-    thumbnailUrl: "/assets/portfolio/lf-1.jpg",
-    videoUrl: "/assets/portfolio/lf-1.mp4",
-    linkUrl: "https://www.youtube.com/watch?v=EXAMPLE1",
+      "A founder-story vlog following a 17-year-old launching his own clothing brand: interview beats, b-roll, and music cuts timed to carry the story from first idea to first drop.",
+    skills: ["Storytelling", "Pacing", "Sound Design", "Colour Grading"],
+    thumbnailUrl: "https://i.ytimg.com/vi/sncn1ALnzW8/hqdefault.jpg",
+    youtubeId: "sncn1ALnzW8",
+    linkUrl: "https://youtu.be/sncn1ALnzW8",
   },
   {
     id: "lf-2",
-    title: "Cinematic Breakdown",
+    title: "48 Hours in Arba Minch 🐊",
     platform: "YouTube",
     description:
-      "A colour-graded breakdown reel that moves from flat footage to a filmic image without losing the subject.",
-    skills: ["Colour Grading", "Transitions", "Pacing", "Storytelling"],
-    thumbnailUrl: "/assets/portfolio/lf-2.jpg",
-    videoUrl: "/assets/portfolio/lf-2.mp4",
-    linkUrl: "https://www.youtube.com/watch?v=EXAMPLE2",
+      "A 48-hour travel vlog from Arba Minch, with fast location cuts, music-synced transitions, and pacing that turns raw trip footage into a story viewers finish to the end.",
+    skills: ["Storytelling", "Transitions", "Music Sync", "Pacing"],
+    thumbnailUrl: "https://i.ytimg.com/vi/5LEJMiHsOAs/hqdefault.jpg",
+    youtubeId: "5LEJMiHsOAs",
+    linkUrl: "https://youtu.be/5LEJMiHsOAs",
   },
   {
     id: "lf-3",
-    title: "Feature-Length Trailer Cut",
+    title: "ልብስ ሸመታ ከጀማው ጋር ft. Nahom Astu",
     platform: "YouTube",
     description:
-      "A trailer cut assembled from scratch: rhythm, music hits, and a climax built to retain viewers to the end.",
-    skills: ["Storytelling", "Pacing", "Transitions", "Hooks", "Audience Retention"],
-    thumbnailUrl: "/assets/portfolio/lf-3.jpg",
-    videoUrl: "/assets/portfolio/lf-3.mp4",
-    linkUrl: "https://www.youtube.com/watch?v=EXAMPLE3",
-  },
-  {
-    id: "lf-4",
-    title: "Brand Documentaries",
-    platform: "YouTube",
-    description:
-      "A longer-form brand piece that edits interview and b-roll into a coherent narrative rather than a montage.",
-    skills: ["Storytelling", "Captions", "Sound Design", "Pacing", "Colour Grading"],
-    thumbnailUrl: "/assets/portfolio/lf-4.jpg",
-    videoUrl: "/assets/portfolio/lf-4.mp4",
-    linkUrl: "https://www.youtube.com/watch?v=EXAMPLE4",
+      "A community give-back edit with Nahom Astu: multi-cam interview and street footage cut around the moment clothes change hands, with captions and sound design carrying the emotion.",
+    skills: ["Multi-cam", "Captions", "Sound Design", "Storytelling"],
+    thumbnailUrl: "https://i.ytimg.com/vi/OJpFNPgr06Q/hqdefault.jpg",
+    youtubeId: "OJpFNPgr06Q",
+    linkUrl: "https://youtu.be/OJpFNPgr06Q",
   },
 ];
 
@@ -186,7 +176,7 @@ const SHORT_FORM_PROJECTS: PortfolioProject[] = [
     title: "3-Second Hook Test",
     platform: "TikTok",
     description:
-      "A short-form edit where the first three seconds are the whole point — visual hit, text hook, and motion that keeps the thumb from scrolling.",
+      "A short-form edit where the first three seconds are the whole point: visual hit, text hook, and motion that keeps the thumb from scrolling.",
     skills: ["Hooks", "Captions", "Pacing", "Audience Retention"],
     thumbnailUrl: "/assets/portfolio/sf-1.jpg",
     videoUrl: "/assets/portfolio/sf-1.mp4",
@@ -197,7 +187,7 @@ const SHORT_FORM_PROJECTS: PortfolioProject[] = [
     title: "Caption-Led Edit",
     platform: "TikTok",
     description:
-      "A clip edited around on-screen captions — timing the text to speech beats instead of treating captions as an afterthought.",
+      "A clip edited around on-screen captions, timing the text to speech beats instead of treating captions as an afterthought.",
     skills: ["Captions", "Pacing", "Sound Design", "Hooks"],
     thumbnailUrl: "/assets/portfolio/sf-2.jpg",
     videoUrl: "/assets/portfolio/sf-2.mp4",
@@ -251,16 +241,26 @@ function ProjectCard({ project, index, total }: { project: PortfolioProject; ind
         style={{ transitionDelay: delay }}
       >
         <div className="relative aspect-video overflow-hidden bg-navy rounded-t-2xl">
-          <video
-            ref={videoRef}
-            src={project.videoUrl}
-            className="h-full w-full object-cover"
-            onLoadedData={handleLoadedData}
-            onEnded={handleVideoEnd}
-            playsInline
-            preload="auto"
-            aria-label={`${project.title} video player`}
-          />
+          {project.youtubeId ? (
+            <iframe
+              src={`https://www.youtube.com/embed/${project.youtubeId}?autoplay=1&rel=0`}
+              className="h-full w-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              title={`${project.title} video player`}
+            />
+          ) : (
+            <video
+              ref={videoRef}
+              src={project.videoUrl}
+              className="h-full w-full object-cover"
+              onLoadedData={handleLoadedData}
+              onEnded={handleVideoEnd}
+              playsInline
+              preload="auto"
+              aria-label={`${project.title} video player`}
+            />
+          )}
           <button
             onClick={() => setShowPlayer(false)}
             className="absolute right-3 top-3 inline-flex h-9 items-center gap-2 rounded-full border border-white/20 bg-navy/70 px-3 text-xs font-medium text-white backdrop-blur-sm transition hover:bg-navy/90 focus:outline-none"

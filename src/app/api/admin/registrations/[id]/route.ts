@@ -27,7 +27,7 @@ export async function PUT(
         data: { status },
         include: {
           course: { select: { title: true } },
-          schedule: { select: { id: true, batchName: true } },
+          schedule: { select: { id: true, group: true, session: true } },
           payment: { select: { id: true, amount: true, currency: true, status: true, merchantReference: true } },
         },
       });
@@ -56,7 +56,7 @@ export async function PUT(
           where: { id: application.id },
           include: {
             course: { select: { title: true } },
-            schedule: { select: { id: true, batchName: true } },
+            schedule: { select: { id: true, group: true, session: true } },
             payment: { select: { id: true, amount: true, currency: true, status: true, merchantReference: true } },
           },
         });

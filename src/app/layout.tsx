@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Nalik Academy",
   description:
-    "Professional media production training — filmmaking, video editing, and visual storytelling from industry experts.",
+    "Professional media production training: filmmaking, video editing, and visual storytelling from industry experts.",
   icons: {
     icon: "/assets/logo.jpeg",
   },

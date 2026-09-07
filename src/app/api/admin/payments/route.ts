@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
             scheduleId: true,
             status: true,
             course: { select: { title: true } },
-            schedule: { select: { batchName: true, days: true } },
+            schedule: { select: { group: true, session: true, days: true } },
           },
         },
       },

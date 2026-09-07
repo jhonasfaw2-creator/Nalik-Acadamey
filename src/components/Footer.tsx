@@ -45,7 +45,7 @@ export default function Footer({ onApplyClick }: FooterProps) {
 
           {/* Tagline */}
           <p className="mt-3 max-w-sm text-sm leading-relaxed text-white/40">
-            Ethiopia&apos;s creative production studio — training the next generation of editors and visual storytellers.
+            Ethiopia&apos;s creative production studio, training the next generation of editors and visual storytellers.
           </p>
 
           {/* Nav links */}
@@ -109,7 +109,7 @@ export default function Footer({ onApplyClick }: FooterProps) {
             &copy; {new Date().getFullYear()} Nalik Academy. All rights reserved.
           </p>
           <p className="text-xs text-white/25">
-            Production & Training Studio — Addis Ababa
+            Production & Training Studio, Addis Ababa
           </p>
         </div>
       </div>
