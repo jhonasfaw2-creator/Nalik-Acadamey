@@ -5,8 +5,57 @@ import { Play } from "lucide-react";
 
 const YOUTUBE_ICON =
   "M23.498 6.186a3.016 3.016 0 0 0-4.242-1.506A3.016 3.016 0 0 0 15.75 6.186a3.016 3.016 0 0 0-4.242 1.506 3.016 3.016 0 0 0 1.506 4.242 3.016 3.016 0 0 0 4.242 1.506 3.016 3.016 0 0 0 1.506-4.242 3.016 3.016 0 0 0-1.506-4.242zM9.75 14.25a2.25 2.25 0 0 0 0 4.5 2.25 2.25 0 0 0 0-4.5zM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z";
-const TIKTOK_ICON =
-  "M22.25 12c0-1.43-.88-2.75-2.19-3.37.46-1.33.2-2.82-.83-3.95s-2.53-1.34-3.88-.82c-1.45.5-3.09.83-4.7 1-.26 2.18.27 4.33 1.3 6.07-.47 1.42-1.31 2.78-2.37 3.93-.07.07-.15.13-.22.2-.21.19-.44.36-.68.49-.07.04-.15.07-.22.1-.41.14-.88.18-1.31.14-.37-.03-.74-.1-.98-.35-.25-.26-.4-.65-.4-1.09 0-.4.12-.79.36-1.14.06-.1.12-.21.16-.31.04-.1.06-.21.06-.32 0-1.43.88-2.75 2.19-3.37-.46-1.33-.2-2.82.83-3.95s2.53-1.34 3.88-.82c1.45.5 3.09.83 4.7 1 .26 2.18-.27 4.33-1.3 6.07.47 1.42 1.31 2.78 2.37 3.93.07.07.15.13.22.2.21.19.44.36.68.49.07.04.15.07.22.1.41.14.88.18 1.31.14.37-.03.74-.1.98-.35.25-.26.4-.65.4-1.09 0-.4-.12-.79-.36-1.14-.06-.1-.12-.21-.16-.31-.04-.1-.06-.21-.06-.32zM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z";
+
+const ARROW_ICON =
+  "M13.72 13.42a1.43 1.43 0 0 1-1.84 0l-5.8-5.8a1.43 1.43 0 0 1 0-2.04l5.8-5.8a1.43 1.43 0 0 1 2.04 2.04L7.08 8.72a1.43 1.43 0 0 1 0 2.04l5.8 5.8a1.43 1.43 0 0 1-1.84 1.84l-2.46-2.46a1.43 1.43 0 0 1 0-2.04l2.46-2.46a1.43 1.43 0 0 1 2.04 0l5.8 5.8a1.43 1.43 0 0 1 0 2.04l-5.8 5.8a1.43 1.43 0 0 1-1.84-1.84l2.46-2.46a1.43 1.43 0 0 1 0-2.04z";
+
+interface PortfolioProject {
+  id: string;
+  title: string;
+  platform: "YouTube" | "Reel";
+  description?: string;
+  skills?: string[];
+  thumbnailUrl: string;
+  videoUrl?: string;
+  youtubeId?: string;
+  linkUrl?: string;
+}
+
+const LONG_FORM_PROJECTS: PortfolioProject[] = [
+  {
+    id: "lf-1",
+    title: "በ 17 አመቴ የራሴን ብራንድ መሰረትኩ 🤩 / Clothing Brand",
+    platform: "YouTube",
+    description:
+      "A founder-story vlog following a 17-year-old launching his own clothing brand: interview beats, b-roll, and music cuts timed to carry the story from first idea to first drop.",
+    skills: ["Storytelling", "Pacing", "Sound Design", "Colour Grading"],
+    thumbnailUrl: "https://i.ytimg.com/vi/sncn1ALnzW8/hqdefault.jpg",
+    youtubeId: "sncn1ALnzW8",
+    linkUrl: "https://youtu.be/sncn1ALnzW8",
+  },
+  {
+    id: "lf-2",
+    title: "48 Hours in Arba Minch 🐊",
+    platform: "YouTube",
+    description:
+      "A 48-hour travel vlog from Arba Minch, with fast location cuts, music-synced transitions, and pacing that turns raw trip footage into a story viewers finish to the end.",
+    skills: ["Storytelling", "Transitions", "Music Sync", "Pacing"],
+    thumbnailUrl: "https://i.ytimg.com/vi/5LEJMiHsOAs/hqdefault.jpg",
+    youtubeId: "5LEJMiHsOAs",
+    linkUrl: "https://youtu.be/5LEJMiHsOAs",
+  },
+  {
+    id: "lf-3",
+    title: "ልብስ ሸመታ ከጀማው ጋር ft. Nahom Astu",
+    platform: "YouTube",
+    description:
+      "A community give-back edit with Nahom Astu: multi-cam interview and street footage cut around the moment clothes change hands, with captions and sound design carrying the emotion.",
+    skills: ["Multi-cam", "Captions", "Sound Design", "Storytelling"],
+    thumbnailUrl: "https://i.ytimg.com/vi/OJpFNPgr06Q/hqdefault.jpg",
+    youtubeId: "OJpFNPgr06Q",
+    linkUrl: "https://youtu.be/OJpFNPgr06Q",
+  },
+];
 
 export default function SelectedWork() {
   const sectionRef = useRef<HTMLDivElement>(null);
@@ -61,334 +110,285 @@ export default function SelectedWork() {
             Editing, by format.
           </h2>
           <p className="mt-4 hero-desc text-base leading-relaxed text-gray-600">
-            A curated split of long-form and short-form work. Each project is a full cut, not a highlight
+            A curated selection of long-form work. Each piece is a full cut, not a highlight
             reel. Thumbnails only; the player loads on demand.
           </p>
         </div>
 
-        {/* Long-form */}
+        {/* Featured: first cut leads, two more follow — an editorial 3-piece composition */}
         <div className="mt-12">
           <SectionLabel
             title="Long-form editing"
-            subtitle="YouTube · 3 to 12 minute cuts built around story, pacing, and retention."
+            subtitle="YouTube · Story, pacing, and retention."
             color="navy"
           />
-          <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
-            {LONG_FORM_PROJECTS.map((project, index) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                index={index}
-                total={LONG_FORM_PROJECTS.length}
-              />
-            ))}
+          <div className="mt-6 grid gap-6 lg:grid-cols-3">
+            <WorkCard
+              project={LONG_FORM_PROJECTS[0]}
+              index={0}
+              total={LONG_FORM_PROJECTS.length}
+              featured
+              className="lg:col-span-2"
+            />
+            <div className="flex flex-col gap-6">
+              {LONG_FORM_PROJECTS.slice(1).map((project, i) => (
+                <WorkCard
+                  key={project.id}
+                  project={project}
+                  index={i + 1}
+                  total={LONG_FORM_PROJECTS.length}
+                />
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Short-form */}
-        <div className="mt-14">
-          <SectionLabel
-            title="Short-form editing"
-            subtitle="TikTok · Under-60-second edits engineered for hooks, captions, and watch time."
-            color="gold"
-          />
-          <div className="mt-6 grid gap-6 sm:grid-cols-2">
-            {SHORT_FORM_PROJECTS.map((project, index) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                index={index}
-                total={SHORT_FORM_PROJECTS.length}
-              />
-            ))}
-          </div>
-        </div>
       </div>
     </section>
   );
 }
 
-function SectionLabel({ title, subtitle, color }: { title: string; subtitle: string; color: "navy" | "gold" }) {
+function SectionLabel({
+  title,
+  subtitle,
+  color,
+}: {
+  title: string;
+  subtitle: string;
+  color: "navy" | "gold";
+}) {
   return (
-    <div className="mb-2 flex items-center gap-3">
-      <span className="inline-flex h-1.5 w-16 overflow-hidden rounded-full">
-        <span
-          className="h-full w-full"
-          style={color === "navy" ? { backgroundColor: "var(--color-navy)" } : { backgroundColor: "var(--color-gold)" }}
-        />
-      </span>
-      <h3 className="text-xl font-semibold tracking-tight text-navy">{title}</h3>
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-3">
+        <span className="inline-flex h-1.5 w-16 overflow-hidden rounded-full">
+          <span
+            className="h-full w-full"
+            style={
+              color === "navy"
+                ? { backgroundColor: "var(--color-navy)" }
+                : { backgroundColor: "var(--color-gold)" }
+            }
+          />
+        </span>
+        <h3 className="text-xl font-semibold tracking-tight text-navy sm:text-2xl">{title}</h3>
+      </div>
+      {subtitle && <p className="text-sm text-gray-500 sm:text-right">{subtitle}</p>}
     </div>
   );
 }
 
-interface PortfolioProject {
-  id: string;
-  title: string;
-  platform: "YouTube" | "TikTok";
-  description: string;
-  skills: string[];
-  thumbnailUrl: string;
-  videoUrl?: string;
-  youtubeId?: string;
-  linkUrl: string;
-}
-
-const LONG_FORM_PROJECTS: PortfolioProject[] = [
-  {
-    id: "lf-1",
-    title: "በ 17 አመቴ የራሴን ብራንድ መሰረትኩ 🤩 / Clothing Brand",
-    platform: "YouTube",
-    description:
-      "A founder-story vlog following a 17-year-old launching his own clothing brand: interview beats, b-roll, and music cuts timed to carry the story from first idea to first drop.",
-    skills: ["Storytelling", "Pacing", "Sound Design", "Colour Grading"],
-    thumbnailUrl: "https://i.ytimg.com/vi/sncn1ALnzW8/hqdefault.jpg",
-    youtubeId: "sncn1ALnzW8",
-    linkUrl: "https://youtu.be/sncn1ALnzW8",
-  },
-  {
-    id: "lf-2",
-    title: "48 Hours in Arba Minch 🐊",
-    platform: "YouTube",
-    description:
-      "A 48-hour travel vlog from Arba Minch, with fast location cuts, music-synced transitions, and pacing that turns raw trip footage into a story viewers finish to the end.",
-    skills: ["Storytelling", "Transitions", "Music Sync", "Pacing"],
-    thumbnailUrl: "https://i.ytimg.com/vi/5LEJMiHsOAs/hqdefault.jpg",
-    youtubeId: "5LEJMiHsOAs",
-    linkUrl: "https://youtu.be/5LEJMiHsOAs",
-  },
-  {
-    id: "lf-3",
-    title: "ልብስ ሸመታ ከጀማው ጋር ft. Nahom Astu",
-    platform: "YouTube",
-    description:
-      "A community give-back edit with Nahom Astu: multi-cam interview and street footage cut around the moment clothes change hands, with captions and sound design carrying the emotion.",
-    skills: ["Multi-cam", "Captions", "Sound Design", "Storytelling"],
-    thumbnailUrl: "https://i.ytimg.com/vi/OJpFNPgr06Q/hqdefault.jpg",
-    youtubeId: "OJpFNPgr06Q",
-    linkUrl: "https://youtu.be/OJpFNPgr06Q",
-  },
-];
-
-const SHORT_FORM_PROJECTS: PortfolioProject[] = [
-  {
-    id: "sf-1",
-    title: "3-Second Hook Test",
-    platform: "TikTok",
-    description:
-      "A short-form edit where the first three seconds are the whole point: visual hit, text hook, and motion that keeps the thumb from scrolling.",
-    skills: ["Hooks", "Captions", "Pacing", "Audience Retention"],
-    thumbnailUrl: "/assets/portfolio/sf-1.jpg",
-    videoUrl: "/assets/portfolio/sf-1.mp4",
-    linkUrl: "https://www.tiktok.com/@handle/video/EXAMPLE1",
-  },
-  {
-    id: "sf-2",
-    title: "Caption-Led Edit",
-    platform: "TikTok",
-    description:
-      "A clip edited around on-screen captions, timing the text to speech beats instead of treating captions as an afterthought.",
-    skills: ["Captions", "Pacing", "Sound Design", "Hooks"],
-    thumbnailUrl: "/assets/portfolio/sf-2.jpg",
-    videoUrl: "/assets/portfolio/sf-2.mp4",
-    linkUrl: "https://www.tiktok.com/@handle/video/EXAMPLE2",
-  },
-];
-
-function ProjectCard({ project, index, total }: { project: PortfolioProject; index: number; total: number }) {
-  const [mounted, setMounted] = useState(false);
+function WorkCard({
+  project,
+  index,
+  total,
+  featured = false,
+  className = "",
+}: {
+  project: PortfolioProject;
+  index: number;
+  total: number;
+  featured?: boolean;
+  className?: string;
+}) {
   const [showPlayer, setShowPlayer] = useState(false);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const handlePlayClick = () => {
-    setShowPlayer(true);
-  };
-
-  const handleLoadedData = () => {
-    videoRef.current?.play().catch(() => {});
-  };
-
-  const handleVideoEnd = () => {
-    setShowPlayer(false);
-  };
-
-  const skillTags = project.skills.slice(0, 4);
-
-  const delay = `${(index % total) * 0.07}s`;
-
-  if (!mounted) {
-    return (
-      <article
-        className="group relative overflow-hidden rounded-2xl bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
-        style={{ transitionDelay: delay }}
-      >
-        <ProjectThumbnail project={project} onPlayClick={handlePlayClick} />
-        <div className="px-6 pb-6 pt-5">
-          <ProjectMeta project={project} skillTags={skillTags} showLink />
-        </div>
-      </article>
-    );
-  }
-
-  if (showPlayer) {
-    return (
-      <article
-        className="group relative overflow-hidden rounded-2xl bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
-        style={{ transitionDelay: delay }}
-      >
-        <div className="relative aspect-video overflow-hidden bg-navy rounded-t-2xl">
-          {project.youtubeId ? (
-            <iframe
-              src={`https://www.youtube.com/embed/${project.youtubeId}?autoplay=1&rel=0`}
-              className="h-full w-full"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              title={`${project.title} video player`}
-            />
-          ) : (
-            <video
-              ref={videoRef}
-              src={project.videoUrl}
-              className="h-full w-full object-cover"
-              onLoadedData={handleLoadedData}
-              onEnded={handleVideoEnd}
-              playsInline
-              preload="auto"
-              aria-label={`${project.title} video player`}
-            />
-          )}
-          <button
-            onClick={() => setShowPlayer(false)}
-            className="absolute right-3 top-3 inline-flex h-9 items-center gap-2 rounded-full border border-white/20 bg-navy/70 px-3 text-xs font-medium text-white backdrop-blur-sm transition hover:bg-navy/90 focus:outline-none"
-            aria-label="Close video"
-          >
-            Close
-          </button>
-        </div>
-        <div className="px-6 pb-6 pt-5">
-          <ProjectMeta project={project} skillTags={skillTags} showLink />
-        </div>
-      </article>
-    );
-  }
+  const delay = `${(index % total) * 0.08}s`;
 
   return (
     <article
-      className="group relative overflow-hidden rounded-2xl bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+      className={`group reveal-child relative flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${className}`}
       style={{ transitionDelay: delay }}
     >
-      <ProjectThumbnail project={project} onPlayClick={handlePlayClick} />
-      <div className="px-6 pb-6 pt-5">
-        <ProjectMeta project={project} skillTags={skillTags} showLink />
+      <div className="relative aspect-video overflow-hidden bg-navy">
+        {showPlayer ? (
+          <VideoPlayer project={project} onClose={() => setShowPlayer(false)} />
+        ) : (
+          <VideoThumb
+            project={project}
+            onPlay={() => setShowPlayer(true)}
+            featured={featured}
+          />
+        )}
       </div>
+      <WorkMeta project={project} index={index} total={total} featured={featured} />
     </article>
   );
 }
 
-function ProjectThumbnail({ project, onPlayClick }: { project: PortfolioProject; onPlayClick: () => void }) {
+function VideoThumb({
+  project,
+  onPlay,
+  featured,
+}: {
+  project: PortfolioProject;
+  onPlay: () => void;
+  featured: boolean;
+}) {
   const isYouTube = project.platform === "YouTube";
-  const platformColor = isYouTube ? "bg-red-600" : "bg-green-700";
+  const playSize = featured ? "h-14 w-14" : "h-12 w-12";
+  const iconSize = featured ? 22 : 18;
 
   return (
-    <div className="relative aspect-video overflow-hidden bg-navy rounded-t-2xl">
+    <>
       <img
         src={project.thumbnailUrl}
         alt={`${project.title} thumbnail`}
-        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+        className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
         loading="lazy"
         decoding="async"
       />
 
-      {/* Subtle center affordance, not a huge button */}
+      {/* Quiet center affordance, not a huge button */}
       <div className="absolute inset-0 flex items-center justify-center bg-navy/20 transition-colors duration-300 group-hover:bg-navy/30">
         <button
-          onClick={onPlayClick}
-          className="pointer-events-auto flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-white/95 text-navy shadow-lg transition-transform duration-300 group-hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+          onClick={onPlay}
+          className={`pointer-events-auto flex cursor-pointer items-center justify-center rounded-full bg-white/95 text-navy shadow-lg ring-1 ring-white/40 backdrop-blur-sm transition-all duration-300 group-hover:scale-110 group-hover:ring-gold/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold ${playSize}`}
           aria-label={`Play ${project.title}`}
         >
-          <Play size={20} className="ml-0.5 fill-navy" />
+          <Play size={iconSize} className="ml-0.5 fill-navy" />
         </button>
       </div>
 
       {/* Platform pill */}
       <div className="absolute left-4 top-4 flex items-center gap-1.5 rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-navy shadow-sm backdrop-blur-sm">
-        <span className={`inline-flex h-2 w-2 rounded-full ${platformColor}`} aria-hidden="true" />
-        <svg
-          className="shrink-0 h-[11px] w-[11px] text-navy"
+        <span
+          className={`inline-flex h-2 w-2 rounded-full ${isYouTube ? "bg-red-600" : "bg-gold"}`}
           aria-hidden="true"
-          focusable="false"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-        >
-          <path d={isYouTube ? YOUTUBE_ICON : TIKTOK_ICON} />
-        </svg>
-        <span className="ml-1 text-[11px] tracking-wide uppercase">{project.platform}</span>
+        />
+        {isYouTube && (
+          <svg
+            className="h-[11px] w-[11px] shrink-0 text-navy"
+            aria-hidden="true"
+            focusable="false"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+          >
+            <path d={YOUTUBE_ICON} />
+          </svg>
+        )}
+        <span className="text-[11px] uppercase tracking-wide">{project.platform}</span>
       </div>
+    </>
+  );
+}
 
-      {/* Quick skill chips along the bottom */}
-      <div className="absolute bottom-0 left-0 right-0 overflow-hidden bg-gradient-to-t from-navy/80 via-navy/20 to-transparent p-3">
-        <div className="flex flex-wrap gap-1.5">
-          {project.skills.slice(0, 3).map((skill) => (
+function VideoPlayer({
+  project,
+  onClose,
+}: {
+  project: PortfolioProject;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      {project.youtubeId ? (
+        <iframe
+          src={`https://www.youtube.com/embed/${project.youtubeId}?autoplay=1&rel=0`}
+          className="absolute inset-0 h-full w-full"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          title={`${project.title} video player`}
+        />
+      ) : (
+        <video
+          src={project.videoUrl}
+          className="absolute inset-0 h-full w-full object-cover"
+          autoPlay
+          playsInline
+          onEnded={onClose}
+          aria-label={`${project.title} video player`}
+        />
+      )}
+      <button
+        onClick={onClose}
+        className="absolute right-3 top-3 inline-flex h-9 items-center gap-2 rounded-full border border-white/20 bg-navy/70 px-3 text-xs font-medium text-white backdrop-blur-sm transition hover:bg-navy/90 focus:outline-none"
+        aria-label="Close video"
+      >
+        Close
+      </button>
+    </>
+  );
+}
+
+function WorkMeta({
+  project,
+  index,
+  total,
+  featured,
+}: {
+  project: PortfolioProject;
+  index: number;
+  total: number;
+  featured: boolean;
+}) {
+  if (featured) {
+    return (
+      <div className="flex flex-1 flex-col px-6 pb-6 pt-5 sm:px-7 sm:pb-7 sm:pt-6">
+        <div className="flex items-baseline justify-between gap-3">
+          <h4 className="text-xl font-bold leading-snug text-navy sm:text-2xl">
+            {project.title}
+          </h4>
+          <span className="shrink-0 text-xs font-medium tracking-wide text-gray-400 tabular-nums">
+            {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
+          </span>
+        </div>
+
+        <p className="mt-2.5 text-sm leading-relaxed text-gray-600 sm:text-[15px]">
+          {project.description}
+        </p>
+
+        <div className="mt-4 flex flex-wrap gap-1.5">
+          {(project.skills ?? []).slice(0, 4).map((skill) => (
             <span
               key={skill}
-              className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium text-white/90 backdrop-blur-sm"
+              className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700"
             >
               {skill}
             </span>
           ))}
         </div>
+
+        <div className="mt-auto pt-5">
+          <ProjectLink project={project} />
+        </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 flex-col px-5 pb-5 pt-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <h4 className="text-base font-semibold leading-snug text-navy">{project.title}</h4>
+        <span className="shrink-0 text-[11px] font-medium tracking-wide text-gray-400 tabular-nums">
+          {String(index + 1).padStart(2, "0")}
+        </span>
+      </div>
+      {project.description && (
+        <p className="mt-1.5 text-[13px] leading-relaxed text-gray-600 line-clamp-2">
+          {project.description}
+        </p>
+      )}
+      {project.linkUrl && (
+        <div className="mt-auto pt-3">
+          <ProjectLink project={project} />
+        </div>
+      )}
     </div>
   );
 }
 
-interface ProjectMetaProps {
-  project: PortfolioProject;
-  skillTags: string[];
-  showLink: boolean;
-}
-
-function ProjectMeta({ project, skillTags, showLink }: ProjectMetaProps) {
+function ProjectLink({ project }: { project: PortfolioProject }) {
+  if (!project.linkUrl) return null;
   return (
-    <div className="space-y-2.5">
-      <div className="flex items-start justify-between gap-3">
-        <h4 className="text-lg font-semibold leading-snug text-navy">{project.title}</h4>
-      </div>
-      <p className="text-sm leading-relaxed text-gray-600">{project.description}</p>
-
-      <div className="flex flex-wrap gap-1.5">
-        {skillTags.map((skill) => (
-          <span
-            key={skill}
-            className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700"
-          >
-            {skill}
-          </span>
-        ))}
-        {project.skills.length > 4 && (
-          <span className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-500">
-            +{project.skills.length - 4}
-          </span>
-        )}
-      </div>
-
-      {showLink && (
-        <a
-          href={project.linkUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-gold transition-colors hover:text-gold-hover"
-        >
-          View on {project.platform}
-          <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M13.72 13.42a1.43 1.43 0 0 1-1.84 0l-5.8-5.8a1.43 1.43 0 0 1 0-2.04l5.8-5.8a1.43 1.43 0 0 1 2.04 2.04L7.08 8.72a1.43 1.43 0 0 1 0 2.04l5.8 5.8a1.43 1.43 0 0 1-1.84 1.84l-2.46-2.46a1.43 1.43 0 0 1 0-2.04l2.46-2.46a1.43 1.43 0 0 1 2.04 0l5.8 5.8a1.43 1.43 0 0 1 0 2.04l-5.8 5.8a1.43 1.43 0 0 1-1.84-1.84l2.46-2.46a1.43 1.43 0 0 1 0-2.04z" />
-          </svg>
-        </a>
-      )}
-    </div>
+    <a
+      href={project.linkUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 text-sm font-medium text-gold transition-colors hover:text-gold-hover"
+    >
+      {project.platform === "YouTube" ? "Watch on YouTube" : "Watch video"}
+      <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path d={ARROW_ICON} />
+      </svg>
+    </a>
   );
 }

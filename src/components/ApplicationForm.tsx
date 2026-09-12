@@ -36,10 +36,8 @@ interface ApplicationFormProps {
 }
 
 interface VerifyResponse {
-  status: string; // PENDING / SUCCESS / FAILED / CANCELLED / INCOMPLETE / BLOCKED / AUTH_NEEDED
+  status: string; // PENDING / SUCCESS / FAILED / CANCELLED / INCOMPLETE
   error?: string;
-  /** true when Chapa no longer recognizes the stored checkout (expired/invalid) */
-  sessionExpired?: boolean;
   registration?: {
     referenceId: string;
     fullName: string;
@@ -49,86 +47,136 @@ interface VerifyResponse {
     currency: string;
     paymentStatus: string;
     paymentMethod: string | null;
-    merchantReference: string | null;
+    txRef: string | null;
     chapaReference: string | null;
     registrationStatus: string;
   };
 }
 
-const PENDING_KEY = "nalik_pending_payment";
+interface CheckoutConfig {
+  publicKey: string;
+  amount: number;
+  currency: string;
+  txRef: string;
+  mobile: string;
+}
+
+type View = "form" | "checkout" | "result";
+type ResultKind = "success" | "failed" | "cancelled" | "incomplete";
+
+const INLINE_SCRIPT = "https://js.chapa.co/v1/inline.js";
+
+function loadChapaScript(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (window.ChapaCheckout) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${INLINE_SCRIPT}"]`);
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("error", () => reject(new Error("Failed to load Chapa checkout")));
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = INLINE_SCRIPT;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load Chapa checkout"));
+    document.head.appendChild(script);
+  });
+}
 
 function formatBirr(amount: number) {
   return amount.toLocaleString("en-ET") + " Birr";
 }
 
+function getCheckoutBaseUrl(): string | undefined {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
+  if (configured) {
+    try {
+      const parsed = new URL(configured);
+      if (parsed.protocol === "https:" && !/^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/.test(parsed.hostname)) {
+        return parsed.origin;
+      }
+    } catch {
+      // Fall through to the live origin if the configured URL is invalid.
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    const origin = window.location.origin.replace(/\/$/, "");
+    const host = new URL(origin).hostname;
+    if (origin.startsWith("https://") && !/^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/.test(host)) {
+      return origin;
+    }
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    return "http://localhost:3001";
+  }
+
+  return undefined;
+}
+
+function isPublicCallbackUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return false;
+    return !/^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/.test(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** Session length in hours/minutes, e.g. "2 hours" or "1h 30m". */
+function computeDuration(startTime?: string, endTime?: string): string {
+  if (!startTime || !endTime) return "";
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  if ([sh, sm, eh, em].some((n) => Number.isNaN(n))) return "";
+  const minutes = eh * 60 + em - (sh * 60 + sm);
+  if (minutes <= 0) return "";
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (!hours) return `${mins} min`;
+  return mins ? `${hours}h ${mins}m` : `${hours} hour${hours === 1 ? "" : "s"}`;
+}
+
 export default function ApplicationForm({ open, onClose, preselectedCourse }: ApplicationFormProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  // Guards the automatic "open a fresh checkout" recovery so it fires once per
-  // registration (not on every re-render while the payment is pending).
-  const autoStartRef = useRef<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [serverError, setServerError] = useState("");
 
+  // Course & schedule data
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [scheduleGroups, setScheduleGroups] = useState<ScheduleGroup[]>([]);
   const [coursesLoaded, setCoursesLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
-  // Wizard state
-  const [step, setStep] = useState<"course" | "schedule" | "info" | "summary" | "processing" | "result">("course");
+  // Selections
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [selectedGroupId, setSelectedGroupId] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState("");
-  const [stepErrors, setStepErrors] = useState<string>("");
 
-  // Student info
+  // Student information (uncontrolled inputs)
   const fullNameRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const ageRef = useRef<HTMLInputElement>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState("");
 
-  // Payment / result state
+  // Payment flow
+  const [view, setView] = useState<View>("form");
+  const [submitting, setSubmitting] = useState(false);
   const [referenceId, setReferenceId] = useState("");
   const [amount, setAmount] = useState(0);
-  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
-  const [iframeLoaded, setIframeLoaded] = useState(false);
-  const [paying, setPaying] = useState(false);
+  const [checkout, setCheckout] = useState<CheckoutConfig | null>(null);
   const [payError, setPayError] = useState("");
-  const [expiredNotice, setExpiredNotice] = useState("");
-  const [result, setResult] = useState<VerifyResponse | null>(null);
-  const [pollingStopped, setPollingStopped] = useState(false);
-  const [forceOpen, setForceOpen] = useState(false);
-  const [pendingSummary, setPendingSummary] = useState<{ courseTitle: string; scheduleText: string } | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [result, setResult] = useState<{ kind: ResultKind; message?: string; data?: VerifyResponse } | null>(null);
 
-  const isOpen = open || forceOpen;
-
-  // Resume a pending payment after returning from Chapa (page reload).
+  // ── Load courses + schedules ──────────────────────────────
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(PENDING_KEY);
-      if (!raw) return;
-      const pending = JSON.parse(raw) as { referenceId: string; amount: number; courseTitle?: string; scheduleText?: string };
-      if (pending?.referenceId) {
-        setReferenceId(pending.referenceId);
-        setAmount(pending.amount || 0);
-        setPendingSummary({
-          courseTitle: pending.courseTitle || "",
-          scheduleText: pending.scheduleText || "",
-        });
-        setForceOpen(true);
-        setStep("processing");
-      }
-    } catch {
-      // ignore malformed storage
-    }
-  }, []);
-
-  // Fetch courses + schedules (independently — a schedules failure must never
-  // make courses look unavailable, and vice versa)
-  useEffect(() => {
-    if (!isOpen) return;
+    if (!open) return;
     let cancelled = false;
     setLoadError("");
     setCoursesLoaded(false);
@@ -145,13 +193,11 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
             discountPrice: c.discountPrice,
             discountLabel: c.discountLabel,
           })));
-          // Preselect a course when opened with one
           const wanted = preselectedCourse;
           if (wanted) {
             const match = courseData.find((c: CourseOption) => c.title === wanted);
-            if (match) setSelectedCourseId(match.id);
+            if (match) setSelectedCourseId((current) => current || match.id);
           }
-          setLoadError("");
         } else {
           setLoadError("We couldn't load the courses right now.");
         }
@@ -174,93 +220,136 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
       });
 
     return () => { cancelled = true; };
-  }, [isOpen, preselectedCourse, reloadKey]);
+  }, [open, preselectedCourse, reloadKey]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (isOpen) dialog.showModal();
+    if (open) dialog.showModal();
     else dialog.close();
-  }, [isOpen]);
+  }, [open]);
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    // Any close (X button, Escape key, programmatic close) must fully reset
-    // the wizard. Before, only the X button reset state — closing with Escape
-    // left the previous attempt's order summary (and referenceId) behind, so
-    // reopening the form showed a stale summary instead of step 1.
-    const handleClose = () => {
-      if (step === "result" && result?.status === "SUCCESS") sessionStorage.removeItem(PENDING_KEY);
-      resetForm();
-      onClose();
-      setForceOpen(false);
-    };
-    dialog.addEventListener("close", handleClose);
-    return () => dialog.removeEventListener("close", handleClose);
-    // re-register so the handler reads current step/result (e.g. to clear a
-    // finished payment from sessionStorage); resetForm itself is stable in
-    // behavior across renders (it only touches refs + stable setters).
-  }, [onClose, step, result]);
-
-  useEffect(() => {
-    document.body.style.overflow = isOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
-  }, [isOpen]);
-
-  const selectedGroup = scheduleGroups.find((g) => g.group === selectedGroupId) as ScheduleGroup | undefined;
-  const selectedSession = selectedGroup?.sessions.find((s) => s.id === selectedSessionId);
-  const selectedCourse = courses.find((c) => c.id === selectedCourseId);
-
-  const resetForm = () => {
-    setStep("course");
-    setStepErrors("");
+  // The wizard is kept in memory across close/reopen so a student who steps
+  // away returns to exactly where they were. It is only reset once a payment
+  // has been confirmed.
+  const resetForm = useCallback(() => {
+    setView("form");
     setSelectedCourseId("");
     setSelectedGroupId("");
     setSelectedSessionId("");
     setReferenceId("");
     setAmount(0);
-    setCheckoutUrl(null);
-    setIframeLoaded(false);
-    setPaying(false);
+    setCheckout(null);
     setPayError("");
-    setExpiredNotice("");
+    setVerifying(false);
     setResult(null);
-    setPollingStopped(false);
-    setPendingSummary(null);
     setErrors({});
-    setServerError("");
+    setFormError("");
     if (fullNameRef.current) fullNameRef.current.value = "";
     if (emailRef.current) emailRef.current.value = "";
     if (phoneRef.current) phoneRef.current.value = "";
     if (ageRef.current) ageRef.current.value = "";
-    autoStartRef.current = null;
-  };
+  }, []);
 
-  // If the student lands back on the payment step without a live checkout URL
-  // (page reload while paying, or resuming an "already registered" payment),
-  // mint a fresh Chapa session automatically so the embedded payment window
-  // opens again without them hunting for a button.
   useEffect(() => {
-    if (step !== "processing" || !referenceId || checkoutUrl || paying) return;
-    if (autoStartRef.current === referenceId) return; // already attempted
-    autoStartRef.current = referenceId;
-    startPayment();
-  }, [step, referenceId, checkoutUrl, paying]);
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const onDialogClose = () => {
+      if (result?.kind === "success") resetForm();
+      onClose();
+    };
+    dialog.addEventListener("close", onDialogClose);
+    return () => dialog.removeEventListener("close", onDialogClose);
+  }, [onClose, result, resetForm]);
 
-  const handleClose = () => {
-    // Keep pending state if the student hasn't finished paying, so returning
-    // from Chapa (or a later visit) resumes verification automatically.
-    if (step === "result" && result?.status === "SUCCESS") sessionStorage.removeItem(PENDING_KEY);
-    resetForm();
-    onClose();
-    setForceOpen(false);
-    dialogRef.current?.close();
-  };
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
 
-  const goTo = (next: typeof step) => { setStepErrors(""); setPayError(""); setStep(next); };
+  const selectedGroup = scheduleGroups.find((g) => g.group === selectedGroupId) as ScheduleGroup | undefined;
+  const selectedSession = selectedGroup?.sessions.find((s) => s.id === selectedSessionId);
+  const selectedCourse = courses.find((c) => c.id === selectedCourseId);
+  const price = amount || (selectedCourse ? selectedCourse.discountPrice ?? selectedCourse.price : 0);
+  const duration = computeDuration(selectedSession?.startTime, selectedSession?.endTime);
+  const scheduleText =
+    selectedGroup && selectedSession
+      ? `Schedule ${selectedGroup.group}: ${selectedSession.session}`
+      : "";
+  const scheduleDays = selectedGroup?.days || "";
 
-  // ── Registration ──────────────────────────────────────────
+  const checkStatus = useCallback(async (ref: string): Promise<VerifyResponse | null> => {
+    try {
+      const res = await fetch(`/api/payments/verify?referenceId=${encodeURIComponent(ref)}`, { cache: "no-store" });
+      return await res.json();
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const classify = (status: string): ResultKind =>
+    status === "SUCCESS" ? "success" : status === "CANCELLED" ? "cancelled" : status === "FAILED" ? "failed" : "incomplete";
+
+  // ── Server-side verification (the only source of "success") ─
+  const verify = useCallback(async (ref?: string) => {
+    const id = ref || referenceId;
+    if (!id) return;
+    setVerifying(true);
+    const data = await checkStatus(id);
+    if (!data) {
+      setVerifying(false);
+      setPayError("Could not reach the payment service. Please try again.");
+      return;
+    }
+    if (data.status === "SUCCESS") {
+      setResult({ kind: "success", data });
+      setView("result");
+      return;
+    }
+    if (["FAILED", "CANCELLED", "INCOMPLETE"].includes(data.status)) {
+      setResult({ kind: classify(data.status), data });
+      setView("result");
+      return;
+    }
+    // Still pending — keep waiting in the checkout view.
+    setVerifying(false);
+  }, [referenceId, checkStatus]);
+
+  // ── Start / restart the Chapa Inline checkout ─────────────
+  const openCheckout = useCallback(async (ref: string, rotate: boolean) => {
+    setPayError("");
+    setResult(null);
+    setVerifying(false);
+    setView("checkout");
+    try {
+      const res = await fetch("/api/payments/chapa/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ referenceId: ref, rotate }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.alreadyPaid) {
+        await verify(ref);
+        return;
+      }
+      if (res.ok && data.publicKey && data.txRef) {
+        setCheckout({
+          publicKey: data.publicKey,
+          amount: Number(data.amount) || (selectedCourse ? selectedCourse.discountPrice ?? selectedCourse.price : 0),
+          currency: data.currency || "ETB",
+          txRef: data.txRef,
+          mobile: data.mobile || "",
+        });
+        return;
+      }
+      setPayError(data.error || "Unable to start payment. Please try again.");
+    } catch {
+      setPayError("Network error. Please check your connection and try again.");
+    }
+  }, [verify, selectedCourse]);
+
+  // ── PAY NOW: validate → create (or reuse) registration → checkout ─
   const validateInfo = (): Record<string, string> => {
     const e: Record<string, string> = {};
     const name = fullNameRef.current?.value?.trim() || "";
@@ -274,589 +363,468 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     return e;
   };
 
-  const submitRegistration = async () => {
-    setStepErrors("");
-    setServerError("");
+  const payNow = async () => {
+    setFormError("");
     const validationErrors = validateInfo();
     setErrors(validationErrors);
-    if (Object.keys(validationErrors).length > 0) return;
-
-    if (!selectedCourse) { setStepErrors("Please select a course."); return; }
-    if (!selectedSessionId) { setStepErrors("Please choose a schedule group and session."); return; }
+    if (Object.keys(validationErrors).length > 0) {
+      setFormError("Please complete your information before paying.");
+      return;
+    }
+    if (!selectedCourseId) { setFormError("Please choose a course."); return; }
+    if (!selectedGroupId || !selectedSessionId) { setFormError("Please choose a schedule group and session."); return; }
 
     setSubmitting(true);
     try {
-      const res = await fetch("/api/registrations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fullName: fullNameRef.current?.value?.trim(),
-          email: emailRef.current?.value?.trim(),
-          phone: phoneRef.current?.value?.trim(),
-          age: Number(ageRef.current?.value?.trim()),
-          courseId: selectedCourseId,
-          scheduleId: selectedSessionId,
-        }),
-      });
-      const data = await res.json();
+      let ref = referenceId;
+      let createdNow = false;
 
-      if (res.ok && data.success) {
-        const group = selectedGroup;
-        const session = selectedSession;
-        setReferenceId(data.referenceId);
-        setAmount(data.amount || 0);
-        setPendingSummary({
-          courseTitle: selectedCourse.title,
-          scheduleText:
-            group && session
-              ? `SCHEDULE ${group.group}: ${session.session} (${group.days}, ${session.startTime}–${session.endTime})`
-              : "To be confirmed",
+      // Create the registration once. If it already exists (unique email +
+      // course), reuse it — never create a duplicate.
+      if (!ref) {
+        const res = await fetch("/api/registrations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fullName: fullNameRef.current?.value?.trim(),
+            email: emailRef.current?.value?.trim(),
+            phone: phoneRef.current?.value?.trim(),
+            age: Number(ageRef.current?.value?.trim()),
+            courseId: selectedCourseId,
+            scheduleId: selectedSessionId,
+          }),
         });
-        setStep("summary");
-      } else if (res.status === 409) {
-        setServerError(data.error || "Already registered for this course.");
-        if (data.referenceId) {
-          setReferenceId(data.referenceId);
-          setStep("processing");
+        const data = await res.json();
+        if (res.ok && data.success) {
+          ref = data.referenceId;
+          setReferenceId(ref);
+          setAmount(data.amount || price);
+          createdNow = true;
+        } else if (res.status === 409 && data.referenceId) {
+          ref = data.referenceId;
+          setReferenceId(ref);
+          setAmount(price);
+        } else {
+          setFormError(data.error || "Something went wrong. Please try again.");
+          return;
         }
-      } else {
-        setServerError(data.error || "Something went wrong. Please try again.");
       }
+
+      // Reuse the tx_ref minted at registration only on this first attempt.
+      await openCheckout(ref, !createdNow);
     } catch {
-      setServerError("Network error. Please check your connection and try again.");
+      setFormError("Network error. Please check your connection and try again.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  // ── Chapa payment ─────────────────────────────────────────
-  const startPayment = async (opts?: { expired?: boolean }) => {
-    if (!referenceId) return;
-    // When this call is the recovery from an expired checkout, keep an
-    // explanatory note visible above the fresh payment window.
-    if (opts?.expired) {
-      setExpiredNotice("Your previous payment link expired before you finished, so we opened a fresh one below; the old link was never charged.");
-    } else {
-      setExpiredNotice("");
-    }
-    setPayError("");
-    setPaying(true);
-
-    try {
-      const res = await fetch("/api/payments/chapa/init", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ referenceId }),
-      });
-      const data = await res.json();
-
-      // Already paid (e.g. a webhook confirmed it while the student was on
-      // this step) — jump to processing; the verifier resolves it to SUCCESS
-      // and shows the result immediately.
-      if (res.ok && data.alreadyPaid) {
-        setStep("processing");
-        return;
-      }
-
-      if (res.ok && data.checkoutUrl) {
-        sessionStorage.setItem(PENDING_KEY, JSON.stringify({
-          referenceId,
-          amount,
-          courseTitle: pendingSummary?.courseTitle || "",
-          scheduleText: pendingSummary?.scheduleText || "",
-        }));
-        setCheckoutUrl(data.checkoutUrl);
-        setIframeLoaded(false);
-        setPayError("");
-        setStep("processing");
-        return;
-      }
-
-      setPayError(data.error || "Unable to start payment. Please try again.");
-    } catch {
-      setPayError("Network error. Please check your connection and try again.");
-    } finally {
-      setPaying(false);
-    }
-  };
-
-  const checkStatus = useCallback(async (ref: string): Promise<VerifyResponse | null> => {
-    try {
-      const res = await fetch(`/api/payments/verify?referenceId=${encodeURIComponent(ref)}`, { cache: "no-store" });
-      return await res.json();
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const verifyPayment = useCallback(async () => {
-    if (!referenceId) return;
-    const data = await checkStatus(referenceId);
-    if (!data) { setPayError("Could not reach the payment service. Try again."); return; }
-    setResult(data);
-    if (data.status === "SUCCESS") {
-      sessionStorage.removeItem(PENDING_KEY);
-      setStep("result");
-    } else if (data.sessionExpired) {
-      // Chapa forgot this checkout (expired/invalidated). Don't leave the
-      // student spinning — mint a fresh checkout automatically.
-      setPayError("");
-      setPollingStopped(false);
-      startPayment({ expired: true });
-    } else if (["FAILED", "CANCELLED", "INCOMPLETE", "BLOCKED"].includes(data.status)) {
-      setStep("result");
-    } else {
-      // PENDING — keep waiting
-      if (step !== "processing") setStep("processing");
-      setPollingStopped(false);
-    }
-  }, [referenceId, checkStatus, step]);
-
-  // Poll while processing (after returning from Chapa or 409 resume)
+  // ── Chapa Inline.js mount ─────────────────────────────────
   useEffect(() => {
-    if (step !== "processing" || pollingStopped) return;
+    if (view !== "checkout" || !checkout) return;
     let cancelled = false;
-    let attempts = 0;
 
+    loadChapaScript()
+      .then(() => {
+        if (cancelled) return;
+        if (!window.ChapaCheckout) {
+          setPayError("We couldn't load the secure payment form. Please try again.");
+          return;
+        }
+
+        const appUrl = getCheckoutBaseUrl();
+        if (!appUrl) {
+          setPayError("This deployment is missing a valid HTTPS app URL. Add NEXT_PUBLIC_APP_URL in Vercel and redeploy.");
+          return;
+        }
+
+        const callbackUrl = isPublicCallbackUrl(appUrl) ? `${appUrl}/api/webhooks/chapa` : undefined;
+        const returnUrl = new URL(`/payment/return?referenceId=${encodeURIComponent(referenceId)}`, appUrl);
+
+        const chapa = new window.ChapaCheckout({
+          publicKey: checkout.publicKey,
+          amount: String(checkout.amount),
+          currency: checkout.currency,
+          tx_ref: checkout.txRef,
+          mobile: checkout.mobile || undefined,
+          availablePaymentMethods: ["telebirr", "cbebirr", "ebirr", "mpesa", "chapa"],
+          customizations: { buttonText: `Pay ${formatBirr(checkout.amount)}` },
+          callbackUrl,
+          // A return URL keeps Inline.js from showing its own success popup
+          // before our server has verified the payment.
+          returnUrl: returnUrl.toString(),
+          onSuccessfulPayment: () => { verify(); },
+          onPaymentFailure: (message: string) => {
+            setResult({ kind: "failed", message: message || "The payment was not completed." });
+            setView("result");
+          },
+          onClose: () => { verify(); },
+        });
+        chapa.initialize("chapa-inline-form");
+      })
+      .catch(() => {
+        if (!cancelled) setPayError("We couldn't load the secure payment form. Please try again.");
+      });
+
+    return () => {
+      cancelled = true;
+      const container = document.getElementById("chapa-inline-form");
+      if (container) container.innerHTML = "";
+    };
+  }, [view, checkout, referenceId, verify]);
+
+  // Poll while the checkout is open so a delayed webhook still resolves the
+  // flow even if Inline.js's callback does not fire.
+  useEffect(() => {
+    if (view !== "checkout" || !referenceId || result) return;
+    let cancelled = false;
     const tick = async () => {
-      if (cancelled || !referenceId) return;
-      const data = await checkStatus(referenceId);
       if (cancelled) return;
-      attempts++;
-      if (data?.status === "SUCCESS") {
-        setResult(data);
-        sessionStorage.removeItem(PENDING_KEY);
-        setStep("result");
-      } else if (data && ["FAILED", "CANCELLED", "INCOMPLETE", "BLOCKED"].includes(data.status)) {
-        setResult(data);
-        setStep("result");
-      } else if (attempts >= 120) {
-        // ~10 minutes of waiting — give up polling; let the user check manually
-        setPollingStopped(true);
+      const data = await checkStatus(referenceId);
+      if (cancelled || !data) return;
+      if (data.status === "SUCCESS") {
+        setResult({ kind: "success", data });
+        setView("result");
+      } else if (["FAILED", "CANCELLED", "INCOMPLETE"].includes(data.status)) {
+        setResult({ kind: classify(data.status), data });
+        setView("result");
       }
     };
-
     tick();
     const id = setInterval(tick, 5000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [step, pollingStopped, referenceId, checkStatus]);
+  }, [view, referenceId, result, checkStatus]);
+
+  const retry = () => {
+    setResult(null);
+    setPayError("");
+    // A retry always mints a fresh tx_ref (reusing one that was already
+    // charged is rejected by Chapa).
+    if (referenceId) openCheckout(referenceId, true);
+  };
+
+  const backToForm = () => {
+    setView("form");
+    setResult(null);
+    setPayError("");
+    setCheckout(null);
+  };
 
   const fieldClass = "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy placeholder-gray-400 transition-colors focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20 disabled:bg-gray-50";
   const errorClass = "mt-1 text-xs text-red-500";
-
-  const stepTitles: Record<string, string> = {
-    course: "Choose Your Course",
-    schedule: "Choose Your Class Schedule",
-    info: "Your Details",
-    summary: "Order Summary",
-    processing: "Payment",
-    result: "Payment Result",
-  };
 
   return (
     <dialog ref={dialogRef} className="backdrop:bg-black/60 rounded-xl p-0 max-w-lg w-full max-h-[90vh]">
       <div className="bg-white rounded-xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h2 className="text-xl font-bold text-navy">Register for Nalik Academy</h2>
-          <button onClick={handleClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600" aria-label="Close">
+          <h2 className="text-xl font-bold text-navy">
+            {view === "form" ? "Register for Nalik Academy" : view === "checkout" ? "Complete your payment" : "Payment"}
+          </h2>
+          <button onClick={() => dialogRef.current?.close()} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600" aria-label="Close">
             <X size={18} />
           </button>
         </div>
 
         <div className="overflow-y-auto px-6 py-5">
-          {/* Progress indicator */}
-          {step !== "result" && (
-            <p className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-400">
-              {step === "processing" ? "Payment" : `Step ${["course", "schedule", "info", "summary"].indexOf(step) + 1} of 4: ${stepTitles[step]}`}
-              {step !== "processing" && step !== "course" && (
-                <button onClick={() => goTo(step === "schedule" ? "course" : step === "info" ? "schedule" : step === "summary" ? "info" : "summary")} className="ml-2 normal-case tracking-normal text-gold underline-offset-2 hover:underline">
-                  ← Back
-                </button>
-              )}
-            </p>
-          )}
-
-          {/* STEP: course */}
-          {step === "course" && (
-            <div>
-              {stepErrors && <p className="mb-3 rounded-lg bg-red-50 border border-red-100 px-4 py-2.5 text-sm text-red-600">{stepErrors}</p>}
-              {!coursesLoaded ? (
-                <div className="flex items-center gap-2 rounded-lg border border-gray-200 px-3.5 py-3 text-sm text-gray-400">
-                  <Loader2 size={14} className="animate-spin" /> Loading courses...
-                </div>
-              ) : loadError && courses.length === 0 ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-center">
-                  <p className="text-sm font-medium text-amber-800">{loadError}</p>
-                  <button
-                    onClick={() => setReloadKey((k) => k + 1)}
-                    className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-700"
-                  >
-                    Try Again
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {courses.map((c) => {
-                    const price = c.discountPrice ?? c.price;
-                    const isSelected = selectedCourseId === c.id;
-                    return (
-                      <label key={c.id} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition-all ${isSelected ? "border-gold bg-gold/5" : "border-gray-200 hover:border-gold/50"}`}>
-                        <input
-                          type="radio"
-                          name="course"
-                          value={c.id}
-                          checked={isSelected}
-                          onChange={(e) => { setSelectedCourseId(e.target.value); setSelectedGroupId(""); setSelectedSessionId(""); setStepErrors(""); }}
-                          className="accent-gold"
-                        />
-                        <span className="flex-1">
-                          <span className="block text-sm font-semibold text-navy">{c.title}</span>
-                          <span className="mt-0.5 flex items-baseline gap-2">
-                            <span className="text-base font-bold text-gold">{formatBirr(price)}</span>
-                            {c.discountPrice && <span className="text-xs text-gray-400 line-through">{formatBirr(c.price)}</span>}
-                            {c.discountLabel && <span className="text-[11px] font-medium text-green-600">{c.discountLabel}</span>}
-                          </span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                  {courses.length === 0 && <p className="text-sm text-gray-400">No courses are available right now.</p>}
+          {/* ───────────── FORM (single review-and-pay screen) ───────────── */}
+          {view === "form" && (
+            <div className="space-y-6">
+              {formError && (
+                <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
+                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                  <span>{formError}</span>
                 </div>
               )}
-              <button
-                onClick={() => { if (!selectedCourseId) { setStepErrors("Please choose a course to continue."); return; } goTo("schedule"); }}
-                disabled={!coursesLoaded}
-                className="mt-5 w-full rounded-lg bg-navy px-5 py-3 text-sm font-bold text-white transition-all duration-200 hover:bg-navy/90 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Register Now
-              </button>
-            </div>
-          )}
 
-          {/* STEP: schedule */}
-          {step === "schedule" && (
-            <div>
-              {stepErrors && <p className="mb-3 rounded-lg bg-red-50 border border-red-100 px-4 py-2.5 text-sm text-red-600">{stepErrors}</p>}
-              {scheduleGroups.length === 0 ? (
-                <div className="rounded-lg bg-warm-white px-4 py-3 text-sm text-gray-500">
-                  No schedule groups are open right now. Please try again later.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {scheduleGroups.map((g) => {
-                    const groupSelected = selectedGroupId === g.group;
-                    return (
-                      <div key={g.group} className={`rounded-xl border p-4 transition-all ${groupSelected ? "border-gold bg-gold/5" : "border-gray-200"}`}>
-                        {/* Schedule group header */}
-                        <label className="flex cursor-pointer items-start gap-3">
+              {/* Course */}
+              <section>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Course</h3>
+                {!coursesLoaded ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-gray-200 px-3.5 py-3 text-sm text-gray-400">
+                    <Loader2 size={14} className="animate-spin" /> Loading courses...
+                  </div>
+                ) : loadError && courses.length === 0 ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-center">
+                    <p className="text-sm font-medium text-amber-800">{loadError}</p>
+                    <button onClick={() => setReloadKey((k) => k + 1)} className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-700">
+                      Try Again
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {courses.map((c) => {
+                      const coursePrice = c.discountPrice ?? c.price;
+                      const isSelected = selectedCourseId === c.id;
+                      return (
+                        <label key={c.id} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition-all ${isSelected ? "border-gold bg-gold/5" : "border-gray-200 hover:border-gold/50"}`}>
                           <input
                             type="radio"
-                            name="schedule-group"
-                            value={g.group}
-                            checked={groupSelected}
-                            onChange={() => {
-                              setSelectedGroupId(g.group);
-                              setSelectedSessionId("");
-                              setStepErrors("");
-                            }}
-                            className="mt-0.5 accent-gold"
+                            name="course"
+                            value={c.id}
+                            checked={isSelected}
+                            onChange={(e) => { setSelectedCourseId(e.target.value); setSelectedGroupId(""); setSelectedSessionId(""); setFormError(""); }}
+                            className="accent-gold"
                           />
                           <span className="flex-1">
-                            <span className="flex items-center justify-between">
-                              <span className="text-sm font-bold text-navy">SCHEDULE {g.group}</span>
-                              {g.isFull ? (
-                                <span className="text-xs font-medium text-red-500">FULL</span>
-                              ) : (
-                                <span className="text-xs text-gray-400">Open</span>
-                              )}
-                            </span>
-                            <span className="mt-1 flex items-center gap-1 text-xs text-gray-500">
-                              <Calendar size={11} /> {g.days}
+                            <span className="block text-sm font-semibold text-navy">{c.title}</span>
+                            <span className="mt-0.5 flex items-baseline gap-2">
+                              <span className="text-base font-bold text-gold">{formatBirr(coursePrice)}</span>
+                              {c.discountPrice && <span className="text-xs text-gray-400 line-through">{formatBirr(c.price)}</span>}
+                              {c.discountLabel && <span className="text-[11px] font-medium text-green-600">{c.discountLabel}</span>}
                             </span>
                           </span>
                         </label>
-
-                        {/* Sessions (visible once the group is selected) */}
-                        {groupSelected && (
-                          <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
-                            {g.sessions.map((s) => {
-                              const isFull = s.isFull;
-                              return (
-                                <label key={s.id} className={`flex items-start gap-3 rounded-lg border p-3 transition-all ${selectedSessionId === s.id ? "border-gold bg-gold/5" : "border-gray-200 hover:border-gold/50"}`}>
-                                  <input
-                                    type="radio"
-                                    name="schedule-session"
-                                    value={s.id}
-                                    checked={selectedSessionId === s.id}
-                                    onChange={() => { setSelectedSessionId(s.id); setStepErrors(""); }}
-                                    disabled={isFull}
-                                    className="mt-0.5 accent-gold"
-                                  />
-                                  <span className="flex-1">
-                                    <span className="flex items-center justify-between">
-                                      <span className="text-sm font-semibold text-navy">{s.session}</span>
-                                      {isFull ? (
-                                        <span className="text-xs font-bold text-red-500">FULL</span>
-                                      ) : (
-                                        <span className="text-xs font-medium text-gray-500">{s.seatsAvailable} Seats Available</span>
-                                      )}
-                                    </span>
-                                    <span className="mt-1 flex items-center gap-3 text-xs text-gray-500">
-                                      <span>{s.startTime} – {s.endTime}</span>
-                                      <span>Max {s.maxSeats} students</span>
-                                    </span>
-                                  </span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              <button onClick={() => { if (!selectedGroupId || !selectedSessionId) { setStepErrors("Please select a schedule group and a session to continue."); return; } goTo("info"); }} className="mt-5 w-full rounded-lg bg-navy px-5 py-3 text-sm font-bold text-white transition-all duration-200 hover:bg-navy/90 hover:shadow-md">
-                Register Now
-              </button>
-            </div>
-          )}
-
-          {/* STEP: info */}
-          {step === "info" && (
-            <div className="space-y-4">
-              {serverError && (
-                <div className="rounded-lg bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600 flex items-start gap-2">
-                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                  <span>{serverError}</span>
-                </div>
-              )}
-              <div>
-                <label htmlFor="reg-name" className="mb-1 block text-sm font-medium text-gray-700">Full Name <span className="text-gold">*</span></label>
-                <input ref={fullNameRef} id="reg-name" type="text" placeholder="e.g. Daniel Kebede" autoComplete="name" className={fieldClass} />
-                {errors.fullName && <p className={errorClass}>{errors.fullName}</p>}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="reg-email" className="mb-1 block text-sm font-medium text-gray-700">Email <span className="text-gold">*</span></label>
-                  <input ref={emailRef} id="reg-email" type="email" placeholder="you@example.com" autoComplete="email" className={fieldClass} />
-                  {errors.email && <p className={errorClass}>{errors.email}</p>}
-                </div>
-                <div>
-                  <label htmlFor="reg-phone" className="mb-1 block text-sm font-medium text-gray-700">Phone <span className="text-gold">*</span></label>
-                  <input ref={phoneRef} id="reg-phone" type="tel" placeholder="+251 9XX XXX XXX" autoComplete="tel" className={fieldClass} />
-                  {errors.phone && <p className={errorClass}>{errors.phone}</p>}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="reg-age" className="mb-1 block text-sm font-medium text-gray-700">Age <span className="text-gold">*</span></label>
-                  <input ref={ageRef} id="reg-age" type="number" min={10} max={99} placeholder="e.g. 22" className={fieldClass} />
-                  {errors.age && <p className={errorClass}>{errors.age}</p>}
-                </div>
-              </div>
-
-              <div className="rounded-lg bg-warm-white px-4 py-3 text-xs text-gray-500">
-                <p className="font-medium text-navy">{selectedCourse?.title}</p>
-                {selectedGroup && selectedSession && <p>SCHEDULE {selectedGroup.group}: {selectedSession.session} · {selectedGroup.days}, {selectedSession.startTime}–{selectedSession.endTime}</p>}
-                <p className="mt-1">You&apos;ll pay <span className="font-semibold text-gold">{formatBirr(amount || (selectedCourse?.discountPrice ?? selectedCourse?.price) || 0)}</span> via Chapa after review.</p>
-              </div>
-
-              <button
-                onClick={submitRegistration}
-                disabled={submitting}
-                className="w-full rounded-lg bg-navy px-5 py-3 text-sm font-bold text-white transition-all duration-200 hover:bg-navy/90 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {submitting ? (
-                  <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Submitting...</span>
-                ) : (
-                  "Register Now"
+                      );
+                    })}
+                    {courses.length === 0 && <p className="text-sm text-gray-400">No courses are available right now.</p>}
+                  </div>
                 )}
-              </button>
-            </div>
-          )}
+              </section>
 
-          {/* STEP: summary */}
-          {step === "summary" && (
-            <div>
-              <div className="rounded-xl border border-gray-200 p-4">
+              {/* Schedule */}
+              <section>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Schedule</h3>
+                {scheduleGroups.length === 0 ? (
+                  <div className="rounded-lg bg-warm-white px-4 py-3 text-sm text-gray-500">
+                    No schedule groups are open right now. Please try again later.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {scheduleGroups.map((g) => {
+                      const groupSelected = selectedGroupId === g.group;
+                      return (
+                        <div key={g.group} className={`rounded-xl border p-4 transition-all ${groupSelected ? "border-gold bg-gold/5" : "border-gray-200"}`}>
+                          <label className="flex cursor-pointer items-start gap-3">
+                            <input
+                              type="radio"
+                              name="schedule-group"
+                              value={g.group}
+                              checked={groupSelected}
+                              onChange={() => { setSelectedGroupId(g.group); setSelectedSessionId(""); setFormError(""); }}
+                              className="mt-0.5 accent-gold"
+                            />
+                            <span className="flex-1">
+                              <span className="flex items-center justify-between">
+                                <span className="text-sm font-bold text-navy">SCHEDULE {g.group}</span>
+                                {g.isFull ? <span className="text-xs font-medium text-red-500">FULL</span> : <span className="text-xs text-gray-400">Open</span>}
+                              </span>
+                              <span className="mt-1 flex items-center gap-1 text-xs text-gray-500">
+                                <Calendar size={11} /> {g.days}
+                              </span>
+                            </span>
+                          </label>
+
+                          {groupSelected && (
+                            <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
+                              {g.sessions.map((s) => {
+                                const isFull = s.isFull;
+                                return (
+                                  <label key={s.id} className={`flex items-start gap-3 rounded-lg border p-3 transition-all ${selectedSessionId === s.id ? "border-gold bg-gold/5" : "border-gray-200 hover:border-gold/50"}`}>
+                                    <input
+                                      type="radio"
+                                      name="schedule-session"
+                                      value={s.id}
+                                      checked={selectedSessionId === s.id}
+                                      onChange={() => { setSelectedSessionId(s.id); setFormError(""); }}
+                                      disabled={isFull}
+                                      className="mt-0.5 accent-gold"
+                                    />
+                                    <span className="flex-1">
+                                      <span className="flex items-center justify-between">
+                                        <span className="text-sm font-semibold text-navy">{s.session}</span>
+                                        {isFull ? (
+                                          <span className="text-xs font-bold text-red-500">FULL</span>
+                                        ) : (
+                                          <span className="text-xs font-medium text-gray-500">{s.seatsAvailable} Seats Available</span>
+                                        )}
+                                      </span>
+                                      <span className="mt-1 flex items-center gap-3 text-xs text-gray-500">
+                                        <span>{s.startTime} – {s.endTime}</span>
+                                        <span>{computeDuration(s.startTime, s.endTime)}</span>
+                                      </span>
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              {/* Review: Course / Schedule / Duration / Price */}
+              <section className="rounded-xl border border-gray-200 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Order Summary</p>
                 <dl className="mt-3 space-y-2 text-sm">
                   <div className="flex items-start justify-between gap-3">
                     <dt className="shrink-0 text-gray-500">Course</dt>
-                    <dd className="text-right font-medium text-navy">{pendingSummary?.courseTitle || selectedCourse?.title}</dd>
+                    <dd className="text-right font-medium text-navy">{selectedCourse?.title || "Not selected"}</dd>
                   </div>
                   <div className="flex items-start justify-between gap-3">
                     <dt className="shrink-0 text-gray-500">Schedule</dt>
-                    <dd className="text-right font-medium text-navy">{pendingSummary?.scheduleText || "To be confirmed"}</dd>
+                    <dd className="text-right font-medium text-navy">{scheduleText || "Not selected"}</dd>
                   </div>
-                  <div className="flex items-center justify-between border-t border-gray-100 pt-2">
-                    <dt className="font-semibold text-gray-700">Total Amount</dt>
-                    <dd className="text-lg font-bold text-gold">{formatBirr(amount || (selectedCourse?.discountPrice ?? selectedCourse?.price) || 0)}</dd>
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="shrink-0 text-gray-500">Days</dt>
+                    <dd className="text-right font-medium text-navy">{scheduleDays || "—"}</dd>
                   </div>
                   <div className="flex items-center justify-between">
-                    <dt className="text-gray-500">Currency</dt>
-                    <dd className="font-medium text-navy">ETB</dd>
+                    <dt className="text-gray-500">Duration</dt>
+                    <dd className="font-medium text-navy">{duration || "—"}</dd>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-gray-100 pt-2">
+                    <dt className="font-semibold text-gray-700">Price</dt>
+                    <dd className="text-lg font-bold text-gold">{price ? formatBirr(price) : "—"}</dd>
                   </div>
                 </dl>
-              </div>
+              </section>
 
-              <div className="mt-4 rounded-lg border border-gold/30 bg-gold/5 px-4 py-3">
-                <p className="flex items-center gap-2 text-sm font-semibold text-navy">
-                  <CreditCard size={16} className="text-gold" /> Pay Securely with Chapa
-                </p>
-                <p className="mt-1 text-xs text-gray-600">
-                  You&apos;ll pay securely right here on this page: Chapa&apos;s checkout opens below and your registration is verified and confirmed automatically. Telebirr, CBE Birr, cards and more are supported.
-                </p>
-              </div>
-              <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-white/70 px-3 py-2 text-xs text-gray-500">
+              {/* Student information */}
+              <section className="space-y-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Student Information</h3>
+                <div>
+                  <label htmlFor="reg-name" className="mb-1 block text-sm font-medium text-gray-700">Full Name <span className="text-gold">*</span></label>
+                  <input ref={fullNameRef} id="reg-name" type="text" placeholder="e.g. Daniel Kebede" autoComplete="name" className={fieldClass} />
+                  {errors.fullName && <p className={errorClass}>{errors.fullName}</p>}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="reg-email" className="mb-1 block text-sm font-medium text-gray-700">Email <span className="text-gold">*</span></label>
+                    <input ref={emailRef} id="reg-email" type="email" placeholder="you@example.com" autoComplete="email" className={fieldClass} />
+                    {errors.email && <p className={errorClass}>{errors.email}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="reg-phone" className="mb-1 block text-sm font-medium text-gray-700">Phone <span className="text-gold">*</span></label>
+                    <input ref={phoneRef} id="reg-phone" type="tel" placeholder="+251 9XX XXX XXX" autoComplete="tel" className={fieldClass} />
+                    {errors.phone && <p className={errorClass}>{errors.phone}</p>}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="reg-age" className="mb-1 block text-sm font-medium text-gray-700">Age <span className="text-gold">*</span></label>
+                    <input ref={ageRef} id="reg-age" type="number" min={10} max={99} placeholder="e.g. 22" className={fieldClass} />
+                    {errors.age && <p className={errorClass}>{errors.age}</p>}
+                  </div>
+                </div>
+              </section>
+
+              {/* Pay now */}
+              <button
+                onClick={payNow}
+                disabled={submitting}
+                className="w-full rounded-lg bg-gold px-5 py-3.5 text-base font-bold tracking-wide text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {submitting ? (
+                  <span className="inline-flex items-center gap-2"><Loader2 size={18} className="animate-spin" /> Processing...</span>
+                ) : (
+                  "PAY NOW"
+                )}
+              </button>
+              <p className="flex items-start gap-1.5 rounded-lg bg-white/70 px-3 py-2 text-xs text-gray-500">
                 <Info size={13} className="mt-0.5 shrink-0 text-gold" />
-                Your reference ID: <span className="font-semibold text-navy">{referenceId}</span>. Keep it: you can check your payment status with it anytime.
+                You&apos;ll pay securely with Chapa on the next screen. No charge is made until Chapa confirms your payment.
               </p>
+            </div>
+          )}
 
-              {payError && (
-                <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+          {/* ───────────── CHECKOUT (Chapa Inline.js) ───────────── */}
+          {view === "checkout" && (
+            <div className="space-y-4">
+              <div className="text-center">
+                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-gold/10">
+                  <CreditCard size={26} className="text-gold" />
+                </div>
+                <p className="text-sm text-gray-500">
+                  Paying <span className="font-semibold text-gold">{formatBirr(checkout?.amount ?? price)}</span> securely with Chapa
+                </p>
+              </div>
+
+              {verifying ? (
+                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-12 text-sm text-gray-500">
+                  <Loader2 size={22} className="animate-spin text-gold" />
+                  Confirming your payment with Chapa…
+                </div>
+              ) : checkout ? (
+                <div className="rounded-xl border border-gray-200 bg-white p-4">
+                  {/* Chapa Inline.js mounts its payment form into this container. */}
+                  <div id="chapa-inline-form" />
+                </div>
+              ) : payError ? (
+                <div className="flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                  <span>{payError}</span>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-12 text-sm text-gray-500">
+                  <Loader2 size={22} className="animate-spin text-gold" />
+                  Preparing secure checkout…
+                </div>
+              )}
+
+              {payError && checkout && (
+                <div className="flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
                   <AlertCircle size={16} className="mt-0.5 shrink-0" />
                   <span>{payError}</span>
                 </div>
               )}
 
-              <button
-                onClick={() => startPayment()}
-                disabled={paying}
-                className="mt-5 w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {paying ? (
-                  <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Starting secure payment...</span>
-                ) : (
-                  `Pay ${formatBirr(amount || (selectedCourse?.discountPrice ?? selectedCourse?.price) || 0)} · Register Now`
-                )}
+              {payError && (
+                <button onClick={retry} className="w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md">
+                  Try again
+                </button>
+              )}
+
+              <button onClick={backToForm} className="w-full rounded-lg border border-gray-200 px-5 py-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50">
+                Cancel payment
               </button>
             </div>
           )}
 
-          {/* STEP: processing — Chapa checkout embedded in the page */}
-          {step === "processing" && (
+          {/* ───────────── RESULT ───────────── */}
+          {view === "result" && result && (
             <div>
-              <div className="text-center">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gold/10">
-                  <CreditCard size={26} className="text-gold" />
-                </div>
-                <h3 className="text-lg font-bold text-navy">Complete your payment</h3>
-                <p className="mx-auto mt-2 max-w-sm text-sm text-gray-500">
-                  {checkoutUrl
-                    ? "Pay securely in the window below: you never leave this page, and your registration is confirmed automatically when payment succeeds."
-                    : "Your payment is being checked. If you haven't paid yet, you can start it again below."}
-                </p>
-                {expiredNotice && (
-                  <div className="mx-auto mt-3 flex max-w-sm items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800">
-                    <AlertCircle size={14} className="mt-0.5 shrink-0" />
-                    <span>{expiredNotice}</span>
-                  </div>
-                )}
-              </div>
-
-              {checkoutUrl ? (
-                <div className="relative mt-4 overflow-hidden rounded-xl border border-gray-200 bg-white">
-                  <iframe
-                    key={checkoutUrl}
-                    src={checkoutUrl}
-                    title="Chapa secure payment"
-                    className="h-[520px] w-full border-0"
-                    onLoad={() => setIframeLoaded(true)}
-                  />
-                  {!iframeLoaded && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white text-sm text-gray-500">
-                      <Loader2 size={18} className="animate-spin text-gold" />
-                      Loading secure payment…
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <button
-                  onClick={() => startPayment()}
-                  disabled={paying}
-                  className="mt-5 w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md disabled:opacity-50"
-                >
-                  {paying ? (
-                    <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Starting secure payment...</span>
-                  ) : (
-                    "Continue to Payment"
-                  )}
-                </button>
-              )}
-
-              {checkoutUrl && (
-                <p className="mt-3 text-center text-xs text-gray-400">
-                  Having trouble?{" "}
-                  <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-gold underline underline-offset-2">
-                    Open payment in a new tab
-                  </a>{" "}
-                  ; this page keeps verifying either way.
-                </p>
-              )}
-
-              <div className="mx-auto mt-5 max-w-xs rounded-lg bg-warm-white px-4 py-3 text-left">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Your Reference ID</p>
-                <p className="mt-1 text-base font-bold text-gold">{referenceId}</p>
-              </div>
-
-              {payError && (
-                <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600 text-left">
-                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                  <span>{payError}</span>
-                </div>
-              )}
-
-              <div className="mt-4">
-                <button onClick={verifyPayment} className="w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md">
-                  {pollingStopped ? "Check Payment Status" : "Refresh Status"}
-                </button>
-              </div>
-              <p className="mt-3 text-center text-xs text-gray-400">
-                Status checks automatically every few seconds. You can close this page and return later; your registration is saved.
-              </p>
-            </div>
-          )}
-
-          {/* STEP: result */}
-          {step === "result" && result && (
-            <div>
-              {result.status === "SUCCESS" ? (
+              {result.kind === "success" ? (
                 <div className="text-center">
                   <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-50">
                     <CheckCircle size={28} className="text-green-500" />
                   </div>
-                  <h3 className="text-xl font-bold text-navy">Registration Successful!</h3>
-                  <p className="mt-1 text-sm text-gray-500">Your spot is confirmed. Welcome to Nalik Academy!</p>
+                  <h3 className="text-xl font-bold text-navy">Payment Successful</h3>
+                  <p className="mt-1 text-sm text-gray-500">Your registration is confirmed. Welcome to Nalik Academy!</p>
 
                   <div className="mt-5 space-y-2 rounded-xl border border-gray-200 p-4 text-left">
                     <div className="flex items-center justify-between text-sm">
                       <dt className="text-gray-500">Reference</dt>
-                      <dd className="font-semibold text-gold">{result.registration?.referenceId}</dd>
+                      <dd className="font-semibold text-gold">{result.data?.registration?.referenceId || referenceId}</dd>
                     </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <dt className="text-gray-500">Course</dt>
-                      <dd className="font-medium text-navy">{result.registration?.course || "N/A"}</dd>
+                    <div className="flex items-start justify-between gap-3 text-sm">
+                      <dt className="shrink-0 text-gray-500">Course</dt>
+                      <dd className="text-right font-medium text-navy">{result.data?.registration?.course || selectedCourse?.title || "N/A"}</dd>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <dt className="text-gray-500">Schedule</dt>
-                      <dd className="text-right font-medium text-navy">{result.registration?.schedule || "To be confirmed"}</dd>
+                      <dd className="text-right font-medium text-navy">{scheduleText || "To be confirmed"}</dd>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <dt className="text-gray-500">Duration</dt>
+                      <dd className="font-medium text-navy">{duration || "—"}</dd>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <dt className="text-gray-500">Amount</dt>
-                      <dd className="font-semibold text-navy">{formatBirr(result.registration?.amount || 0)} {result.registration?.currency || "ETB"}</dd>
+                      <dd className="font-semibold text-navy">{formatBirr(result.data?.registration?.amount || checkout?.amount || price)}</dd>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <dt className="text-gray-500">Payment Status</dt>
                       <dd className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
-                        <CheckCircle size={12} /> {result.registration?.paymentStatus || "SUCCESS"}
+                        <CheckCircle size={12} /> {result.data?.registration?.paymentStatus || "SUCCESS"}
                       </dd>
                     </div>
                   </div>
 
-                  <button onClick={handleClose} className="mt-5 w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md">
+                  <button onClick={() => dialogRef.current?.close()} className="mt-5 w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md">
                     Done
                   </button>
                 </div>
@@ -866,22 +834,27 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                     <AlertCircle size={28} className="text-amber-500" />
                   </div>
                   <h3 className="text-lg font-bold text-navy">
-                    Payment {result.status === "FAILED" ? "Failed" : result.status === "CANCELLED" ? "Cancelled" : "Not Completed"}
+                    {result.kind === "failed" ? "Payment Failed" : result.kind === "cancelled" ? "Payment Cancelled" : "Payment Not Completed"}
                   </h3>
                   <p className="mx-auto mt-1 max-w-xs text-sm text-gray-500">
-                    {result.status === "FAILED"
-                      ? "Your payment was not completed. You can try again; no charge is made until the payment is confirmed."
-                      : result.status === "CANCELLED"
-                        ? "You cancelled the payment. Your registration is still saved; you can pay anytime."
-                        : "Your payment did not complete (timeout or was abandoned). You can retry below."}
+                    {result.message ||
+                      (result.kind === "cancelled"
+                        ? "You cancelled the payment. Your registration is still saved and can be paid anytime."
+                        : "Your payment was not completed. You can try again — no charge is made until Chapa confirms the payment.")}
+                  </p>
+                  <p className="mx-auto mt-3 max-w-xs rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    Your registration is saved as <span className="font-semibold">Pending Payment</span>. Retrying will not create a new registration.
                   </p>
                   <div className="mx-auto mt-4 max-w-xs rounded-lg bg-warm-white px-4 py-3 text-left">
                     <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Reference ID</p>
                     <p className="mt-0.5 text-sm font-bold text-gold">{referenceId}</p>
                   </div>
-                  <div className="mt-5">
-                    <button onClick={() => startPayment()} disabled={paying} className="w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md disabled:opacity-50">
-                      {paying ? (<span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Starting...</span>) : "Try Again"}
+                  <div className="mt-5 space-y-2">
+                    <button onClick={retry} className="w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md">
+                      Retry payment
+                    </button>
+                    <button onClick={backToForm} className="w-full rounded-lg border border-gray-200 px-5 py-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50">
+                      ← Back to registration
                     </button>
                   </div>
                 </div>

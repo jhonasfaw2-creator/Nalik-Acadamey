@@ -19,7 +19,8 @@ export async function GET(request: NextRequest) {
         { email: { contains: search } },
         { phone: { contains: search } },
         { referenceId: { contains: search } },
-        { payment: { is: { merchantReference: { contains: search } } } },
+        { payment: { is: { txRef: { contains: search } } } },
+        { payment: { is: { chapaReference: { contains: search } } } },
       ];
     }
 
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
               currency: true,
               status: true,
               method: true,
-              merchantReference: true,
+              txRef: true,
               chapaReference: true,
               paidAt: true,
             },

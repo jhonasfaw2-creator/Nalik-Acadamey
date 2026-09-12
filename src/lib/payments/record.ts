@@ -1,10 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
+import { generateTxRef } from "@/lib/payments/chapa";
 
 /**
- * Registrations created before online payments existed (the site's first
- * weeks) have no Payment record, so starting a payment for them used to fail
- * with "Payment record not found" — those students could never pay.
+ * Registrations created before online payments existed have no Payment record,
+ * so starting a payment for them would fail with "Payment record not found".
  *
  * Self-heal: whenever a student actively starts a payment (or checks status)
  * for a registration that has none, create the missing PENDING payment on the
@@ -12,9 +11,7 @@ import type { Prisma } from "@prisma/client";
  * rule as registration). Safe under concurrency: if two requests race, the
  * loser just returns the row the winner created (unique applicationId).
  */
-export async function ensurePaymentForApplication(
-  applicationId: string
-): Promise<Prisma.PaymentGetPayload<Record<string, never>> | null> {
+export async function ensurePaymentForApplication(applicationId: string) {
   const existing = await prisma.payment.findUnique({ where: { applicationId } });
   if (existing) return existing;
 
@@ -34,6 +31,8 @@ export async function ensurePaymentForApplication(
         amount: application.course.discountPrice ?? application.course.price,
         currency: "ETB",
         status: "PENDING",
+        // Mint the tx_ref up front, same as new registrations.
+        txRef: generateTxRef(application.id),
       },
     });
   } catch (error) {

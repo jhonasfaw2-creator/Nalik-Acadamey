@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { readJson } from "@/lib/http";
-import { applyChapaPaymentResult } from "@/lib/payments/apply";
+import {
+  isChapaConfigured,
+  verifyChapaTransaction,
+  PaymentNotFoundError,
+} from "@/lib/payments/chapa";
+import { applyChapaPaymentResult, mapChapaStatus } from "@/lib/payments/apply";
 
 // GET /api/admin/payments — list all payments with registration info
 export async function GET(request: NextRequest) {
@@ -43,62 +48,56 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PUT /api/admin/payments — update payment status (manual override)
-export async function PUT(request: NextRequest) {
+// POST /api/admin/payments — re-run server-side verification for a payment.
+//
+// This is not a manual override: it re-queries Chapa's verify endpoint using
+// the stored tx_ref and applies the result through the same idempotent,
+// amount-checked path as the webhook. Statuses can never be set by hand.
+export async function POST(request: NextRequest) {
   try {
     const body = await readJson(request);
     if (!body) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
-    const { id, status, notes, chapaReference, merchantReference, method } = body as {
-      id?: unknown;
-      status?: unknown;
-      notes?: unknown;
-      chapaReference?: unknown;
-      merchantReference?: unknown;
-      method?: unknown;
-    };
-    if (typeof id !== "string" || !id) return NextResponse.json({ error: "id required" }, { status: 400 });
-
-    const VALID_STATUSES = ["PENDING", "SUCCESS", "FAILED", "CANCELLED", "INCOMPLETE"];
-    if (status !== undefined && (typeof status !== "string" || !VALID_STATUSES.includes(status))) {
-      return NextResponse.json({ error: "Invalid payment status" }, { status: 400 });
-    }
-    if (notes !== undefined && typeof notes !== "string") {
-      return NextResponse.json({ error: "notes must be a string" }, { status: 400 });
+    const { id } = body as { id?: unknown };
+    if (typeof id !== "string" || !id) {
+      return NextResponse.json({ error: "id required" }, { status: 400 });
     }
 
-    let payment = await prisma.payment.findUnique({ where: { id } });
+    const payment = await prisma.payment.findUnique({ where: { id } });
     if (!payment) return NextResponse.json({ error: "Payment not found" }, { status: 404 });
 
-    if (notes !== undefined) {
-      payment = await prisma.payment.update({
-        where: { id },
-        data: { notes },
-        include: { application: { select: { referenceId: true, fullName: true, email: true } } },
-      });
+    if (payment.status === "SUCCESS") {
+      return NextResponse.json({ success: true, changed: false, status: "SUCCESS" });
+    }
+    if (!payment.txRef) {
+      return NextResponse.json({ error: "This payment has no Chapa transaction reference yet." }, { status: 400 });
+    }
+    if (!isChapaConfigured()) {
+      return NextResponse.json({ error: "Chapa is not configured" }, { status: 503 });
     }
 
-    if (status) {
+    try {
+      const verification = await verifyChapaTransaction(payment.txRef);
       const result = await applyChapaPaymentResult(payment.id, {
-        status,
-        amount: payment.amount,
-        currency: payment.currency,
-        chapaReference: typeof chapaReference === "string" ? chapaReference : payment.chapaReference || undefined,
-        merchantReference: typeof merchantReference === "string" ? merchantReference : payment.merchantReference || undefined,
-        method: typeof method === "string" ? method : payment.method || undefined,
+        status: mapChapaStatus(verification.status),
+        chapaReference: verification.chapaReference,
+        txRef: verification.txRef || payment.txRef || undefined,
+        amount: verification.amount,
+        currency: verification.currency,
+        method: verification.method,
+        charge: verification.charge,
+        raw: verification,
       });
-      const updated = await prisma.payment.findUnique({
-        where: { id },
-        include: { application: { select: { referenceId: true, fullName: true, email: true } } },
-      });
-      if (!result || !updated) return NextResponse.json({ error: "Payment not found" }, { status: 404 });
-      payment = updated;
+      return NextResponse.json({ success: true, changed: result?.changed ?? false, status: result?.paymentStatus ?? payment.status });
+    } catch (error) {
+      if (error instanceof PaymentNotFoundError) {
+        return NextResponse.json({ error: "Chapa has no transaction for this reference yet." }, { status: 404 });
+      }
+      throw error;
     }
-
-    return NextResponse.json(payment);
   } catch (error) {
-    console.error("Admin payment update error:", error);
-    return NextResponse.json({ error: "Failed to update payment" }, { status: 500 });
+    console.error("Admin payment verify error:", error);
+    return NextResponse.json({ error: "Failed to verify payment" }, { status: 500 });
   }
 }

@@ -2,16 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { readJson, isUniqueConstraintError } from "@/lib/http";
 import { registrationSchema } from "@/lib/validators";
+import { generateTxRef } from "@/lib/payments/chapa";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const REF_ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
 
-// Reference IDs are used to look up a registration's payment status, so they
-// must not be guessable. The old 4-digit format (NA-2026-1234, ~9k values per
-// year) was trivially enumerable and leaked student PII via /api/payments/
-// verify. Now: 6 chars from a 32-char alphabet ≈ 1B combinations.
+// Reference IDs are how a student looks up their registration, so they must
+// not be guessable. The old 4-digit format (NA-2026-1234, ~9k values per year)
+// was trivially enumerable and leaked student PII. Now: 6 chars from a 32-char
+// alphabet ≈ 1B combinations.
 function generateReferenceId(): string {
   const year = new Date().getFullYear();
   const random = Array.from({ length: 6 }, () =>
@@ -22,9 +23,9 @@ function generateReferenceId(): string {
 
 // POST /api/registrations — create a registration with a PENDING payment.
 //
-// The amount is ALWAYS calculated server-side from the course in the
-// database (discount price when active, otherwise list price). The browser
-// never sends a price.
+// The amount is ALWAYS calculated server-side from the course in the database
+// (discount price when active, otherwise list price). The browser never sends
+// a price; Inline.js only ever receives the amount this endpoint later returns.
 export async function POST(request: NextRequest) {
   try {
     const body = await readJson(request);
@@ -34,8 +35,7 @@ export async function POST(request: NextRequest) {
     const parsed = registrationSchema.safeParse(body);
     if (!parsed.success) {
       const fieldErrors = parsed.error.flatten().fieldErrors;
-      const firstError =
-        Object.values(fieldErrors).flat()[0] || "Invalid input";
+      const firstError = Object.values(fieldErrors).flat()[0] || "Invalid input";
       return NextResponse.json({ error: firstError, fields: fieldErrors }, { status: 400 });
     }
     const {
@@ -101,40 +101,38 @@ export async function POST(request: NextRequest) {
       attempts++;
     }
 
-    // Create registration + PENDING payment atomically. If either fails,
-    // neither is written so we never leave an orphaned application or
-    // an application without a payment record.
+    // Mint the unique Chapa tx_ref now, before any payment is attempted.
+    // It is generated server-side from the reference ID and stored on the
+    // payment row; the browser only ever receives it to hand to Inline.js.
+    const txRef = generateTxRef(referenceId);
+
+    // Registration + PENDING payment are written in a single atomic create via
+    // the nested relation, so we never leave an orphaned application or an
+    // application without a payment record.
     let application: { id: string; referenceId: string };
     try {
-      const result = await prisma.$transaction(async (tx) => {
-        const createdApp = await (tx as any).application.create({
-          data: {
-            referenceId,
-            fullName,
-            email: normalizedEmail,
-            phone,
-            age,
-            courseId,
-            scheduleId,
-            previousExperience: previousExperience || "",
-            motivation: motivation || "",
-            status: "PENDING_PAYMENT",
+      application = await prisma.application.create({
+        data: {
+          referenceId,
+          fullName,
+          email: normalizedEmail,
+          phone,
+          age,
+          courseId,
+          scheduleId,
+          previousExperience: previousExperience || "",
+          motivation: motivation || "",
+          status: "PENDING_PAYMENT",
+          payment: {
+            create: {
+              amount: paymentAmount,
+              currency: "ETB",
+              status: "PENDING",
+              txRef,
+            },
           },
-        });
-
-        await (tx as any).payment.create({
-          data: {
-            applicationId: createdApp.id,
-            amount: paymentAmount,
-            currency: "ETB",
-            status: "PENDING",
-          },
-        });
-
-        return createdApp;
+        },
       });
-
-      application = result;
     } catch (error) {
       // Two concurrent submissions can both pass the findUnique check above;
       // the (email, courseId) unique index is the authoritative guard.
@@ -164,7 +162,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error: unknown) {
     console.error("Registration error:", error);
-    const message = error instanceof Error ? error.message : "Registration failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Never surface internal error details to the browser.
+    return NextResponse.json({ error: "Registration failed. Please try again." }, { status: 500 });
   }
 }

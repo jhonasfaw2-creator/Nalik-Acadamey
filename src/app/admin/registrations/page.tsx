@@ -21,7 +21,7 @@ interface Registration {
     currency: string;
     status: string;
     method: string | null;
-    merchantReference: string | null;
+    txRef: string | null;
     chapaReference: string | null;
     paidAt: string | null;
   } | null;
@@ -46,8 +46,6 @@ const PAYMENT_COLORS: Record<string, string> = {
   FAILED: "bg-red-100 text-red-700",
   CANCELLED: "bg-gray-200 text-gray-600",
   INCOMPLETE: "bg-orange-100 text-orange-700",
-  BLOCKED: "bg-red-100 text-red-700",
-  AUTH_NEEDED: "bg-blue-100 text-blue-700",
 };
 
 export default function AdminRegistrations() {
@@ -85,6 +83,8 @@ export default function AdminRegistrations() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
+  const formatBirr = (n: number) => n.toLocaleString("en-ET") + " Birr";
+
   const updateStatus = async (id: string, status: string) => {
     setUpdating(id);
     await fetch(`/api/admin/registrations/${id}`, {
@@ -95,8 +95,6 @@ export default function AdminRegistrations() {
     load();
     setUpdating(null);
   };
-
-  const formatBirr = (n: number) => n.toLocaleString("en-ET") + " Birr";
 
   return (
     <div>
@@ -197,8 +195,8 @@ export default function AdminRegistrations() {
                     {reg.payment ? (
                       <div>
                         <p className="text-sm font-medium text-navy">{formatBirr(reg.payment.amount)}</p>
-                        {reg.payment.merchantReference && (
-                          <p className="text-xs text-gray-400">Ref: {reg.payment.merchantReference}</p>
+                        {reg.payment.txRef && (
+                          <p className="text-xs text-gray-400">tx_ref: {reg.payment.txRef}</p>
                         )}
                         <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${PAYMENT_COLORS[reg.payment.status] || ""}`}>
                           {reg.payment.status}

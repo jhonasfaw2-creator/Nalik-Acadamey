@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isChapaConfigured, verifyChapaPayment, PaymentNotFoundError } from "@/lib/payments/chapa";
+import {
+  isChapaConfigured,
+  verifyChapaTransaction,
+  PaymentNotFoundError,
+} from "@/lib/payments/chapa";
 import { applyChapaPaymentResult, mapChapaStatus } from "@/lib/payments/apply";
 import { ensurePaymentForApplication } from "@/lib/payments/record";
 
 export const dynamic = "force-dynamic";
 
-// GET/POST /api/payments/verify — server-side verification of a payment.
+// GET/POST /api/payments/verify — authoritative server-side verification.
 //
-// Finds the payment for a registration (by referenceId), verifies it against
-// Chapa's /verify endpoint and, when Chapa confirms SUCCESS (and the amount
-// and currency match the stored payment), marks the payment SUCCESS and the
-// registration PAID. A frontend success page is never trusted on its own.
+// Finds the payment for a registration (by referenceId), verifies its stored
+// tx_ref against Chapa's verify endpoint and, when Chapa confirms success (and
+// the amount + currency match the stored payment), marks the payment SUCCESS
+// and the registration PAID. The browser (Inline.js success callback) is a
+// signal only and is never trusted on its own.
 async function handle(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -27,12 +32,11 @@ async function handle(request: NextRequest) {
 
     const application = await prisma.application.findUnique({
       where: { referenceId },
+      // Deliberately minimal: this endpoint is public, so it never returns
+      // student PII (name / email / phone).
       select: {
         id: true,
         referenceId: true,
-        fullName: true,
-        email: true,
-        phone: true,
         status: true,
         course: { select: { title: true, price: true, discountPrice: true, discountLabel: true } },
         schedule: { select: { group: true, session: true, days: true, startTime: true, endTime: true } },
@@ -42,8 +46,7 @@ async function handle(request: NextRequest) {
       return NextResponse.json({ error: "Registration not found" }, { status: 404 });
     }
 
-    // Legacy registrations (pre-online-payments) have no Payment row — create
-    // the missing PENDING payment on the spot so status checks work for them.
+    // Legacy registrations (pre-online-payments) have no Payment row.
     const payment = await ensurePaymentForApplication(application.id);
     if (!payment) {
       return NextResponse.json({ error: "Registration not found" }, { status: 404 });
@@ -54,27 +57,18 @@ async function handle(request: NextRequest) {
       return NextResponse.json(buildSummary(application, payment));
     }
 
-    if (!isChapaConfigured() || !payment.chapaReference) {
+    if (!isChapaConfigured() || !payment.txRef) {
       // No attempt initialized yet (or not configured): stay pending.
       return NextResponse.json(buildSummary(application, payment));
     }
 
     let verification;
     try {
-      verification = await verifyChapaPayment(payment.chapaReference);
+      verification = await verifyChapaTransaction(payment.txRef);
     } catch (error) {
       if (error instanceof PaymentNotFoundError) {
-        // Chapa doesn't know this reference. Right after init it may simply not
-        // have propagated yet — keep pending for a grace period. But if the
-        // checkout was minted a while ago and Chapa has forgotten it (expired /
-        // invalidated session), the student would otherwise spin on PENDING
-        // forever. Surface that so the client mints a fresh checkout.
-        const ageMs = payment.updatedAt ? Date.now() - new Date(payment.updatedAt).getTime() : 0;
-        const summary = buildSummary(application, payment);
-        if (payment.chapaReference && ageMs > 60_000) {
-          return NextResponse.json({ ...summary, sessionExpired: true });
-        }
-        return NextResponse.json(summary);
+        // Chapa does not know this tx_ref (yet). Stay pending.
+        return NextResponse.json(buildSummary(application, payment));
       }
       console.error("Chapa verify error:", error);
       return NextResponse.json(
@@ -86,16 +80,16 @@ async function handle(request: NextRequest) {
     await applyChapaPaymentResult(payment.id, {
       status: mapChapaStatus(verification.status),
       chapaReference: verification.chapaReference,
-      merchantReference: verification.merchantReference || payment.merchantReference || undefined,
+      txRef: verification.txRef || payment.txRef || undefined,
       amount: verification.amount,
       currency: verification.currency,
       method: verification.method,
-      serviceFee: verification.serviceFee,
+      charge: verification.charge,
       raw: verification,
     });
 
     // Re-read to return fresh state (payment AND application status — the
-    // application may have just flipped PENDING_PAYMENT → PAID above).
+    // application may have just flipped PENDING → PAID above).
     const [updated, updatedApplication] = await Promise.all([
       prisma.payment.findUnique({ where: { id: payment.id } }),
       prisma.application.findUnique({ where: { id: application.id }, select: { status: true } }),
@@ -120,22 +114,24 @@ export async function POST(request: NextRequest) {
 function buildSummary(
   application: {
     referenceId: string;
-    fullName: string;
-    email: string;
-    phone: string;
     status: string;
     course: { title: string; price: number; discountPrice: number | null; discountLabel: string | null } | null;
     schedule: { group: string; session: string; days: string; startTime: string; endTime: string } | null;
   },
-  payment: { amount: number; currency: string; status: string; merchantReference: string | null; chapaReference: string | null; method: string | null; paidAt: Date | null }
+  payment: {
+    amount: number;
+    currency: string;
+    status: string;
+    txRef: string | null;
+    chapaReference: string | null;
+    method: string | null;
+    paidAt: Date | null;
+  }
 ): Record<string, unknown> {
   return {
     status: payment.status,
     registration: {
       referenceId: application.referenceId,
-      fullName: application.fullName,
-      email: application.email,
-      phone: application.phone,
       registrationStatus: application.status,
       course: application.course?.title || null,
       schedule: application.schedule
@@ -145,7 +141,7 @@ function buildSummary(
       currency: payment.currency,
       paymentStatus: payment.status,
       paymentMethod: payment.method,
-      merchantReference: payment.merchantReference,
+      txRef: payment.txRef,
       chapaReference: payment.chapaReference,
       paidAt: payment.paidAt,
     },

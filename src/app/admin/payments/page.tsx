@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { DollarSign, CheckCircle, XCircle, Clock, Loader2 } from "lucide-react";
+import { DollarSign, CheckCircle, XCircle, Clock, Loader2, RefreshCw } from "lucide-react";
 
 interface Payment {
   id: string;
@@ -9,8 +9,9 @@ interface Payment {
   currency: string;
   status: string;
   method: string | null;
-  merchantReference: string | null;
+  txRef: string | null;
   chapaReference: string | null;
+  charge: number | null;
   notes: string | null;
   paidAt: string | null;
   createdAt: string;
@@ -20,7 +21,6 @@ interface Payment {
     fullName: string;
     email: string;
     phone: string;
-    courseId: string;
     course: { title: string } | null;
     schedule: { group: string; session: string; days: string } | null;
     status: string;
@@ -42,8 +42,6 @@ const STATUS_COLORS: Record<string, string> = {
   FAILED: "bg-red-100 text-red-700",
   CANCELLED: "bg-gray-200 text-gray-600",
   INCOMPLETE: "bg-orange-100 text-orange-700",
-  BLOCKED: "bg-red-100 text-red-700",
-  AUTH_NEEDED: "bg-blue-100 text-blue-700",
 };
 
 const STATUS_ICONS: Record<string, typeof Clock> = {
@@ -59,9 +57,8 @@ export default function AdminPayments() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
-  const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [verifying, setVerifying] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
 
   const load = useCallback(() => {
     setLoading(true);
@@ -75,16 +72,23 @@ export default function AdminPayments() {
 
   useEffect(() => { load(); }, [load]);
 
-  const updatePayment = async (id: string, status: string) => {
-    setSaving(true);
-    await fetch("/api/admin/payments", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, status, notes: notes || undefined }),
-    });
-    setEditingPayment(null);
-    setSaving(false);
-    load();
+  const reverify = async (id: string) => {
+    setVerifying(id);
+    setNotice("");
+    try {
+      const res = await fetch("/api/admin/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      setNotice(res.ok ? `Verified with Chapa — status: ${data.status}` : data.error || "Verification failed");
+      load();
+    } catch {
+      setNotice("Network error while verifying.");
+    } finally {
+      setVerifying(null);
+    }
   };
 
   const formatBirr = (n: number) => n.toLocaleString("en-ET") + " Birr";
@@ -103,6 +107,13 @@ export default function AdminPayments() {
         <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 flex items-center justify-between">
           <span>{error}</span>
           <button onClick={load} className="rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200">Retry</button>
+        </div>
+      )}
+
+      {notice && (
+        <div className="mt-4 flex items-center justify-between rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          <span>{notice}</span>
+          <button onClick={() => setNotice("")} className="text-xs font-medium text-blue-600 hover:underline">Dismiss</button>
         </div>
       )}
 
@@ -138,7 +149,7 @@ export default function AdminPayments() {
           </div>
 
           {/* Filters */}
-          <div className="mt-6 flex gap-2">
+          <div className="mt-6 flex flex-wrap gap-2">
             {STATUS_OPTIONS.map((s) => (
               <button
                 key={s.value}
@@ -149,35 +160,6 @@ export default function AdminPayments() {
               </button>
             ))}
           </div>
-
-          {/* Edit modal */}
-          {editingPayment && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-              <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-                <h2 className="text-lg font-bold text-navy mb-4">Update Payment</h2>
-                <p className="text-sm text-gray-500 mb-4">
-                  {editingPayment.application.fullName} · {editingPayment.application.referenceId}
-                  <span className="block text-xs text-gray-400">Ref: {editingPayment.merchantReference}</span>
-                </p>
-                <div className="space-y-3">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">Notes</label>
-                    <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none resize-none" placeholder="Optional notes..." />
-                  </div>
-                </div>
-                <div className="mt-5 flex justify-end gap-2">
-                  <button onClick={() => setEditingPayment(null)} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
-                  <button onClick={() => updatePayment(editingPayment.id, "FAILED")} disabled={saving} className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50">
-                    <XCircle size={14} /> Mark Failed
-                  </button>
-                  <button onClick={() => updatePayment(editingPayment.id, "SUCCESS")} disabled={saving} className="inline-flex items-center gap-1 rounded-lg bg-green-50 px-4 py-2 text-sm font-medium text-green-600 hover:bg-green-100 disabled:opacity-50">
-                    {saving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
-                    Mark as Paid
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Payments list */}
           <div className="mt-4 space-y-3">
@@ -195,8 +177,8 @@ export default function AdminPayments() {
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500">
                       <span>{p.application.course?.title || "No course"} · {p.application.schedule ? `SCHEDULE ${p.application.schedule.group}: ${p.application.schedule.session}` : "No schedule"}</span>
-                      {p.merchantReference && <span>Ref: {p.merchantReference}</span>}
-                      {p.chapaReference && <span>Chapa: {p.chapaReference}</span>}
+                      {p.txRef && <span>tx_ref: {p.txRef}</span>}
+                      {p.chapaReference && <span>ref: {p.chapaReference}</span>}
                       {p.method && <span>Method: {p.method}</span>}
                       <span>{new Date(p.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
                     </div>
@@ -207,8 +189,14 @@ export default function AdminPayments() {
                       {p.status}
                     </span>
                   </div>
-                  <button onClick={() => { setEditingPayment(p); setNotes(p.notes || ""); }} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-navy transition-colors hover:bg-gray-50">
-                    Manage
+                  <button
+                    onClick={() => reverify(p.id)}
+                    disabled={verifying === p.id}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-navy transition-colors hover:bg-gray-50 disabled:opacity-50"
+                    title="Re-check this payment with Chapa"
+                  >
+                    {verifying === p.id ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                    Verify
                   </button>
                 </div>
               );

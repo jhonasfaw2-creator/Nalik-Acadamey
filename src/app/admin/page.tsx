@@ -6,7 +6,7 @@ import { Users, DollarSign, Clock, BookOpen, CheckCircle } from "lucide-react";
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
     totalRegistrations: 0,
-    pendingPayment: 0,
+    pending: 0,
     paid: 0,
     confirmed: 0,
     totalPayments: 0,
@@ -16,7 +16,6 @@ export default function AdminDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [retryKey, setRetryKey] = useState(0);
 
   const loadStats = useCallback(() => {
     setError("");
@@ -28,7 +27,7 @@ export default function AdminDashboard() {
       const paid = (payData || []).filter((p: { status: string }) => p.status === "SUCCESS");
       setStats({
         totalRegistrations: regData.applications?.length || 0,
-        pendingPayment: regData.statusCounts?.PENDING_PAYMENT || 0,
+        pending: regData.statusCounts?.PENDING_PAYMENT || 0,
         paid: regData.statusCounts?.PAID || 0,
         confirmed: regData.statusCounts?.CONFIRMED || 0,
         totalPayments: (payData || []).length,
@@ -49,7 +48,7 @@ export default function AdminDashboard() {
 
   const cards = [
     { label: "Total Registrations", value: stats.totalRegistrations, icon: Users, color: "bg-blue-50 text-blue-600" },
-    { label: "Pending Payment", value: stats.pendingPayment, icon: Clock, color: "bg-amber-50 text-amber-600" },
+    { label: "Pending Payment", value: stats.pending, icon: Clock, color: "bg-amber-50 text-amber-600" },
     { label: "Paid", value: stats.paid, icon: CheckCircle, color: "bg-blue-100 text-blue-600" },
     { label: "Confirmed", value: stats.confirmed, icon: Users, color: "bg-green-50 text-green-600" },
     { label: "Active Courses", value: stats.activeCourses, icon: BookOpen, color: "bg-purple-50 text-purple-600" },
