@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-const siteUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://nalikacademy.com").replace(/\/$/, "");
+const siteUrl = (
+  process.env.NEXT_PUBLIC_APP_URL || "https://nalik-acadamey.vercel.app"
+).replace(/\/$/, "");
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
