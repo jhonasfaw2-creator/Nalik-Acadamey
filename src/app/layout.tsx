@@ -1,12 +1,51 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+const siteUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://nalikacademy.com").replace(/\/$/, "");
+
 export const metadata: Metadata = {
-  title: "Nalik Academy",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "Nalik Academy",
+    template: "%s | Nalik Academy",
+  },
   description:
-    "Professional media production training: filmmaking, video editing, and visual storytelling from industry experts.",
+    "Nalik Academy offers professional media production training in filmmaking, video editing, photography, and visual storytelling for students and creatives.",
+  applicationName: "Nalik Academy",
+  keywords: [
+    "Nalik Academy",
+    "Nalik Acadeamey",
+    "Nalik Academy Ethiopia",
+    "film school",
+    "media production training",
+    "video editing training",
+    "filmmaking courses",
+    "creative media education",
+  ],
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "Nalik Academy",
+    description:
+      "Professional media production training in filmmaking, video editing, and visual storytelling.",
+    url: siteUrl,
+    siteName: "Nalik Academy",
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Nalik Academy",
+    description:
+      "Professional media production training in filmmaking, video editing, and visual storytelling.",
+  },
   icons: {
     icon: "/assets/logo.jpeg",
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 };
 
