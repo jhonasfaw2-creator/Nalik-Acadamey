@@ -173,6 +173,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const [payError, setPayError] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [result, setResult] = useState<{ kind: ResultKind; message?: string; data?: VerifyResponse } | null>(null);
+  const [paymentInFlight, setPaymentInFlight] = useState(false);
 
   // ── Load courses + schedules ──────────────────────────────
   useEffect(() => {
@@ -317,10 +318,12 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
 
   // ── Start / restart the Chapa Inline checkout ─────────────
   const openCheckout = useCallback(async (ref: string, rotate: boolean) => {
+    if (paymentInFlight) return;
     setPayError("");
     setResult(null);
     setVerifying(false);
     setView("checkout");
+    setPaymentInFlight(true);
     try {
       const res = await fetch("/api/payments/chapa/init", {
         method: "POST",
@@ -346,8 +349,10 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
       setPayError(data.error || "Unable to start payment. Please try again.");
     } catch {
       setPayError("Network error. Please check your connection and try again.");
+    } finally {
+      setPaymentInFlight(false);
     }
-  }, [verify, selectedCourse]);
+  }, [paymentInFlight, verify, selectedCourse]);
 
   // ── PAY NOW: validate → create (or reuse) registration → checkout ─
   const validateInfo = (): Record<string, string> => {
@@ -496,6 +501,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   }, [view, referenceId, result, checkStatus]);
 
   const retry = () => {
+    if (paymentInFlight) return;
     setResult(null);
     setPayError("");
     // A retry always mints a fresh tx_ref (reusing one that was already
@@ -508,226 +514,266 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     setResult(null);
     setPayError("");
     setCheckout(null);
+    setPaymentInFlight(false);
   };
 
-  const fieldClass = "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy placeholder-gray-400 transition-colors focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20 disabled:bg-gray-50";
+  const fieldClass = "w-full rounded-xl border border-gray-200 bg-[#f9faf8] px-3.5 py-2.75 text-sm text-navy placeholder:text-gray-400 transition-all focus:border-gold focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold/20 disabled:bg-gray-50";
   const errorClass = "mt-1 text-xs text-red-500";
+  const steps = [
+    { label: "Course", done: Boolean(selectedCourseId) },
+    { label: "Schedule", done: Boolean(selectedSessionId) },
+    { label: "Details", done: Boolean(fullNameRef.current?.value || emailRef.current?.value || phoneRef.current?.value || ageRef.current?.value) },
+    { label: "Review", done: false },
+  ];
 
   return (
-    <dialog ref={dialogRef} className="backdrop:bg-black/60 rounded-xl p-0 max-w-lg w-full max-h-[90vh]">
-      <div className="bg-white rounded-xl overflow-hidden flex flex-col max-h-[90vh]">
+    <dialog ref={dialogRef} className="backdrop:bg-black/60 rounded-[28px] p-0 max-w-5xl w-[calc(100%-1.5rem)] max-h-[92vh]">
+      <div className="bg-white rounded-[28px] overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h2 className="text-xl font-bold text-navy">
-            {view === "form" ? "Register for Nalik Academy" : view === "checkout" ? "Complete your payment" : "Payment"}
-          </h2>
-          <button onClick={() => dialogRef.current?.close()} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600" aria-label="Close">
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 py-3 sm:px-6">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">Nalik Academy</p>
+            <h2 className="mt-1 text-xl font-bold text-navy sm:text-2xl">
+              {view === "form" ? "Secure your seat" : view === "checkout" ? "Complete payment" : "Registration update"}
+            </h2>
+          </div>
+          <button onClick={() => dialogRef.current?.close()} className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700" aria-label="Close">
             <X size={18} />
           </button>
         </div>
 
-        <div className="overflow-y-auto px-6 py-5">
-          {/* ───────────── FORM (single review-and-pay screen) ───────────── */}
+        <div className="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           {view === "form" && (
-            <div className="space-y-6">
-              {formError && (
-                <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
-                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                  <span>{formError}</span>
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_360px]">
+              <div className="space-y-5">
+                <div className="rounded-2xl border border-[#efe7da] bg-[#fffaf1] p-3 sm:p-4">
+                  <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+                    <span>Checkout flow</span>
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[10px] text-gold">Fast & secure</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-4 gap-2">
+                    {steps.map((step, index) => (
+                      <div key={step.label} className="flex items-center gap-2">
+                        <div className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${step.done ? "bg-gold text-navy" : index === 0 ? "bg-navy text-white" : "bg-white text-gray-400 border border-gray-200"}`}>
+                          {index + 1}
+                        </div>
+                        <span className={`hidden text-[11px] font-medium sm:block ${step.done ? "text-navy" : "text-gray-500"}`}>{step.label}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              )}
 
-              {/* Course */}
-              <section>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Course</h3>
-                {!coursesLoaded ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-gray-200 px-3.5 py-3 text-sm text-gray-400">
-                    <Loader2 size={14} className="animate-spin" /> Loading courses...
-                  </div>
-                ) : loadError && courses.length === 0 ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-center">
-                    <p className="text-sm font-medium text-amber-800">{loadError}</p>
-                    <button onClick={() => setReloadKey((k) => k + 1)} className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-700">
-                      Try Again
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {courses.map((c) => {
-                      const coursePrice = c.discountPrice ?? c.price;
-                      const isSelected = selectedCourseId === c.id;
-                      return (
-                        <label key={c.id} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition-all ${isSelected ? "border-gold bg-gold/5" : "border-gray-200 hover:border-gold/50"}`}>
-                          <input
-                            type="radio"
-                            name="course"
-                            value={c.id}
-                            checked={isSelected}
-                            onChange={(e) => { setSelectedCourseId(e.target.value); setSelectedGroupId(""); setSelectedSessionId(""); setFormError(""); }}
-                            className="accent-gold"
-                          />
-                          <span className="flex-1">
-                            <span className="block text-sm font-semibold text-navy">{c.title}</span>
-                            <span className="mt-0.5 flex items-baseline gap-2">
-                              <span className="text-base font-bold text-gold">{formatBirr(coursePrice)}</span>
-                              {c.discountPrice && <span className="text-xs text-gray-400 line-through">{formatBirr(c.price)}</span>}
-                              {c.discountLabel && <span className="text-[11px] font-medium text-green-600">{c.discountLabel}</span>}
-                            </span>
-                          </span>
-                        </label>
-                      );
-                    })}
-                    {courses.length === 0 && <p className="text-sm text-gray-400">No courses are available right now.</p>}
+                {formError && (
+                  <div className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+                    <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                    <span>{formError}</span>
                   </div>
                 )}
-              </section>
 
-              {/* Schedule */}
-              <section>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Schedule</h3>
-                {scheduleGroups.length === 0 ? (
-                  <div className="rounded-lg bg-warm-white px-4 py-3 text-sm text-gray-500">
-                    No schedule groups are open right now. Please try again later.
+                <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Choose a course</h3>
+                    <span className="text-[11px] font-medium text-gray-400">{courses.length} options</span>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    {scheduleGroups.map((g) => {
-                      const groupSelected = selectedGroupId === g.group;
-                      return (
-                        <div key={g.group} className={`rounded-xl border p-4 transition-all ${groupSelected ? "border-gold bg-gold/5" : "border-gray-200"}`}>
-                          <label className="flex cursor-pointer items-start gap-3">
+                  {!coursesLoaded ? (
+                    <div className="flex items-center gap-2 rounded-xl border border-gray-200 px-3.5 py-3 text-sm text-gray-400">
+                      <Loader2 size={14} className="animate-spin" /> Loading courses...
+                    </div>
+                  ) : loadError && courses.length === 0 ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-center">
+                      <p className="text-sm font-medium text-amber-800">{loadError}</p>
+                      <button onClick={() => setReloadKey((k) => k + 1)} className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-700">
+                        Try Again
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {courses.map((c) => {
+                        const coursePrice = c.discountPrice ?? c.price;
+                        const isSelected = selectedCourseId === c.id;
+                        return (
+                          <label key={c.id} className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-3.5 transition-all ${isSelected ? "border-gold bg-[#fffaf1] shadow-sm" : "border-gray-200 hover:border-gold/50 hover:bg-[#fffaf1]/50"}`}>
                             <input
                               type="radio"
-                              name="schedule-group"
-                              value={g.group}
-                              checked={groupSelected}
-                              onChange={() => { setSelectedGroupId(g.group); setSelectedSessionId(""); setFormError(""); }}
-                              className="mt-0.5 accent-gold"
+                              name="course"
+                              value={c.id}
+                              checked={isSelected}
+                              onChange={(e) => { setSelectedCourseId(e.target.value); setSelectedGroupId(""); setSelectedSessionId(""); setFormError(""); }}
+                              className="accent-gold"
                             />
                             <span className="flex-1">
-                              <span className="flex items-center justify-between">
-                                <span className="text-sm font-bold text-navy">SCHEDULE {g.group}</span>
-                                {g.isFull ? <span className="text-xs font-medium text-red-500">FULL</span> : <span className="text-xs text-gray-400">Open</span>}
+                              <span className="flex items-start justify-between gap-3">
+                                <span className="block text-sm font-semibold text-navy">{c.title}</span>
+                                <span className="text-right">
+                                  <span className="block text-base font-bold text-gold">{formatBirr(coursePrice)}</span>
+                                  {c.discountPrice && <span className="block text-[10px] text-gray-400 line-through">{formatBirr(c.price)}</span>}
+                                </span>
                               </span>
-                              <span className="mt-1 flex items-center gap-1 text-xs text-gray-500">
-                                <Calendar size={11} /> {g.days}
-                              </span>
+                              {c.discountLabel && <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">{c.discountLabel}</span>}
                             </span>
                           </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
 
-                          {groupSelected && (
-                            <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
-                              {g.sessions.map((s) => {
-                                const isFull = s.isFull;
-                                return (
-                                  <label key={s.id} className={`flex items-start gap-3 rounded-lg border p-3 transition-all ${selectedSessionId === s.id ? "border-gold bg-gold/5" : "border-gray-200 hover:border-gold/50"}`}>
-                                    <input
-                                      type="radio"
-                                      name="schedule-session"
-                                      value={s.id}
-                                      checked={selectedSessionId === s.id}
-                                      onChange={() => { setSelectedSessionId(s.id); setFormError(""); }}
-                                      disabled={isFull}
-                                      className="mt-0.5 accent-gold"
-                                    />
-                                    <span className="flex-1">
-                                      <span className="flex items-center justify-between">
-                                        <span className="text-sm font-semibold text-navy">{s.session}</span>
-                                        {isFull ? (
-                                          <span className="text-xs font-bold text-red-500">FULL</span>
-                                        ) : (
-                                          <span className="text-xs font-medium text-gray-500">{s.seatsAvailable} Seats Available</span>
-                                        )}
+                <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Choose a schedule</h3>
+                    <span className="text-[11px] font-medium text-gray-400">Availability</span>
+                  </div>
+                  {scheduleGroups.length === 0 ? (
+                    <div className="rounded-xl bg-warm-white px-4 py-3 text-sm text-gray-500">
+                      No schedule groups are open right now. Please try again later.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {scheduleGroups.map((g) => {
+                        const groupSelected = selectedGroupId === g.group;
+                        return (
+                          <div key={g.group} className={`rounded-2xl border p-3 transition-all ${groupSelected ? "border-gold bg-[#fffaf1]" : "border-gray-200 bg-white"}`}>
+                            <label className="flex cursor-pointer items-start gap-3">
+                              <input
+                                type="radio"
+                                name="schedule-group"
+                                value={g.group}
+                                checked={groupSelected}
+                                onChange={() => { setSelectedGroupId(g.group); setSelectedSessionId(""); setFormError(""); }}
+                                className="mt-0.5 accent-gold"
+                              />
+                              <span className="flex-1">
+                                <span className="flex items-center justify-between gap-2">
+                                  <span className="text-sm font-bold text-navy">Schedule {g.group}</span>
+                                  {g.isFull ? <span className="text-[11px] font-bold text-red-500">Full</span> : <span className="text-[11px] text-gray-500">Open</span>}
+                                </span>
+                                <span className="mt-1 flex items-center gap-1 text-xs text-gray-500">
+                                  <Calendar size={11} /> {g.days}
+                                </span>
+                              </span>
+                            </label>
+
+                            {groupSelected && (
+                              <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
+                                {g.sessions.map((s) => {
+                                  const isFull = s.isFull;
+                                  return (
+                                    <label key={s.id} className={`flex items-start gap-3 rounded-xl border p-3 transition-all ${selectedSessionId === s.id ? "border-gold bg-white" : "border-gray-200 hover:border-gold/50"}`}>
+                                      <input
+                                        type="radio"
+                                        name="schedule-session"
+                                        value={s.id}
+                                        checked={selectedSessionId === s.id}
+                                        onChange={() => { setSelectedSessionId(s.id); setFormError(""); }}
+                                        disabled={isFull}
+                                        className="mt-0.5 accent-gold"
+                                      />
+                                      <span className="flex-1">
+                                        <span className="flex items-center justify-between gap-2">
+                                          <span className="text-sm font-semibold text-navy">{s.session}</span>
+                                          {isFull ? (
+                                            <span className="text-[11px] font-bold text-red-500">Booked</span>
+                                          ) : (
+                                            <span className="text-[11px] font-medium text-gray-500">{s.seatsAvailable} seats</span>
+                                          )}
+                                        </span>
+                                        <span className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                                          <span>{s.startTime} – {s.endTime}</span>
+                                          <span>•</span>
+                                          <span>{computeDuration(s.startTime, s.endTime)}</span>
+                                        </span>
                                       </span>
-                                      <span className="mt-1 flex items-center gap-3 text-xs text-gray-500">
-                                        <span>{s.startTime} – {s.endTime}</span>
-                                        <span>{computeDuration(s.startTime, s.endTime)}</span>
-                                      </span>
-                                    </span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
 
-              {/* Review: Course / Schedule / Duration / Price */}
-              <section className="rounded-xl border border-gray-200 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Order Summary</p>
-                <dl className="mt-3 space-y-2 text-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <dt className="shrink-0 text-gray-500">Course</dt>
-                    <dd className="text-right font-medium text-navy">{selectedCourse?.title || "Not selected"}</dd>
+                <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Your details</h3>
+                  <div className="mt-4 space-y-4">
+                    <div>
+                      <label htmlFor="reg-name" className="mb-1.5 block text-sm font-medium text-gray-700">Full name <span className="text-gold">*</span></label>
+                      <input ref={fullNameRef} id="reg-name" type="text" placeholder="e.g. Daniel Kebede" autoComplete="name" className={fieldClass} />
+                      {errors.fullName && <p className={errorClass}>{errors.fullName}</p>}
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="reg-email" className="mb-1.5 block text-sm font-medium text-gray-700">Email <span className="text-gold">*</span></label>
+                        <input ref={emailRef} id="reg-email" type="email" placeholder="you@example.com" autoComplete="email" className={fieldClass} />
+                        {errors.email && <p className={errorClass}>{errors.email}</p>}
+                      </div>
+                      <div>
+                        <label htmlFor="reg-phone" className="mb-1.5 block text-sm font-medium text-gray-700">Phone <span className="text-gold">*</span></label>
+                        <input ref={phoneRef} id="reg-phone" type="tel" placeholder="+251 9XX XXX XXX" autoComplete="tel" className={fieldClass} />
+                        {errors.phone && <p className={errorClass}>{errors.phone}</p>}
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor="reg-age" className="mb-1.5 block text-sm font-medium text-gray-700">Age <span className="text-gold">*</span></label>
+                      <input ref={ageRef} id="reg-age" type="number" min={10} max={99} placeholder="22" className={fieldClass} />
+                      {errors.age && <p className={errorClass}>{errors.age}</p>}
+                    </div>
                   </div>
-                  <div className="flex items-start justify-between gap-3">
-                    <dt className="shrink-0 text-gray-500">Schedule</dt>
-                    <dd className="text-right font-medium text-navy">{scheduleText || "Not selected"}</dd>
-                  </div>
-                  <div className="flex items-start justify-between gap-3">
-                    <dt className="shrink-0 text-gray-500">Days</dt>
-                    <dd className="text-right font-medium text-navy">{scheduleDays || "—"}</dd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <dt className="text-gray-500">Duration</dt>
-                    <dd className="font-medium text-navy">{duration || "—"}</dd>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-gray-100 pt-2">
-                    <dt className="font-semibold text-gray-700">Price</dt>
-                    <dd className="text-lg font-bold text-gold">{price ? formatBirr(price) : "—"}</dd>
-                  </div>
-                </dl>
-              </section>
+                </section>
+              </div>
 
-              {/* Student information */}
-              <section className="space-y-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Student Information</h3>
-                <div>
-                  <label htmlFor="reg-name" className="mb-1 block text-sm font-medium text-gray-700">Full Name <span className="text-gold">*</span></label>
-                  <input ref={fullNameRef} id="reg-name" type="text" placeholder="e.g. Daniel Kebede" autoComplete="name" className={fieldClass} />
-                  {errors.fullName && <p className={errorClass}>{errors.fullName}</p>}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label htmlFor="reg-email" className="mb-1 block text-sm font-medium text-gray-700">Email <span className="text-gold">*</span></label>
-                    <input ref={emailRef} id="reg-email" type="email" placeholder="you@example.com" autoComplete="email" className={fieldClass} />
-                    {errors.email && <p className={errorClass}>{errors.email}</p>}
-                  </div>
-                  <div>
-                    <label htmlFor="reg-phone" className="mb-1 block text-sm font-medium text-gray-700">Phone <span className="text-gold">*</span></label>
-                    <input ref={phoneRef} id="reg-phone" type="tel" placeholder="+251 9XX XXX XXX" autoComplete="tel" className={fieldClass} />
-                    {errors.phone && <p className={errorClass}>{errors.phone}</p>}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label htmlFor="reg-age" className="mb-1 block text-sm font-medium text-gray-700">Age <span className="text-gold">*</span></label>
-                    <input ref={ageRef} id="reg-age" type="number" min={10} max={99} placeholder="e.g. 22" className={fieldClass} />
-                    {errors.age && <p className={errorClass}>{errors.age}</p>}
-                  </div>
-                </div>
-              </section>
+              <aside className="lg:pt-2">
+                <div className="lg:sticky lg:top-0">
+                  <div className="rounded-2xl border border-gray-200 bg-[#fafaf8] p-4 sm:p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Order summary</h3>
+                      <span className="rounded-full bg-gold/10 px-2 py-1 text-[10px] font-semibold text-navy">Secure</span>
+                    </div>
 
-              {/* Pay now */}
-              <button
-                onClick={payNow}
-                disabled={submitting}
-                className="w-full rounded-lg bg-gold px-5 py-3.5 text-base font-bold tracking-wide text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {submitting ? (
-                  <span className="inline-flex items-center gap-2"><Loader2 size={18} className="animate-spin" /> Processing...</span>
-                ) : (
-                  "PAY NOW"
-                )}
-              </button>
-              <p className="flex items-start gap-1.5 rounded-lg bg-white/70 px-3 py-2 text-xs text-gray-500">
-                <Info size={13} className="mt-0.5 shrink-0 text-gold" />
-                You&apos;ll pay securely with Chapa on the next screen. No charge is made until Chapa confirms your payment.
-              </p>
+                    <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
+                      <p className="text-sm font-semibold text-navy">{selectedCourse?.title || "Course not selected"}</p>
+                      <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                        <span>Schedule</span>
+                        <span className="font-medium text-navy">{scheduleText || "Not selected"}</span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                        <span>Days</span>
+                        <span className="font-medium text-navy">{scheduleDays || "—"}</span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                        <span>Duration</span>
+                        <span className="font-medium text-navy">{duration || "—"}</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl bg-navy p-4 text-white">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-white/70">Total</span>
+                        <span className="text-2xl font-bold text-gold">{price ? formatBirr(price) : "—"}</span>
+                      </div>
+                      <p className="mt-2 text-[11px] text-white/65">Payment is processed securely through Chapa after review.</p>
+                    </div>
+
+                    <button
+                      onClick={payNow}
+                      disabled={submitting || paymentInFlight}
+                      className="mt-4 w-full rounded-xl bg-gold px-5 py-3.5 text-base font-bold tracking-wide text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {submitting ? (
+                        <span className="inline-flex items-center justify-center gap-2"><Loader2 size={18} className="animate-spin" /> Processing…</span>
+                      ) : (
+                        "Continue to payment"
+                      )}
+                    </button>
+                    <p className="mt-3 flex items-start gap-1.5 rounded-xl bg-white px-3 py-2 text-[11px] text-gray-500">
+                      <Info size={12} className="mt-0.5 shrink-0 text-gold" />
+                      No additional fees. Chapa only charges once your payment is confirmed.
+                    </p>
+                  </div>
+                </div>
+              </aside>
             </div>
           )}
 
