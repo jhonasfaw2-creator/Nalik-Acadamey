@@ -4,13 +4,10 @@ import { useState, useCallback } from "react";
 import Navbar from "@/components/Navbar";
 import Hero from "@/sections/Hero";
 import About from "@/sections/About";
-import WhatWeTeach from "@/sections/WhatWeTeach";
 import Courses from "@/sections/Courses";
-import OurPrograms from "@/sections/OurPrograms";
-import HowItWorks from "@/sections/HowItWorks";
 import Founders from "@/sections/Founders";
 import OurWork from "@/sections/OurWork";
-import HowYouLearn from "@/sections/HowYouLearn";
+import { CreatorsAndStreamers, BusinessCollaborators } from "@/sections/Collaborations";
 import Contact from "@/sections/Contact";
 import Footer from "@/components/Footer";
 import ApplicationForm from "@/components/ApplicationForm";
@@ -40,14 +37,11 @@ export default function HomeClient() {
       <Hero onApplyClick={openForm} />
 
       <About />
-      <WhatWeTeach />
-
       <Courses onApplyWithCourse={openFormWithCourse} />
-      <OurPrograms />
-      <HowItWorks />
       <Founders />
       <OurWork />
-      <HowYouLearn />
+      <CreatorsAndStreamers />
+      <BusinessCollaborators />
       <Contact onApplyClick={openForm} />
       <Footer onApplyClick={openForm} />
 

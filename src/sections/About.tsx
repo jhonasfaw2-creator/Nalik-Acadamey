@@ -91,35 +91,43 @@ export default function About() {
   };
 
   return (
-    <section id="about" ref={sectionRef} className="bg-warm-white px-4 py-20 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">{content.badge}</p>
+    <section id="about" ref={sectionRef} className="bg-warm-white px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-6 sm:mb-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gold sm:text-sm">{content.badge}</p>
+        </div>
 
-        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
-          <div ref={textRef}>
-            <h2 className="text-3xl font-bold leading-snug text-navy sm:text-4xl">{content.title}</h2>
-            <p className="mt-6 text-base leading-relaxed text-gray-600">{content.paragraph1}</p>
-            <p className="mt-4 text-base leading-relaxed text-gray-600">{content.paragraph2}</p>
+        <div className="grid items-center gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:gap-12">
+          <div ref={textRef} className="max-w-xl">
+            <h2 className="text-3xl font-bold leading-tight text-navy sm:text-4xl lg:text-[2.75rem] lg:leading-[1.05]">
+              {content.title}
+            </h2>
+            <div className="mt-5 space-y-4 text-base leading-relaxed text-gray-600 sm:text-[1.05rem]">
+              <p>{content.paragraph1}</p>
+              <p>{content.paragraph2}</p>
+            </div>
           </div>
 
-          <div ref={videoRef}>
-            <div className="relative mx-auto max-w-md overflow-hidden rounded-lg bg-navy shadow-xl">
-              <video
-                ref={videoElRef}
-                muted={isMuted}
-                loop
-                playsInline
-                preload="metadata"
-                poster={content.poster}
-                className="h-auto w-full object-cover"
-              >
-                <source src={content.video} type="video/mp4" />
-              </video>
+          <div ref={videoRef} className="flex justify-center lg:justify-end">
+            <div className="relative w-full max-w-[22rem] overflow-hidden rounded-[1.75rem] border border-gray-200 bg-navy shadow-[0_18px_60px_-28px_rgba(21,27,41,0.35)]">
+              <div className="aspect-[3/4] overflow-hidden bg-navy">
+                <video
+                  ref={videoElRef}
+                  muted={isMuted}
+                  loop
+                  playsInline
+                  preload="metadata"
+                  poster={content.poster}
+                  className="h-full w-full object-cover opacity-95"
+                >
+                  <source src={content.video} type="video/mp4" />
+                </video>
+              </div>
 
               <button
                 onClick={toggleSound}
                 aria-label={isMuted ? "Unmute video" : "Mute video"}
-                className="absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-navy/70 text-white backdrop-blur-sm transition-colors hover:bg-navy/90"
+                className="absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/85 text-navy shadow-sm backdrop-blur-sm transition-transform duration-200 hover:scale-105"
               >
                 {isMuted ? (
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

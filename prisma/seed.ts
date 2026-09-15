@@ -42,17 +42,6 @@ async function main() {
     { section: "our-programs", key: "item3_text", value: "Go beyond basic corrections. Learn professional color grading workflows in DaVinci Resolve, the same tool used on major Hollywood productions." },
     { section: "our-programs", key: "item4_title", value: "Portfolio-Ready Output" },
     { section: "our-programs", key: "item4_text", value: "Every course ends with a portfolio project. You graduate with real work to show employers or clients, not just a certificate of attendance." },
-    // How It Works
-    { section: "how-it-works", key: "badge", value: "How It Works" },
-    { section: "how-it-works", key: "title", value: "Four simple steps to get started." },
-    { section: "how-it-works", key: "step1_title", value: "Choose Your Course" },
-    { section: "how-it-works", key: "step1_text", value: "Browse our programs and pick the one that matches your goals: video editing, graphic design, or color grading." },
-    { section: "how-it-works", key: "step2_title", value: "Submit Your Application" },
-    { section: "how-it-works", key: "step2_text", value: "Fill out the short application form with your details, experience level, and motivation. Takes less than two minutes." },
-    { section: "how-it-works", key: "step3_title", value: "Get Contacted" },
-    { section: "how-it-works", key: "step3_text", value: "Our team reviews your application and reaches out to discuss next steps, scheduling, and any questions you have." },
-    { section: "how-it-works", key: "step4_title", value: "Start Learning" },
-    { section: "how-it-works", key: "step4_text", value: "Jump into hands-on classes with real projects. Build your skills week by week and leave with a professional portfolio." },
     // How You Learn
     { section: "how-you-learn", key: "badge", value: "How You Learn" },
     { section: "how-you-learn", key: "title", value: "A learning experience built around practice, not theory." },

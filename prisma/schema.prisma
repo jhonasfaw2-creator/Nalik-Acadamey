@@ -27,16 +27,18 @@ model Content {
 
 // ── Courses ───────────────────────────────────────────
 model Course {
-  id            String   @id @default(cuid())
-  title         String
-  description   String
-  price         Int      @default(0)       // price in Birr
-  discountPrice Int?                        // discounted price in Birr
-  discountLabel String?                     // e.g. "Opening Offer, 19% off"
-  active        Boolean  @default(true)     // shown in registration form
-  sortOrder     Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id               String    @id @default(cuid())
+  title            String
+  description      String
+  price            Int       @default(0)       // price in Birr
+  discountPrice    Int?                         // discounted price in Birr
+  discountLabel    String?                      // e.g. "Opening Offer, 19% off"
+  discountStartAt  DateTime?                    // when the discounted price begins
+  discountEndAt    DateTime?                    // when the discounted price ends
+  active           Boolean   @default(true)     // shown in registration form
+  sortOrder        Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([active])
   applications Application[]

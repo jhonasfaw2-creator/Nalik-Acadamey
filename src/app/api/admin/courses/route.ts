@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const { title, description, price, discountPrice, discountLabel, active, sortOrder } = parsed.data;
+    const { title, description, price, discountPrice, discountLabel, discountStartAt, discountEndAt, active, sortOrder } = parsed.data;
 
     const course = await prisma.course.create({
       data: {
@@ -40,6 +40,8 @@ export async function POST(request: NextRequest) {
         price,
         discountPrice: discountPrice ?? null,
         discountLabel: discountLabel || null,
+        discountStartAt: discountStartAt ?? null,
+        discountEndAt: discountEndAt ?? null,
         active: active ?? true,
         sortOrder: sortOrder ?? 0,
       },

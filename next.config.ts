@@ -46,15 +46,21 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      // Baseline security headers for all responses. A full CSP is deliberately
-      // omitted for now (Next.js hydration scripts would need careful
-      // nonce/hash handling — add one before launch if you want CSP).
+      // Baseline security headers for all responses. A full, strict CSP is kept
+      // deliberately conservative here because Next.js emits inline scripts and
+      // CSS during hydration; a nonce-based CSP is the safer next step for a
+      // hard lockdown before public launch.
       {
         source: "/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-XSS-Protection", value: "0" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
           {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=(), payment=()",

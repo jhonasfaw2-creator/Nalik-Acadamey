@@ -189,9 +189,14 @@ export default function Courses({ onApplyWithCourse }: CoursesProps) {
               ))}
             </dl>
             <p className="mt-5 text-base leading-relaxed text-gray-600">{PROGRAMME.description}</p>
-            <p className="mt-4 text-sm leading-relaxed text-gray-600 border-t border-dashed border-gray-200 pt-4">
-              <span className="font-semibold text-navy">Opportunity.</span> {PROGRAMME.opportunity}
-            </p>
+            <div className="mt-4 rounded-xl border border-gold/25 bg-gold/5 p-4 sm:p-5">
+              <span className="inline-flex items-center rounded-full border border-gold/30 bg-white/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-gold">
+                Real-World Opportunities
+              </span>
+              <p className="mt-3 text-sm leading-relaxed text-gray-600">
+                <span className="font-semibold text-navy">Strong students may be introduced to real client and project opportunities</span> through the academy, depending on fit, readiness, and project requirements.
+              </p>
+            </div>
           </div>
 
           <div className="mt-8 grid gap-6 sm:grid-cols-3">
@@ -292,9 +297,12 @@ export default function Courses({ onApplyWithCourse }: CoursesProps) {
 
           <p className="mt-5 text-base leading-relaxed text-gray-600">{PROGRAMME.description}</p>
 
-          <div className="mt-4 rounded-lg border border-gold/30 bg-gold/5 p-4">
-            <p className="text-sm leading-relaxed text-gray-600">
-              <span className="font-semibold text-navy">Opportunity.</span> {PROGRAMME.opportunity}
+          <div className="mt-4 rounded-xl border border-gold/25 bg-gold/5 p-4 sm:p-5">
+            <span className="inline-flex items-center rounded-full border border-gold/30 bg-white/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-gold">
+              Real-World Opportunities
+            </span>
+            <p className="mt-3 text-sm leading-relaxed text-gray-600">
+              <span className="font-semibold text-navy">Strong students may be introduced to real client and project opportunities</span> through the academy, depending on fit, readiness, and project requirements.
             </p>
           </div>
         </div>

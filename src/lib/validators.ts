@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+const nullableDate = z.preprocess((value) => {
+  if (value === "" || value === null || value === undefined) return null;
+  if (value instanceof Date) return value;
+  return new Date(value as string);
+}, z.date().nullable().optional());
+
 export const courseSchema = z.object({
   id: z.string().optional(),
   title: z.string().min(1, "Title is required").max(200),
@@ -7,6 +13,8 @@ export const courseSchema = z.object({
   price: z.number().int().nonnegative(),
   discountPrice: z.number().int().nonnegative().nullable().optional(),
   discountLabel: z.string().max(200).nullable().optional(),
+  discountStartAt: nullableDate,
+  discountEndAt: nullableDate,
   active: z.boolean().default(true),
   sortOrder: z.number().int().nonnegative().default(0),
 });

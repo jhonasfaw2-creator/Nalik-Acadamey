@@ -75,11 +75,10 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
             : "bg-transparent"
         )}
       >
-        {/* Top accent line */}
         <div
           className={cn(
-            "h-[2px] transition-all duration-500",
-            scrolled ? "bg-gold/80" : "bg-gradient-to-r from-transparent via-gold/40 to-transparent"
+            "h-px transition-all duration-500",
+            scrolled ? "bg-gold/80" : "bg-gold/60"
           )}
         />
 
@@ -119,24 +118,15 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
                   href={link.href}
                   onClick={(e) => { e.preventDefault(); handleNavClick(link.href); }}
                   className={cn(
-                    "relative px-4 py-2 text-[13px] font-semibold uppercase tracking-wider transition-all duration-300",
+                    "px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.16em] transition-all duration-300",
                     isActive
-                      ? scrolled
-                        ? "text-gold"
-                        : "text-gold"
+                      ? "text-gold"
                       : scrolled
                         ? "text-navy/60 hover:text-navy"
-                        : "text-white/60 hover:text-white"
+                        : "text-white/70 hover:text-white"
                   )}
                 >
                   {link.label}
-                  {/* Active dot indicator */}
-                  <span
-                    className={cn(
-                      "absolute bottom-0 left-1/2 -translate-x-1/2 h-[3px] rounded-full bg-gold transition-all duration-300",
-                      isActive ? "w-4 opacity-100" : "w-0 opacity-0"
-                    )}
-                  />
                 </a>
               );
             })}
