@@ -118,7 +118,7 @@ export default function SelectedWork() {
         {/* Featured: first cut leads, two more follow — an editorial 3-piece composition */}
         <div className="mt-12">
           <SectionLabel
-            title="Long-form editing"
+            title="Some of his work"
             subtitle="YouTube · Story, pacing, and retention."
             color="navy"
           />
@@ -160,16 +160,6 @@ function SectionLabel({
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3">
-        <span className="inline-flex h-1.5 w-16 overflow-hidden rounded-full">
-          <span
-            className="h-full w-full"
-            style={
-              color === "navy"
-                ? { backgroundColor: "var(--color-navy)" }
-                : { backgroundColor: "var(--color-gold)" }
-            }
-          />
-        </span>
         <h3 className="text-xl font-semibold tracking-tight text-navy sm:text-2xl">{title}</h3>
       </div>
       {subtitle && <p className="text-sm text-gray-500 sm:text-right">{subtitle}</p>}

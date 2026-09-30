@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Save, Loader2 } from "lucide-react";
+import { Save, Loader2, KeyRound, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 
 const SETTING_FIELDS = [
   { key: "academy_name", label: "Academy Name", placeholder: "Nalik Academy" },
@@ -16,6 +16,14 @@ export default function AdminSettings() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // ── Change password state ──
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMessage, setPwMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   const reload = useCallback(() => {
     setError("");
@@ -39,6 +47,40 @@ export default function AdminSettings() {
       });
       if (res.ok) setSaved(true);
     } finally { setSaving(false); }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwMessage(null);
+    if (newPassword.length < 8) {
+      setPwMessage({ ok: false, text: "New password must be at least 8 characters." });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwMessage({ ok: false, text: "New passwords do not match." });
+      return;
+    }
+    setPwSaving(true);
+    try {
+      const res = await fetch("/api/admin/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.success) {
+        setPwMessage({ ok: true, text: "Password changed. Use the new password next time you sign in." });
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      } else {
+        setPwMessage({ ok: false, text: d.error || "Failed to change password." });
+      }
+    } catch {
+      setPwMessage({ ok: false, text: "Connection error. Please try again." });
+    } finally {
+      setPwSaving(false);
+    }
   };
 
   if (loading) {
@@ -87,6 +129,88 @@ export default function AdminSettings() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Change Password */}
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
+            <KeyRound size={14} /> Change Password
+          </h2>
+          <p className="mb-4 text-xs text-gray-400">
+            Replace the current (temporary) password with your own. The new password is required at
+            next sign-in.
+          </p>
+          {pwMessage && (
+            <div
+              className={`mb-4 flex items-start gap-2 rounded-lg px-4 py-3 text-sm ${
+                pwMessage.ok
+                  ? "border border-green-100 bg-green-50 text-green-700"
+                  : "border border-red-100 bg-red-50 text-red-600"
+              }`}
+              role="alert"
+            >
+              {pwMessage.ok && <CheckCircle2 size={16} className="mt-0.5 shrink-0" />}
+              <span>{pwMessage.text}</span>
+            </div>
+          )}
+          <form onSubmit={handleChangePassword} className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label htmlFor="pw-current" className="mb-1 block text-sm font-medium text-gray-700">Current password</label>
+              <div className="relative">
+                <input
+                  id="pw-current"
+                  type={showPw ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  autoComplete="current-password"
+                  className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 pr-10 text-sm text-navy focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
+                />
+              </div>
+            </div>
+            <div>
+              <label htmlFor="pw-new" className="mb-1 block text-sm font-medium text-gray-700">New password</label>
+              <div className="relative">
+                <input
+                  id="pw-new"
+                  type={showPw ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  autoComplete="new-password"
+                  className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 pr-10 text-sm text-navy focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw(!showPw)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  tabIndex={-1}
+                  aria-label={showPw ? "Hide passwords" : "Show passwords"}
+                >
+                  {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="pw-confirm" className="mb-1 block text-sm font-medium text-gray-700">Confirm new password</label>
+              <input
+                id="pw-confirm"
+                type={showPw ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
+              />
+            </div>
+            <div className="sm:col-span-3">
+              <button
+                type="submit"
+                disabled={pwSaving || !currentPassword || !newPassword || !confirmPassword}
+                className="inline-flex items-center gap-2 rounded-lg bg-gold px-5 py-2 text-sm font-semibold text-navy transition-colors hover:bg-gold-hover disabled:opacity-50"
+              >
+                {pwSaving ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
+                {pwSaving ? "Updating..." : "Update Password"}
+              </button>
+            </div>
+          </form>
         </div>
 
         {/* Payment Settings */}

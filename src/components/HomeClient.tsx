@@ -7,7 +7,7 @@ import About from "@/sections/About";
 import Courses from "@/sections/Courses";
 import Founders from "@/sections/Founders";
 import OurWork from "@/sections/OurWork";
-import { CreatorsAndStreamers, BusinessCollaborators } from "@/sections/Collaborations";
+import Collaborations from "@/sections/Collaborations";
 import Contact from "@/sections/Contact";
 import Footer from "@/components/Footer";
 import ApplicationForm from "@/components/ApplicationForm";
@@ -40,8 +40,7 @@ export default function HomeClient() {
       <Courses onApplyWithCourse={openFormWithCourse} />
       <Founders />
       <OurWork />
-      <CreatorsAndStreamers />
-      <BusinessCollaborators />
+      <Collaborations />
       <Contact onApplyClick={openForm} />
       <Footer onApplyClick={openForm} />
 

@@ -1,22 +1,65 @@
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { SignJWT } from "jose";
 import { getSessionSecret, COOKIE_NAME } from "@/lib/auth";
 import { readJson } from "@/lib/http";
+import { prisma } from "@/lib/prisma";
+
+// The admin password can be changed from the admin panel (Settings → Change
+// Password). The changed password is stored as a bcrypt hash in the Setting
+// table and takes precedence over the ADMIN_PASSWORD env fallback.
+const PASSWORD_HASH_KEY = "admin_password_hash";
 
 // Fail closed in production: without an ADMIN_PASSWORD the admin panel must not
 // silently default to a well-known password. Local development keeps a
 // convenience default so the app boots without env config.
-function getAdminPassword(): string {
-  const password = process.env.ADMIN_PASSWORD;
-  if (!password) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("ADMIN_PASSWORD is not set — refusing to enable admin login in production");
-    }
-    console.warn("[auth] ADMIN_PASSWORD not set — using insecure dev default. Set it in .env for real access.");
-    return "admin123";
+function getAdminPasswordPlain(): string | undefined {
+  return process.env.ADMIN_PASSWORD?.trim();
+}
+
+function getAdminPasswordHash(): string | undefined {
+  // Support ADMIN_PASSWORD_HASH for hashed password deployments.
+  return process.env.ADMIN_PASSWORD_HASH?.trim();
+}
+
+function ensureAdminConfig(): void {
+  if (!getAdminPasswordPlain() && !getAdminPasswordHash() && process.env.NODE_ENV === "production") {
+    throw new Error("ADMIN_PASSWORD or ADMIN_PASSWORD_HASH is not set — refusing to enable admin login in production");
   }
-  return password;
+  if (!getAdminPasswordPlain() && !getAdminPasswordHash()) {
+    console.warn("[auth] ADMIN_PASSWORD not set — using insecure dev default. Set ADMIN_PASSWORD_HASH in production.");
+    // Note: dev default not returned as a password here — comparisons will
+    // fallback to the literal 'admin123' for local development only.
+  }
+}
+
+async function passwordsMatch(candidate: string): Promise<boolean> {
+  // 1. DB hash set via the panel's Change Password — always wins.
+  const stored = await prisma.setting
+    .findUnique({ where: { key: PASSWORD_HASH_KEY }, select: { value: true } })
+    .catch(() => null);
+  if (stored?.value) {
+    try {
+      return bcrypt.compareSync(candidate, stored.value);
+    } catch {
+      return false;
+    }
+  }
+  // 2. Env-provided hash (ADMIN_PASSWORD_HASH) for hash-only deployments.
+  const envHash = getAdminPasswordHash();
+  if (envHash) {
+    try {
+      return bcrypt.compareSync(candidate, envHash);
+    } catch {
+      return false;
+    }
+  }
+  // 3. Env plaintext (the "temporary password" flow), constant-time compare.
+  const expected = getAdminPasswordPlain() ?? "admin123";
+  const a = Buffer.from(candidate);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 // ── Brute-force protection ────────────────────────────────────────────
@@ -60,14 +103,6 @@ function recordFailure(ip: string): void {
   }
 }
 
-// Constant-time comparison so a password guess never leaks how many leading
-// characters matched.
-function passwordsMatch(candidate: string, expected: string): boolean {
-  const a = Buffer.from(candidate);
-  const b = Buffer.from(expected);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
-
 // ── POST /api/admin/auth — Login ──────────────────────
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
@@ -86,7 +121,8 @@ export async function POST(request: NextRequest) {
     }
     const { password } = body as { password?: unknown };
 
-    if (typeof password !== "string" || !passwordsMatch(password, getAdminPassword())) {
+    ensureAdminConfig();
+    if (typeof password !== "string" || !(await passwordsMatch(password))) {
       recordFailure(ip);
       return NextResponse.json(
         { error: "Invalid password" },

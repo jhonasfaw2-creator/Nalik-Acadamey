@@ -1,162 +1,42 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, User } from "lucide-react";
+import Image from "next/image";
+import { ArrowRight, Asterisk } from "lucide-react";
 import { SOCIAL_LINKS } from "@/lib/socials";
 
-interface CollaborationLink {
-  label: string;
-  url: string;
-}
+const INSTAGRAM_ICON =
+  SOCIAL_LINKS.find((l) => l.label === "Instagram")?.icon ?? "";
+const TIKTOK_ICON =
+  SOCIAL_LINKS.find((l) => l.label === "TikTok")?.icon ?? "";
 
-interface CreatorProfile {
-  name: string;
-  role: string;
-  description?: string;
-  avatarUrl?: string;
-  links?: CollaborationLink[];
-}
-
-interface BusinessCollaborator {
-  name: string;
-  role: string;
-  description?: string;
-  logoUrl?: string;
-  profileUrl?: string;
-  links?: CollaborationLink[];
-}
-
-const MY_G_MEMBERS: CreatorProfile[] = [
-  {
-    name: "LOFTY HARON",
-    role: "Streamer",
-    description: "Live creator and community storyteller.",
-    avatarUrl: "/assets/Collabritors/Loftyharon.jpeg",
-    links: [{ label: "Instagram", url: "" }],
-  },
-  {
-    name: "SEYOUM TAD",
-    role: "Streamer",
-    description: "Content creator and streamer",
-    avatarUrl: "/assets/Collabritors/SeyoumTad.jpeg",
-    links: [{ label: "Instagram", url: "" }],
-  },
-  {
-    name: "NATTY2COLD",
-    role: "Streamer",
-    description: "Creator and streamer",
-    avatarUrl: "/assets/Collabritors/Natty2cold.jpeg",
-    links: [{ label: "TikTok", url: "" }],
-  },
-  {
-    name: "Kaya Faya",
-    role: "Streamer",
-    description: "Creator and streamer",
-    avatarUrl: "/assets/Collabritors/Kayafaya.jpeg",
-    links: [{ label: "Instagram", url: "" }],
-  },
+const CREATORS = [
+  { name: "Lofty Haron", role: "Streamer", image: "/assets/Collabritors/Loftyharon.jpeg", tiktok: "", instagram: "" },
+  { name: "Seyoum Tad", role: "Streamer", image: "/assets/Collabritors/SeyoumTad.jpeg", tiktok: "", instagram: "" },
+  { name: "Natty2cold", role: "Streamer", image: "/assets/Collabritors/Natty2cold.jpeg", tiktok: "", instagram: "" },
+  { name: "Kaya Faya", role: "Streamer", image: "/assets/Collabritors/Kayafaya.jpeg", tiktok: "", instagram: "" },
+  { name: "Shiro B", role: "Creator & Host", image: "/assets/Collabritors/shirobaee.png", tiktok: "", instagram: "" },
+  { name: "TAT", role: "Streamer", image: "/assets/Collabritors/TAT.jpeg", tiktok: "", instagram: "" },
+  { name: "Lil Kidus", role: "Creator & Stylist", image: "/assets/Collabritors/LilKidus.jpg", tiktok: "", instagram: "" },
 ];
 
-const SOLO_CREATORS: CreatorProfile[] = [
-  {
-    name: "Lil Kidus",
-    role: "Creator & stylist",
-    description: "Fashion-forward creator bringing strong visual identity and lifestyle storytelling.",
-    avatarUrl: "/assets/Collabritors/LilKidus.jpg",
-    links: [{ label: "Instagram", url: "" }],
-  },
-  {
-    name: "ShiroBaee",
-    role: "Creator & host",
-    description: "Creator and on-camera personality contributing to media and brand storytelling.",
-    avatarUrl: "/assets/Collabritors/shirobaee.png",
-    links: [{ label: "Instagram", url: "" }],
-  },
-  {
-    name: "TAT",
-    role: "Streamer",
-    description: "Digital creator and streamer",
-    avatarUrl: "/assets/Collabritors/TAT.jpeg",
-    links: [{ label: "TikTok", url: "" }],
-  },
+const BUSINESSES = [
+  { name: "Salt Burger", role: "Cafe & Hospitality", image: "/assets/Collabritors/SaltBurger.jpeg" },
+  { name: "Yorgo", role: "Business", image: "/assets/Collabritors/Yorgo.jpeg" },
 ];
 
-const BUSINESS_COLLABORATORS: BusinessCollaborator[] = [
-  {
-    name: "Salt Burger",
-    role: "Cafe & hospitality partner",
-    description: "A neighborhood cafe partner supporting community-based creative collaborations and local culture.",
-    logoUrl: "/assets/Collabritors/SaltBurger.jpeg",
-    profileUrl: "",
-    links: [{ label: "Instagram", url: "" }],
-  },
-  {
-    name: "Yorgo",
-    role: "Business partner",
-    description: "Creative and commercial partner connected to the academy’s local network and production work.",
-    logoUrl: "/assets/Collabritors/Yorgo.jpeg",
-    profileUrl: "",
-    links: [{ label: "Instagram", url: "" }],
-  },
-];
-
-const PLATFORM_ICONS: Record<string, string> = {
-  ...Object.fromEntries(SOCIAL_LINKS.map((link) => [link.label.toLowerCase(), link.icon])),
-  website:
-    "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm7.93 9h-3.02a15.6 15.6 0 0 0-1.2-5.4A8.03 8.03 0 0 1 19.93 11zM12 4.06c.9 1.3 1.6 3.4 1.78 6.94H10.2c.19-3.54.9-5.64 1.8-6.94zM8.29 5.6A15.6 15.6 0 0 0 7.09 11H4.07a8.03 8.03 0 0 1 4.22-5.4zM4.07 13h3.02c.13 2 .55 3.85 1.2 5.4A8.03 8.03 0 0 1 4.07 13zM12 19.94c-.9-1.3-1.6-3.4-1.78-6.94h3.56c-.19 3.54-.9 5.64-1.78 6.94zm3.71-1.54c.65-1.55 1.07-3.4 1.2-5.4h3.02a8.03 8.03 0 0 1-4.22 5.4z",
-  twitch:
-    "M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0 1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z",
-  x: "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z",
-  linkedin:
-    "M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452z",
-};
-
-const PLATFORM_ALIASES: Record<string, string> = {
-  ig: "instagram",
-  insta: "instagram",
-  yt: "youtube",
-  twitter: "x",
-};
-
-function platformIcon(label: string) {
-  const key = label.toLowerCase().replace(/[^a-z]/g, "");
-  const direct = PLATFORM_ALIASES[key] ?? key;
-  if (PLATFORM_ICONS[direct]) return PLATFORM_ICONS[direct];
-  const match = Object.keys(PLATFORM_ICONS).find((name) => key.includes(name));
-  if (!match) return "";
-  return PLATFORM_ICONS[PLATFORM_ALIASES[match] ?? match] ?? "";
-}
-
-const TONE = {
-  light: {
-    tile: "bg-white ring-gray-200/80",
-    initials: "text-navy/25",
-    avatar: "bg-navy/5 ring-gray-200",
-    avatarIcon: "text-navy/25",
-    chip: "border-gray-200 bg-warm-white text-navy hover:border-gold/50 hover:bg-white hover:text-gold",
-  },
-  dark: {
-    tile: "bg-white ring-white/20",
-    initials: "text-navy/30",
-    avatar: "bg-white/10 ring-white/15",
-    avatarIcon: "text-white/25",
-    chip: "border-white/15 bg-white/5 text-white/70 hover:border-gold/50 hover:text-gold",
-  },
-} as const;
-
-type Tone = keyof typeof TONE;
-
-function useReveal<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [ready, setReady] = useState(false);
+export default function Collaborations() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setReady(true);
+    setMounted(true);
   }, []);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el || !ready) return;
+    const el = sectionRef.current;
+    if (!el || !mounted) return;
+
     el.classList.add("reveal", "stagger-children");
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -169,271 +49,209 @@ function useReveal<T extends HTMLElement>() {
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [ready]);
-
-  return ref;
-}
-
-export function CreatorsAndStreamers() {
-  const sectionRef = useReveal<HTMLElement>();
-  const myGroupMembers = MY_G_MEMBERS.filter((person) => person.name.trim().length > 0);
-  const soloCreators = SOLO_CREATORS.filter((person) => person.name.trim().length > 0);
+  }, [mounted]);
 
   return (
-    <section id="creators" ref={sectionRef} className="bg-warm-white px-4 py-20 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="reveal-child max-w-2xl">
-          <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">Collaborations</p>
-          <h2 className="text-3xl font-bold leading-snug text-navy sm:text-4xl">Creators &amp; Streamers</h2>
-          <p className="mt-4 text-base leading-relaxed text-gray-600">
-            Creative talent and social-first personalities connected through the academy’s production work.
+    <section
+      id="collaborations"
+      ref={sectionRef}
+      className="relative overflow-hidden bg-warm-white px-4 py-16 sm:px-6 lg:px-8"
+    >
+      {/* Warm color glow for energy */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-24 left-1/2 h-72 w-[36rem] -translate-x-1/2 rounded-full bg-gold/15 blur-[100px]"
+      />
+
+      <div className="relative mx-auto max-w-5xl">
+        {/* ── Header ─────────────────────────────── */}
+        <div className="reveal-child mx-auto max-w-xl text-center">
+          <p className="flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold">
+            <Asterisk size={15} strokeWidth={2.5} aria-hidden="true" />
+            Client Work
+          </p>
+          <h2 className="mt-3 text-3xl font-black leading-tight tracking-tight text-navy sm:text-4xl">
+            Some of his works.
+          </h2>
+          <p className="mt-3 text-base text-gray-500">
+            Freelance video editing for streamers, content creators, and
+            businesses — made for social media.
           </p>
         </div>
 
-        {myGroupMembers.length > 0 && (
-          <div className="reveal-child mt-10 overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-[0_24px_60px_-40px_rgba(15,23,42,0.35)]">
-            <div className="flex items-center justify-between border-b border-gray-200 bg-warm-white px-5 py-3 sm:px-6">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">MY G</span>
-              <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-gold">Group members</span>
-            </div>
+        {/* ── Creators & Streamers ───────────────── */}
+        <div className="reveal-child mt-12">
+          <p className="text-center text-xs font-semibold uppercase tracking-widest text-gray-400">
+            Creators &amp; Streamers
+          </p>
+          <div className="mt-8 grid grid-cols-2 gap-x-5 gap-y-10 sm:grid-cols-3 lg:grid-cols-4">
+            {CREATORS.map((creator, i) => (
+              <CastCard key={creator.name} creator={creator} index={i} />
+            ))}
 
-            <div className="flex gap-4 overflow-x-auto px-4 py-5 sm:px-6">
-              {myGroupMembers.map((person, index) => (
-                <CreatorCard key={`${person.name}-${index}`} person={person} index={index} />
-              ))}
-            </div>
+            {/* "You?" invitation tile — fills the 8th slot, adds energy */}
+            <article className="reveal-child group flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-gold/50 bg-gold/[0.06] p-4 text-center transition-all duration-300 hover:-translate-y-1 hover:border-gold hover:bg-gold/10">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-gold text-2xl font-black text-navy shadow-lg shadow-gold/30 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6">
+                ?
+              </span>
+              <p className="mt-3 text-base font-bold text-navy">You next?</p>
+              <a
+                href="#contact"
+                className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-gold hover:text-gold-hover"
+              >
+                Start a project
+                <ArrowRight size={13} aria-hidden="true" />
+              </a>
+            </article>
           </div>
-        )}
+        </div>
 
-        {soloCreators.length > 0 && (
-          <div className="reveal-child mt-10 overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-[0_24px_60px_-40px_rgba(15,23,42,0.35)]">
-            <div className="flex items-center justify-between border-b border-gray-200 bg-warm-white px-5 py-3 sm:px-6">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">Featured creators</span>
-              <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-gold">Individual profiles</span>
-            </div>
-
-            <div className="flex gap-4 overflow-x-auto px-4 py-5 sm:px-6">
-              {soloCreators.map((person, index) => (
-                <CreatorCard key={`${person.name}-${index}`} person={person} index={index} />
-              ))}
-            </div>
+        {/* ── Brands & Businesses ────────────────── */}
+        <div className="reveal-child mt-14">
+          <p className="text-center text-xs font-semibold uppercase tracking-widest text-gray-400">
+            Brands &amp; Businesses
+          </p>
+          <div className="mx-auto mt-5 flex max-w-2xl flex-wrap items-center justify-center gap-5">
+            {BUSINESSES.map((business, i) => (
+              <article
+                key={business.name}
+                className="group text-center"
+                style={{ transitionDelay: `${i * 0.08}s` }}
+              >
+                <div
+                  className={`relative aspect-[16/9] w-[122px] overflow-hidden rounded-xl ring-1 ring-gray-200 transition-all duration-300 group-hover:-translate-y-0.5 group-hover:shadow-[0_12px_24px_-10px_rgba(226,160,51,0.35)] group-hover:ring-gold/60 sm:w-[162px] ${
+                    i % 2 === 0
+                      ? "group-hover:rotate-[0.5deg]"
+                      : "group-hover:-rotate-[0.5deg]"
+                  }`}
+                >
+                  <Image
+                    src={business.image}
+                    alt={business.name}
+                    fill
+                    sizes="(max-width: 640px) 122px, 162px"
+                    className="object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-navy/70 via-navy/10 to-transparent" />
+                  <div className="absolute inset-x-0 bottom-0 p-2.5">
+                    <p className="text-sm font-black text-white drop-shadow-sm">
+                      {business.name}
+                    </p>
+                    <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-white/70">
+                      {business.role}
+                    </p>
+                  </div>
+                </div>
+              </article>
+            ))}
           </div>
-        )}
+        </div>
+
+        {/* ── Tiny CTA ───────────────────────────── */}
+        <div className="reveal-child mt-12 text-center">
+          <a
+            href="#contact"
+            className="group inline-flex items-center gap-1.5 text-sm font-semibold text-navy transition-colors hover:text-gold"
+          >
+            Want your content professionally edited?
+            <ArrowRight
+              size={14}
+              aria-hidden="true"
+              className="transition-transform duration-200 group-hover:translate-x-0.5"
+            />
+          </a>
+        </div>
       </div>
     </section>
   );
 }
 
-function CreatorCard({ person, index }: { person: CreatorProfile; index: number }) {
-  const validLinks = (person.links ?? []).filter((link) => link.url && link.url.trim().length > 0);
+function CastCard({
+  creator,
+  index,
+}: {
+  creator: (typeof CREATORS)[number];
+  index: number;
+}) {
+  const tilt = index % 2 === 0 ? "group-hover:rotate-1" : "group-hover:-rotate-1";
 
   return (
     <article
-      className="reveal-child min-w-[250px] flex-1 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-gold/40 hover:shadow-lg sm:min-w-[260px]"
-      style={{ transitionDelay: `${index * 0.06}s` }}
+      className="reveal-child group mx-auto w-full max-w-[126px] text-center sm:max-w-[140px]"
+      style={{ transitionDelay: `${(index % 4) * 0.06}s` }}
     >
-      <div className="flex items-center gap-3">
-        <Avatar name={person.name} imageUrl={person.avatarUrl} tone="light" size="lg" />
-        <div className="min-w-0">
-          <h3 className="truncate text-base font-semibold text-navy">{person.name}</h3>
-          <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-gray-400">{person.role}</p>
+      <div
+        className={`relative aspect-[4/5] overflow-hidden rounded-3xl ring-1 ring-gray-200 transition-all duration-300 group-hover:-translate-y-1.5 group-hover:shadow-[0_20px_40px_-12px_rgba(21,27,41,0.25)] group-hover:ring-2 group-hover:ring-gold ${tilt}`}
+      >
+        <Image
+          src={creator.image}
+          alt={creator.name}
+          fill
+          sizes="(max-width: 640px) 126px, 140px"
+          className="object-cover transition-transform duration-500 group-hover:scale-[1.06]"
+        />
+
+        {/* Role sticker */}
+        <span className="absolute left-2.5 top-2.5 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-navy shadow-sm backdrop-blur-sm">
+          {creator.role}
+        </span>
+
+        {/* Social pills on photo */}
+        <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1.5 bg-gradient-to-t from-navy/80 via-navy/30 to-transparent pb-3 pt-8 opacity-0 transition-all duration-300 group-hover:opacity-100">
+          <SocialPill href={creator.tiktok} icon={TIKTOK_ICON} label={`${creator.name} on TikTok`} />
+          <SocialPill href={creator.instagram} icon={INSTAGRAM_ICON} label={`${creator.name} on Instagram`} />
         </div>
       </div>
 
-      {person.description && (
-        <p className="mt-3 text-sm leading-relaxed text-gray-600">{person.description}</p>
-      )}
-
-      {validLinks.length > 0 ? (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {validLinks.map((link) => (
-            <a
-              key={`${person.name}-${link.label}`}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${TONE.light.chip}`}
-            >
-              <PlatformIcon label={link.label} />
-              {link.label}
-            </a>
-          ))}
-        </div>
-      ) : (
-        <div className="mt-4 inline-flex rounded-full border border-dashed border-gray-300 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
-          Profile link coming soon
-        </div>
-      )}
+      {/* Name BELOW photo — cast style */}
+      <h3 className="mt-3 text-base font-bold tracking-tight text-navy sm:text-lg">
+        {creator.name}
+      </h3>
+      <p className="mt-0.5 text-xs font-medium uppercase tracking-[0.12em] text-gray-400 sm:text-[11px]">
+        {creator.role}
+      </p>
     </article>
   );
 }
 
-export function BusinessCollaborators() {
-  const sectionRef = useReveal<HTMLElement>();
-  const businesses = BUSINESS_COLLABORATORS.filter((entry) => entry.name.trim().length > 0);
+function SocialPill({
+  href,
+  icon,
+  label,
+}: {
+  href: string;
+  icon: string;
+  label: string;
+}) {
+  const classes =
+    "flex h-8 w-8 items-center justify-center rounded-full backdrop-blur-sm transition-all duration-200 " +
+    (href
+      ? "bg-white/90 text-navy hover:bg-gold hover:text-navy"
+      : "border border-dashed border-white/60 text-white/70");
 
-  return (
-    <section id="business-colaborators" ref={sectionRef} className="bg-white px-4 py-20 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="reveal-child max-w-2xl">
-          <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">Collaborations</p>
-          <h2 className="text-3xl font-bold leading-snug text-navy sm:text-4xl">Business Collaborators</h2>
-          <p className="mt-4 text-base leading-relaxed text-gray-600">
-            Professional businesses and partners the studio has worked with across creative and production projects.
-          </p>
-        </div>
-
-        {businesses.length > 0 && (
-          <div className="reveal-child mt-10 overflow-hidden rounded-3xl border border-gray-200 bg-warm-white shadow-[0_24px_60px_-40px_rgba(15,23,42,0.3)]">
-            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-5 py-3 sm:px-6">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">Business network</span>
-              <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-gold">Official logo placeholder</span>
-            </div>
-
-            <div className="flex gap-4 overflow-x-auto px-4 py-5 sm:px-6">
-              {businesses.map((business, index) => (
-                <BusinessCard key={`${business.name}-${index}`} business={business} index={index} />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function BusinessCard({ business, index }: { business: BusinessCollaborator; index: number }) {
-  const validLinks = (business.links ?? []).filter((link) => link.url && link.url.trim().length > 0);
-
-  return (
-    <article
-      className="reveal-child min-w-[230px] flex-1 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-gold/40 hover:shadow-lg"
-      style={{ transitionDelay: `${index * 0.06}s` }}
-    >
-      <div className="flex items-center justify-center rounded-2xl border border-gray-200 bg-warm-white p-4">
-        <BrandMark name={business.name} imageUrl={business.logoUrl} tone="light" size="lg" />
-      </div>
-
-      <h3 className="mt-4 text-center text-base font-semibold text-navy">{business.name}</h3>
-      <p className="mt-1 text-center text-[10px] uppercase tracking-[0.14em] text-gray-400">{business.role}</p>
-
-      {business.description && (
-        <p className="mt-3 text-center text-sm leading-relaxed text-gray-600">{business.description}</p>
-      )}
-
-      {validLinks.length > 0 ? (
-        <div className="mt-4 flex justify-center gap-2">
-          {validLinks.map((link) => (
-            <a
-              key={`${business.name}-${link.label}`}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${TONE.light.chip}`}
-            >
-              <PlatformIcon label={link.label} />
-              {link.label}
-            </a>
-          ))}
-        </div>
-      ) : (
-        <div className="mt-4 flex justify-center">
-          <div className="inline-flex rounded-full border border-dashed border-gray-300 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
-            Link coming soon
-          </div>
-        </div>
-      )}
-    </article>
-  );
-}
-
-function PlatformIcon({ label }: { label: string }) {
-  const path = platformIcon(label);
-
-  if (!path) {
-    return <ExternalLink size={11} className="shrink-0" aria-hidden="true" />;
+  if (!href) {
+    // Placeholder: dashed pill until a real URL is added.
+    return (
+      <span className={classes} title="Link coming soon" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d={icon} />
+        </svg>
+      </span>
+    );
   }
 
   return (
-    <svg className="h-3 w-3 shrink-0" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path d={path} />
-    </svg>
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={classes}
+      aria-label={label}
+      title={label}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <path d={icon} />
+      </svg>
+    </a>
   );
-}
-
-function BrandMark({
-  name,
-  imageUrl,
-  tone,
-  size = "md",
-}: {
-  name: string;
-  imageUrl?: string;
-  tone: Tone;
-  size?: "md" | "lg";
-}) {
-  const box = size === "lg" ? "h-20 w-20 sm:h-24 sm:w-24" : "h-16 w-16 sm:h-20 sm:w-20";
-
-  return (
-    <span className={`flex ${box} shrink-0 items-center justify-center overflow-hidden rounded-2xl ring-1 ${TONE[tone].tile}`}>
-      {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={`${name} logo`}
-          width={96}
-          height={96}
-          className="h-full w-full object-contain p-2.5"
-          loading="lazy"
-          decoding="async"
-        />
-      ) : (
-        <span className={`text-lg font-bold ${TONE[tone].initials}`} aria-hidden="true">
-          {initials(name)}
-        </span>
-      )}
-    </span>
-  );
-}
-
-function Avatar({
-  name,
-  imageUrl,
-  tone,
-  size,
-}: {
-  name: string;
-  imageUrl?: string;
-  tone: Tone;
-  size: "md" | "lg";
-}) {
-  const box = size === "lg" ? "h-20 w-20" : "h-14 w-14";
-  const hasName = name.trim().length > 0;
-
-  return (
-    <span className={`flex ${box} shrink-0 items-center justify-center overflow-hidden rounded-full ring-1 ${TONE[tone].avatar}`}>
-      {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={hasName ? `${name} profile photo` : ""}
-          width={80}
-          height={80}
-          className="h-full w-full object-cover"
-          loading="lazy"
-          decoding="async"
-        />
-      ) : (
-        <User size={size === "lg" ? 22 : 19} className={TONE[tone].avatarIcon} aria-hidden="true" />
-      )}
-    </span>
-  );
-}
-
-function initials(name: string) {
-  const letters = name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((word) => word.charAt(0).toUpperCase())
-    .join("");
-  return letters || "–";
 }

@@ -16,16 +16,26 @@ export async function GET() {
     const groups = ["A", "B"].map((group) => {
       const sessions = schedules
         .filter((s: ScheduleRow) => s.group === group)
-        .map((s: ScheduleRow) => ({
-          id: s.id,
-          session: s.session,
-          startTime: s.startTime,
-          endTime: s.endTime,
-          maxSeats: s.maxSeats,
-          enrolled: s.enrolled,
-          seatsAvailable: Math.max(0, s.maxSeats - s.enrolled),
-          isFull: s.enrolled >= s.maxSeats,
-        }));
+        .map((s: ScheduleRow) => {
+          const seatsLeft = Math.max(0, s.maxSeats - s.enrolled);
+          // Effective availability: an admin-marked Full session (override
+          // false) is never selectable; an admin-marked Available session
+          // (override true) stays selectable even at 0 seats (admin's call).
+          // Default (null) is automatic — full when no seats remain.
+          const isFull = s.availabilityOverride === false ? true : s.enrolled >= s.maxSeats;
+          const adminMarkedAvailable = s.availabilityOverride === true;
+          return {
+            id: s.id,
+            session: s.session,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            maxSeats: s.maxSeats,
+            enrolled: s.enrolled,
+            seatsAvailable: adminMarkedAvailable ? seatsLeft || s.maxSeats - s.enrolled : seatsLeft,
+            isFull,
+            adminMarkedAvailable,
+          };
+        });
 
       return {
         group,

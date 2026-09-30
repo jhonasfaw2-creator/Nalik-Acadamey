@@ -55,7 +55,12 @@ model Schedule {
   session     String   // "Morning Session", "Afternoon Session", "Evening Session"
   startTime   String   // e.g. "08:00"
   endTime     String   // e.g. "10:00"
+  startDate   DateTime? // first day of class (shown on confirmation & lookup)
   maxSeats    Int      @default(15)
+  // Admin availability marking: null = automatic (by seats), true = marked
+  // Available, false = marked Full. Students can only select sessions that
+  // are effectively available.
+  availabilityOverride Boolean?
   enrolled    Int      @default(0)
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())

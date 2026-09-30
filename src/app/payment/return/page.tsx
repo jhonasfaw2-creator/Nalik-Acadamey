@@ -1,6 +1,11 @@
 import { Suspense } from "react";
 import PaymentReturnClient from "./PaymentReturnClient";
 
+export const metadata = {
+  title: "Enrollment Confirmation",
+  robots: { index: false, follow: false },
+};
+
 export default function PaymentReturnPage() {
   return (
     <Suspense

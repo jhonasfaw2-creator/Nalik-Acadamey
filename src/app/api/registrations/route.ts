@@ -3,23 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { readJson, isUniqueConstraintError } from "@/lib/http";
 import { registrationSchema } from "@/lib/validators";
 import { generateTxRef } from "@/lib/payments/chapa";
+import { generateUniqueReferenceId } from "@/lib/reference";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-const REF_ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
-
-// Reference IDs are how a student looks up their registration, so they must
-// not be guessable. The old 4-digit format (NA-2026-1234, ~9k values per year)
-// was trivially enumerable and leaked student PII. Now: 6 chars from a 32-char
-// alphabet ≈ 1B combinations.
-function generateReferenceId(): string {
-  const year = new Date().getFullYear();
-  const random = Array.from({ length: 6 }, () =>
-    REF_ID_ALPHABET[crypto.getRandomValues(new Uint8Array(1))[0] % REF_ID_ALPHABET.length]
-  ).join("");
-  return `NA-${year}-${random}`;
-}
 
 // POST /api/registrations — create a registration with a PENDING payment.
 //
@@ -85,21 +72,21 @@ export async function POST(request: NextRequest) {
     if (!schedule) {
       return NextResponse.json({ error: "Schedule not found" }, { status: 400 });
     }
+    // An admin-marked Full session (availabilityOverride=false) is blocked for
+    // public registration regardless of the raw seat count.
+    if (schedule.availabilityOverride === false) {
+      return NextResponse.json({ error: "This session is full. Please choose another session." }, { status: 400 });
+    }
     if (schedule.enrolled >= schedule.maxSeats) {
       return NextResponse.json({ error: "This session is full. Please choose another session." }, { status: 400 });
     }
 
     const paymentAmount = course.discountPrice ?? course.price;
 
-    // Generate unique reference ID
-    let referenceId = generateReferenceId();
-    let attempts = 0;
-    while (attempts < 5) {
-      const exists = await prisma.application.findUnique({ where: { referenceId } });
-      if (!exists) break;
-      referenceId = generateReferenceId();
-      attempts++;
-    }
+    // Generate unique reference ID (shared with admin manual enrollment).
+    const referenceId = await generateUniqueReferenceId(async (id) =>
+      Boolean(await prisma.application.findUnique({ where: { referenceId: id }, select: { id: true } }))
+    );
 
     // Mint the unique Chapa tx_ref now, before any payment is attempted.
     // It is generated server-side from the reference ID and stored on the

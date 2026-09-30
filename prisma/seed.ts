@@ -55,11 +55,11 @@ async function main() {
     { section: "how-you-learn", key: "step4_title", value: "Build Your Portfolio" },
     { section: "how-you-learn", key: "step4_text", value: "Leave the academy with a collection of polished projects ready to show employers, clients, or use for freelancing." },
     // Founders
-    { section: "founders", key: "badge", value: "Meet the Founders" },
+    { section: "founders", key: "badge", value: "Meet the Founder" },
     { section: "founders", key: "name", value: "Nalik Academy" },
-    { section: "founders", key: "role", value: "Founding Team" },
+    { section: "founders", key: "role", value: "Founder of Nalik Academy" },
     { section: "founders", key: "bio", value: "A team of passionate media professionals dedicated to training the next generation of storytellers in Ethiopia. With years of hands-on experience in film, television, and digital content creation, we built Nalik Academy to bridge the gap between talent and opportunity in the creative industry." },
-    { section: "founders", key: "image", value: "/assets/logo.jpeg" },
+    { section: "founders", key: "portraitUrl", value: "/assets/natiii.jpg" },
     // Contact
     { section: "contact", key: "badge", value: "Get in Touch" },
     { section: "contact", key: "title", value: "Ready to start your creative journey?" },

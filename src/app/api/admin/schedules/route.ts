@@ -63,7 +63,9 @@ export async function POST(request: NextRequest) {
         days,
         startTime: parsed.data.startTime,
         endTime: parsed.data.endTime,
+        startDate: parsed.data.startDate ? new Date(parsed.data.startDate) : null,
         maxSeats: parsed.data.maxSeats,
+        availabilityOverride: mapAvailability(parsed.data.availabilityOverride),
         active: parsed.data.active,
       },
     });
@@ -106,7 +108,9 @@ export async function PUT(request: NextRequest) {
       days?: string;
       startTime?: string;
       endTime?: string;
+      startDate?: Date | null;
       maxSeats?: number;
+      availabilityOverride?: boolean | null;
       active?: boolean;
     } = {};
     if (parsed.data.group !== undefined) {
@@ -116,7 +120,13 @@ export async function PUT(request: NextRequest) {
     if (parsed.data.session !== undefined) updateData.session = parsed.data.session;
     if (parsed.data.startTime !== undefined) updateData.startTime = parsed.data.startTime;
     if (parsed.data.endTime !== undefined) updateData.endTime = parsed.data.endTime;
+    if (parsed.data.startDate !== undefined) {
+      updateData.startDate = parsed.data.startDate ? new Date(parsed.data.startDate) : null;
+    }
     if (parsed.data.maxSeats !== undefined) updateData.maxSeats = parsed.data.maxSeats;
+    if (parsed.data.availabilityOverride !== undefined) {
+      updateData.availabilityOverride = mapAvailability(parsed.data.availabilityOverride);
+    }
     if (parsed.data.active !== undefined) updateData.active = parsed.data.active;
 
     try {
@@ -167,6 +177,14 @@ export async function DELETE(request: NextRequest) {
     console.error("Admin schedule delete error:", error);
     return NextResponse.json({ error: "Failed to delete schedule" }, { status: 500 });
   }
+}
+
+// "AVAILABLE" → true, "FULL" → false, "AUTO"/undefined → null (by seat count).
+function mapAvailability(value: "AVAILABLE" | "FULL" | "AUTO" | undefined): boolean | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === "AVAILABLE") return true;
+  if (value === "FULL") return false;
+  return null;
 }
 
 function isUniqueConstraintError(error: unknown): boolean {

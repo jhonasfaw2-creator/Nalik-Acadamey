@@ -6,6 +6,13 @@ const nullableDate = z.preprocess((value) => {
   return new Date(value as string);
 }, z.date().nullable().optional());
 
+// Accepts "" / null → null, otherwise an ISO date string (YYYY-MM-DD), for
+// schedule start dates submitted from the admin UI.
+const nullableDateString = z.preprocess((value) => {
+  if (value === "" || value === null || value === undefined) return null;
+  return value;
+}, z.string().regex(/^\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?$/, "Start date must be a valid date").nullable().optional());
+
 export const courseSchema = z.object({
   id: z.string().optional(),
   title: z.string().min(1, "Title is required").max(200),
@@ -46,6 +53,10 @@ export const scheduleSchema = z.object({
     .or(z.string().trim().min(1, "Session is required").max(120)),
   startTime: z.string().regex(/^\d{2}:\d{2}$/, "Start time must be HH:MM"),
   endTime: z.string().regex(/^\d{2}:\d{2}$/, "End time must be HH:MM"),
+  startDate: nullableDateString,
   maxSeats: z.number().int("Max seats must be a whole number").min(1).max(1000).default(15),
+  // Admin availability marking: null = automatic (by seat count), true =
+  // marked Available, false = marked Full.
+  availabilityOverride: z.enum(["AVAILABLE", "FULL", "AUTO"]).optional(),
   active: z.boolean().default(true),
 });

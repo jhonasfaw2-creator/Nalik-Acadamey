@@ -10,11 +10,20 @@ interface ScheduleSession {
   days: string;
   startTime: string;
   endTime: string;
+  startDate: string | null;
   maxSeats: number;
   enrolled: number;
   seatsAvailable: number;
   isFull: boolean;
+  availabilityOverride: boolean | null;
   active: boolean;
+}
+
+// Admin-facing label for the availability state.
+function availabilityLabel(s: Pick<ScheduleSession, "availabilityOverride" | "isFull">): string {
+  if (s.availabilityOverride === false) return "Full";
+  if (s.availabilityOverride === true) return "Available";
+  return s.isFull ? "Full (auto)" : "Available (auto)";
 }
 
 const SESSION_OPTIONS = ["Morning Session", "Afternoon Session", "Evening Session"];
@@ -28,6 +37,7 @@ const emptySchedule = (group?: string): Partial<ScheduleSession> => ({
   session: "Morning Session",
   startTime: "08:00",
   endTime: "10:00",
+  startDate: null,
   maxSeats: 15,
   active: true,
 });
@@ -161,9 +171,61 @@ export default function AdminSchedules() {
                 </div>
               </div>
               <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Start Date</label>
+                <input
+                  type="date"
+                  value={editing.startDate ? editing.startDate.slice(0, 10) : ""}
+                  onChange={(e) => setEditing({ ...editing, startDate: e.target.value || null })}
+                  className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
+                />
+                <p className="mt-1 text-xs text-gray-400">First day of class — shown to students on their registration confirmation and lookup.</p>
+              </div>
+              <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Max Seats</label>
                 <input type="number" value={editing.maxSeats ?? 15} onChange={(e) => setEditing({ ...editing, maxSeats: Number(e.target.value) })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20" />
                 <p className="mt-1 text-xs text-gray-400">Each session holds a maximum of 15 students.</p>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Availability</label>
+                <div className="flex gap-2">
+                  {([
+                    { value: "AVAILABLE", label: "Available" },
+                    { value: "FULL", label: "Full" },
+                    { value: "AUTO", label: "Auto" },
+                  ] as const).map((opt) => {
+                    const current =
+                      editing.availabilityOverride === true
+                        ? "AVAILABLE"
+                        : editing.availabilityOverride === false
+                          ? "FULL"
+                          : "AUTO";
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() =>
+                          setEditing({
+                            ...editing,
+                            availabilityOverride:
+                              opt.value === "AVAILABLE" ? true : opt.value === "FULL" ? false : null,
+                          })
+                        }
+                        className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                          current === opt.value
+                            ? opt.value === "FULL"
+                              ? "bg-red-500 text-white"
+                              : "bg-gold text-navy"
+                            : "border border-gray-200 text-gray-600 hover:border-gold/50"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1 text-xs text-gray-400">
+                  Full: students cannot select this session. Auto: availability follows the seat count.
+                </p>
               </div>
               <div className="flex items-center gap-3">
                 <label className="text-sm font-medium text-gray-700">Active</label>
@@ -207,6 +269,16 @@ export default function AdminSchedules() {
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                         <span>{s.startTime} – {s.endTime}</span>
+                        {s.startDate && <span>Starts {new Date(s.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            s.availabilityOverride === false || s.isFull
+                              ? "bg-red-100 text-red-600"
+                              : "bg-green-100 text-green-700"
+                          }`}
+                        >
+                          {availabilityLabel(s)}
+                        </span>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">

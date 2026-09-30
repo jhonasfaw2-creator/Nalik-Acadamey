@@ -6,8 +6,8 @@ import { ArrowRight } from "lucide-react";
 const DEFAULTS = {
   badge: "Behind Nalik Academy",
   name: "Nalik Academy",
-  role: "Founder & Video Editor",
-  portraitUrl: "/assets/founder-portrait.jpg",
+  role: "Founder of Nalik Academy",
+  portraitUrl: "/assets/natiii.jpg",
   bioShort: "Ethiopian video editor and creative professional with experience editing social-media content for established Ethiopian creators and influencers, including Loft Haron Shirobaie.",
   bioLong:
     "I built Nalik Academy from a background in editing for social-media and creator content. Working with established Ethiopian creators and influencers shaped how I think about pacing, hooks, captions, sound design, colour grading, motion graphics, and the difference between a good cut and an edit that holds attention. This academy is my attempt to pass that practice on, not as theory but as the kind of hands-on editing work that shows up in real projects.",
@@ -41,12 +41,12 @@ export default function Founders() {
             badge: d.badge || DEFAULTS.badge,
             name: d.name || DEFAULTS.name,
             role: d.role || DEFAULTS.role,
+            bioShort: d.bio || d.bioShort || DEFAULTS.bioShort,
+            bioLong: d.bio || d.bioLong || DEFAULTS.bioLong,
             portraitUrl: d.portraitUrl || DEFAULTS.portraitUrl,
-            bioShort: d.bioShort || DEFAULTS.bioShort,
-            bioLong: d.bioLong || DEFAULTS.bioLong,
             specialties: d.specialties || DEFAULTS.specialties,
             // JSON from /api/content is a flat string map, so treat arrays as unknown and re-derive them safely.
-            featuredClients: ((d as unknown as { featuredClients?: string[] }).featuredClients) || []
+            featuredClients: ((d as unknown as { featuredClients?: string[] }).featuredClients) || DEFAULTS.featuredClients
           });
         }
       })
@@ -109,29 +109,27 @@ export default function Founders() {
             {data.bioShort}
           </p>
 
-          <div className="mt-10 grid gap-10 sm:grid-cols-2 lg:grid-cols-2">
-            {/* Portrait */}
+          <div className="mt-10 grid items-start gap-10 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+            {/* Portrait — natiii.jpg is a 1080×1920 phone photo, so cap its height
+                and crop from the top so the face stays in frame. */}
             <div
               ref={portraitRef}
-              className="relative overflow-hidden rounded-2xl bg-navy"
+              className="group relative mx-auto w-full max-w-sm self-start overflow-hidden rounded-2xl bg-navy sm:sticky sm:top-24"
             >
               <img
                 src={data.portraitUrl}
                 alt={`${data.name}, founder portrait`}
-                className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                className="aspect-[3/4] w-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
                 loading="lazy"
                 decoding="async"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-navy/40 via-transparent to-transparent" />
 
-              {/* Name + role over the portrait */}
+              {/* Role over the portrait */}
               <div className="absolute bottom-0 left-0 right-0 p-5">
                 <p className="text-sm font-semibold uppercase tracking-wide text-gold">
                   {data.role}
                 </p>
-                <h3 className="mt-1 text-xl font-semibold leading-snug text-white">
-                  {data.name}
-                </h3>
               </div>
             </div>
 

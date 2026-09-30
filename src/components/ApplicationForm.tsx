@@ -656,6 +656,8 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                             {groupSelected && (
                               <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
                                 {g.sessions.map((s) => {
+                                  // isFull already includes the admin's
+                                  // Available/Full marking from the API.
                                   const isFull = s.isFull;
                                   return (
                                     <label key={s.id} className={`flex items-start gap-3 rounded-xl border p-3 transition-all ${selectedSessionId === s.id ? "border-gold bg-white" : "border-gray-200 hover:border-gold/50"}`}>
@@ -672,7 +674,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                                         <span className="flex items-center justify-between gap-2">
                                           <span className="text-sm font-semibold text-navy">{s.session}</span>
                                           {isFull ? (
-                                            <span className="text-[11px] font-bold text-red-500">Booked</span>
+                                            <span className="text-[11px] font-bold text-red-500">Full</span>
                                           ) : (
                                             <span className="text-[11px] font-medium text-gray-500">{s.seatsAvailable} seats</span>
                                           )}
@@ -873,6 +875,12 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                   <button onClick={() => dialogRef.current?.close()} className="mt-5 w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md">
                     Done
                   </button>
+                  <a
+                    href={`/payment/return?referenceId=${encodeURIComponent(result.data?.registration?.referenceId || referenceId)}`}
+                    className="mt-2 block w-full text-center text-sm font-medium text-gray-500 transition-colors hover:text-gold"
+                  >
+                    View full confirmation →
+                  </a>
                 </div>
               ) : (
                 <div className="text-center">
