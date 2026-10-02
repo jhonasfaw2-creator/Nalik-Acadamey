@@ -38,6 +38,7 @@ interface ApplicationFormProps {
 interface VerifyResponse {
   status: string; // PENDING / SUCCESS / FAILED / CANCELLED / INCOMPLETE
   error?: string;
+  message?: string;
   registration?: {
     referenceId: string;
     fullName: string;
@@ -75,14 +76,14 @@ const sanitizeChapaPublicKey = (value: unknown): string => {
 
 const sanitizeTxRef = (value: unknown): string => {
   const cleaned = String(value ?? "")
-    .replace(/[^A-Za-z0-9_-]/g, "")
+    .replace(/[^A-Za-z0-9-]/g, "")
     .slice(0, 64);
-  return cleaned || "NALIK-transaction";
+  return cleaned;
 };
 
 const sanitizeAmountString = (value: unknown): string => {
   const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric > 0 ? String(Math.round(numeric)) : "0";
+  return Number.isFinite(numeric) && numeric > 0 ? String(numeric) : "0";
 };
 
 function loadChapaScript(): Promise<void> {
@@ -300,8 +301,16 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
 
   const checkStatus = useCallback(async (ref: string): Promise<VerifyResponse | null> => {
     try {
-      const res = await fetch(`/api/payments/verify?referenceId=${encodeURIComponent(ref)}`, { cache: "no-store" });
-      return await res.json();
+      const res = await fetch(`/api/payments/verify?referenceId=${encodeURIComponent(ref)}`, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(12_000),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const message = data?.message || data?.error || "Payment verification is temporarily unavailable.";
+        return { status: "ERROR", error: message, message };
+      }
+      return data;
     } catch {
       return null;
     }
@@ -323,9 +332,9 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     }
     // Error-only response (no status to apply) — surface it instead of
     // silently treating it as "still pending" and waiting forever.
-    if (data.error && !data.status) {
+    if (data.status === "ERROR" || data.status === "error" || data.error) {
       setVerifying(false);
-      setPayError(data.error);
+      setPayError(data.message || data.error || "Payment verification is temporarily unavailable.");
       return;
     }
     if (data.status === "SUCCESS") {
@@ -492,13 +501,21 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         const fullName = (fullNameRef.current?.value ?? "Customer").trim() || "Customer";
         const givenName = fullName.split(/\s+/).filter(Boolean)[0] || "Customer";
         const familyName = fullName.split(/\s+/).filter(Boolean).slice(1).join(" ") || "Customer";
+        const publicKey = sanitizeChapaPublicKey(checkout.publicKey);
+        const amount = sanitizeAmountString(checkout.amount);
+        const txRef = sanitizeTxRef(checkout.txRef);
+
+        if (!publicKey || Number(amount) <= 0 || !txRef) {
+          setPayError("Payment details are invalid. Please try again or contact support.");
+          return;
+        }
 
         const chapa = new window.ChapaCheckout({
-          publicKey: sanitizeChapaPublicKey(checkout.publicKey),
-          public_key: sanitizeChapaPublicKey(checkout.publicKey),
-          amount: sanitizeAmountString(checkout.amount),
+          publicKey,
+          public_key: publicKey,
+          amount,
           currency: "ETB",
-          tx_ref: sanitizeTxRef(checkout.txRef),
+          tx_ref: txRef,
           email: emailRef.current?.value?.trim() || "student@example.com",
           first_name: givenName,
           last_name: familyName,
@@ -532,21 +549,36 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   useEffect(() => {
     if (view !== "checkout" || !referenceId || result) return;
     let cancelled = false;
+    let consecutiveUnresolvedChecks = 0;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const scheduleRetry = () => {
+      consecutiveUnresolvedChecks += 1;
+      const delay = Math.min(5_000 * 2 ** Math.min(consecutiveUnresolvedChecks - 1, 3), 30_000);
+      timeoutId = setTimeout(tick, delay);
+    };
+
     const tick = async () => {
       if (cancelled) return;
       const data = await checkStatus(referenceId);
-      if (cancelled || !data) return;
+      if (cancelled) return;
+
+      if (!data || data.status === "ERROR" || data.status === "error" || data.error) {
+        scheduleRetry();
+        return;
+      }
+
       if (data.status === "SUCCESS") {
         setResult({ kind: "success", data });
         setView("result");
       } else if (["FAILED", "CANCELLED", "INCOMPLETE"].includes(data.status)) {
         setResult({ kind: classify(data.status), data });
         setView("result");
+      } else {
+        scheduleRetry();
       }
     };
-    tick();
-    const id = setInterval(tick, 5000);
-    return () => { cancelled = true; clearInterval(id); };
+    void tick();
+    return () => { cancelled = true; clearTimeout(timeoutId); };
   }, [view, referenceId, result, checkStatus]);
 
   const retry = () => {

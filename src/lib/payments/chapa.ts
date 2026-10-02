@@ -46,7 +46,7 @@ export function chapaSecretKey(): string | undefined {
 /** Returns a cleaned Chapa public key or undefined if it is absent. */
 export function chapaPublicKey(): string | undefined {
   try {
-    const raw = process.env.CHAPA_PUBLIC_KEY;
+    const raw = process.env.CHAPA_PUBLIC_KEY || process.env.NEXT_PUBLIC_CHAPA_PUBLIC_KEY;
     if (!raw) return undefined;
     return normalizeChapaKey(raw, "public");
   } catch {
@@ -72,12 +72,15 @@ export function isChapaConfigured(): boolean {
 const PUBLIC_KEY_RE = /^(?:(?:CHAPUBK|PUBK)[-_](TEST|LIVE)[-_]|CHAPA[-_](TEST|LIVE)[-_](?:PUB|PUBLIC)[-_])[A-Za-z0-9_-]+$/i;
 const SECRET_KEY_RE = /^(?:(?:CHASECK|SECK)[-_](TEST|LIVE)[-_]|CHAPA[-_](TEST|LIVE)[-_](?:PRIV|PRIVATE)[-_])[A-Za-z0-9_-]+$/i;
 
-export function normalizeChapaKey(value: unknown, kind: "public" | "secret"): string {
-  const raw = typeof value === "string" ? value : "";
-  const cleaned = raw
+function cleanChapaKey(value: unknown): string {
+  return (typeof value === "string" ? value : "")
     .trim()
     .replace(/^['"]+|['"]+$/g, "")
     .replace(/[\r\n\t\s]+/g, "");
+}
+
+export function normalizeChapaKey(value: unknown, kind: "public" | "secret"): string {
+  const cleaned = cleanChapaKey(value);
 
   if (!cleaned) {
     throw new Error(`${kind === "public" ? "CHAPA_PUBLIC_KEY" : "CHAPA_SECRET_KEY"} is empty or missing`);
@@ -249,25 +252,36 @@ interface ChapaVerifyResponse {
   data?: ChapaVerifyData | null;
 }
 
-export async function verifyChapaTransaction(txRef: string): Promise<ChapaVerification> {
-  const key = chapaSecretKey();
-  if (!key) throw new Error("Chapa is not configured (CHAPA_SECRET_KEY missing)");
+export async function verifyChapaTransaction(
+  txRef: string,
+  configuredKey: string | undefined = chapaSecretKey()
+): Promise<ChapaVerification> {
+  if (!configuredKey) throw new Error("Chapa is not configured (CHAPA_SECRET_KEY missing)");
+  const key = normalizeChapaKey(configuredKey, "secret");
   // The secret key travels only in the Authorization header of this server-side
   // call. The public key must NEVER be used here — Chapa answers a public key
   // with 401 "Invalid API key", which our caller would misread as a failed
   // payment rather than a configuration error.
 
-  const res = await fetch(
-    `${CHAPA_BASE_URL}/v1/transaction/verify/${encodeURIComponent(txRef)}`,
-    {
-      method: "GET",
-      headers: { Authorization: `Bearer ${key}` },
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    }
-  );
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  let res: Response;
+  let body: ChapaVerifyResponse | null;
+  try {
+    res = await fetch(
+      `${CHAPA_BASE_URL}/v1/transaction/verify/${encodeURIComponent(txRef)}`,
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${key}` },
+        cache: "no-store",
+        signal: controller.signal,
+      }
+    );
+    body = (await res.json().catch(() => null)) as ChapaVerifyResponse | null;
+  } finally {
+    clearTimeout(timeout);
+  }
 
-  const body = (await res.json().catch(() => null)) as ChapaVerifyResponse | null;
   const data = body?.data;
 
   if (!res.ok || !data) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
-  isChapaConfigured,
+  chapaSecretKey,
   verifyChapaTransaction,
   PaymentNotFoundError,
 } from "@/lib/payments/chapa";
@@ -57,29 +57,45 @@ async function handle(request: NextRequest) {
       return NextResponse.json(buildSummary(application, payment));
     }
 
-    if (!isChapaConfigured() || !payment.txRef) {
-      // No attempt initialized yet (or not configured): stay pending.
+    if (!payment.txRef) {
+      // No attempt initialized yet.
       return NextResponse.json(buildSummary(application, payment));
+    }
+
+    const configuredSecret = process.env.CHAPA_SECRET_KEY?.trim().replace(/^['"]|['"]$/g, "");
+    if (!configuredSecret) {
+      return NextResponse.json(
+        { status: "ERROR", message: "Server missing CHAPA_SECRET_KEY configuration", error: "Server missing CHAPA_SECRET_KEY configuration" },
+        { status: 500 }
+      );
+    }
+
+    const secretKey = chapaSecretKey();
+    if (!secretKey) {
+      return NextResponse.json(
+        { status: "ERROR", message: "Server CHAPA_SECRET_KEY configuration is invalid", error: "Server CHAPA_SECRET_KEY configuration is invalid" },
+        { status: 500 }
+      );
     }
 
     let verification;
     try {
-      verification = await verifyChapaTransaction(payment.txRef);
+      verification = await verifyChapaTransaction(payment.txRef, secretKey);
     } catch (error) {
       if (error instanceof PaymentNotFoundError) {
         // Chapa does not know this tx_ref (yet). Stay pending.
         return NextResponse.json(buildSummary(application, payment));
       }
-      const message = error instanceof Error ? error.message : "Verification temporarily unavailable.";
-      console.error("Chapa verify error:", message, error);
+      console.error("Chapa verify error:", error);
+      const message = "Verification temporarily unavailable. Please try again.";
       return NextResponse.json(
         {
           ...buildSummary(application, payment),
-          error: message,
-          status: "ERROR",
-          code: "CHAPA_VERIFY_FAILED",
+          status: "PENDING",
+          warning: message,
+          code: "CHAPA_VERIFY_RETRYING",
         },
-        { status: 502 }
+        { status: 200 }
       );
     }
 
@@ -105,7 +121,10 @@ async function handle(request: NextRequest) {
     );
   } catch (error) {
     console.error("Payment verify error:", error);
-    return NextResponse.json({ error: "Failed to verify payment" }, { status: 500 });
+    return NextResponse.json(
+      { status: "ERROR", error: "Failed to verify payment", message: "Failed to verify payment", code: "VERIFY_HANDLER_FAILED" },
+      { status: 500 }
+    );
   }
 }
 
