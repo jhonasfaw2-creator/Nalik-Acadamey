@@ -59,8 +59,11 @@ export function isChapaConfigured(): boolean {
 // business can't accept payments at the moment". These helpers catch that
 // server-side so the operator gets an actionable message instead.
 
-const PUBLIC_KEY_RE = /^CHAPUBK[-_](TEST|LIVE)[-_][A-Za-z0-9]+$/;
-const SECRET_KEY_RE = /^CHASECK[-_](TEST|LIVE)[-_][A-Za-z0-9]+$/;
+// Chapa tokens commonly include hyphens and underscores after the mode marker,
+// so the check must allow the real credential shape instead of a too-strict
+// alphanumeric-only pattern.
+const PUBLIC_KEY_RE = /^CHAPUBK[-_](TEST|LIVE)[-_][A-Za-z0-9_-]+$/;
+const SECRET_KEY_RE = /^CHASECK[-_](TEST|LIVE)[-_][A-Za-z0-9_-]+$/;
 
 export type ChapaKeyMode = "TEST" | "LIVE";
 
