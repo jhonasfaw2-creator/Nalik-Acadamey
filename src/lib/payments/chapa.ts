@@ -52,18 +52,12 @@ export function isChapaConfigured(): boolean {
 }
 
 // ── Key format validation ─────────────────────────────────────────────────
-// Chapa keys carry their mode in the prefix (CHAPUBK_TEST-… / CHASECK_LIVE-…).
-// When the wrong kind of key reaches the checkout — a secret key in the public
-// key slot, or a TEST key paired with a LIVE one — Chapa's inline charge
-// endpoint rejects it with the opaque browser error "Invalid public key or the
-// business can't accept payments at the moment". These helpers catch that
-// server-side so the operator gets an actionable message instead.
-
-// Chapa tokens commonly include hyphens and underscores after the mode marker,
-// so the check must allow the real credential shape instead of a too-strict
-// alphanumeric-only pattern.
-const PUBLIC_KEY_RE = /^CHAPUBK[-_](TEST|LIVE)[-_][A-Za-z0-9_-]+$/;
-const SECRET_KEY_RE = /^CHASECK[-_](TEST|LIVE)[-_][A-Za-z0-9_-]+$/;
+// Chapa keys have changed naming formats across versions. We accept both the
+// older CHAPUBK_/CHASECK_ names and the newer CHAPA_TEST_PUB_/CHAPA_TEST_PRIV_
+// family so valid keys are not rejected during checkout. The app still rejects
+// a secret key in the public slot and any TEST/LIVE mix.
+const PUBLIC_KEY_RE = /^(?:CHAPUBK[-_](TEST|LIVE)[-_]|CHAPA[-_](TEST|LIVE)[-_]PUB[-_])[A-Za-z0-9_-]+$/i;
+const SECRET_KEY_RE = /^(?:CHASECK[-_](TEST|LIVE)[-_]|CHAPA[-_](TEST|LIVE)[-_]PRIV[-_])[A-Za-z0-9_-]+$/i;
 
 export type ChapaKeyMode = "TEST" | "LIVE";
 
@@ -83,8 +77,8 @@ export function chapaSecretKeyMode(): ChapaKeyMode | undefined {
 
 /** Classifies a key's shape without ever exposing its value. */
 function describeKeyType(key: string): string {
-  if (/^CHASECK/i.test(key)) return "a CHASECK (secret) key";
-  if (/^CHAPUBK/i.test(key)) return "a CHAPUBK (public) key";
+  if (/^CHASECK/i.test(key) || /^CHAPA.*PRIV/i.test(key)) return "a CHASECK / CHAPA secret key";
+  if (/^CHAPUBK/i.test(key) || /^CHAPA.*PUB/i.test(key)) return "a CHAPUBK / CHAPA public key";
   return "a key with an unrecognized prefix";
 }
 
@@ -100,12 +94,12 @@ export function chapaConfigurationProblems(): string[] {
   if (!pub) problems.push("CHAPA_PUBLIC_KEY is not set");
   else if (!PUBLIC_KEY_RE.test(pub))
     problems.push(
-      `CHAPA_PUBLIC_KEY is ${describeKeyType(pub)} — Inline.js needs a CHAPUBK_TEST-/CHAPUBK_LIVE- public key`
+      `CHAPA_PUBLIC_KEY is ${describeKeyType(pub)} — Inline.js needs a CHAPUBK_TEST-/CHAPUBK_LIVE- or CHAPA_TEST_PUB-/CHAPA_LIVE_PUB- public key`
     );
   if (!sec) problems.push("CHAPA_SECRET_KEY is not set");
   else if (!SECRET_KEY_RE.test(sec))
     problems.push(
-      `CHAPA_SECRET_KEY is ${describeKeyType(sec)} — server verification needs a CHASECK_TEST-/CHASECK_LIVE- secret key`
+      `CHAPA_SECRET_KEY is ${describeKeyType(sec)} — server verification needs a CHASECK_TEST-/CHASECK_LIVE- or CHAPA_TEST_PRIV-/CHAPA_LIVE_PRIV- secret key`
     );
 
   const pubMode = chapaPublicKeyMode();
