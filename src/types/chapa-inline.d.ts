@@ -16,6 +16,7 @@ interface ChapaCheckoutOptions {
   tx_ref?: string;
   /** Optional phone number to prefill (9-digit local Ethiopian format). */
   mobile?: string;
+  phone_number?: string;
   email?: string;
   first_name?: string;
   last_name?: string;

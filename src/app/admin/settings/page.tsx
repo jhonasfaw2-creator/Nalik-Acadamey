@@ -217,16 +217,15 @@ export default function AdminSettings() {
         <div className="rounded-xl border border-gray-200 bg-white p-6">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Payment Settings</h2>
           <p className="text-sm text-gray-600">
-            Student payments are collected with Chapa&apos;s Inline.js checkout (rendered on the
-            registration page) and confirmed by server-side verification and signed webhooks.
+            Student payments use Chapa&apos;s hosted checkout (created server-side) and are confirmed
+            by server-side verification and signed webhooks.
             Chapa keys are configured with environment variables on the server; they are never
             stored in this database.
           </p>
           <ul className="mt-3 space-y-1 text-xs text-gray-500">
-            <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">CHAPA_PUBLIC_KEY</code>: public key used by Inline.js (CHAPUBK_TEST_... / CHAPUBK_LIVE_...)</li>
-            <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">CHAPA_SECRET_KEY</code>: secret key used for server-side verification (CHASECK_TEST_... / CHASECK_LIVE_...)</li>
+            <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">CHAPA_SECRET_KEY</code>: v2 server key used for hosted checkout and verification (CHAPA_TEST_... / CHAPA_LIVE_...)</li>
             <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">CHAPA_WEBHOOK_SECRET</code>: secret hash set in Chapa → Webhooks, used to verify signatures</li>
-            <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">NEXT_PUBLIC_APP_URL</code>: public app URL (used for callback + return URLs)</li>
+            <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">NEXT_PUBLIC_APP_URL</code>: public app URL used as the hosted checkout return URL</li>
           </ul>
           <p className="mt-3 text-xs text-gray-400">
             Payments are confirmed automatically (webhook + server-side verification); the amount and

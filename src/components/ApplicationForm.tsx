@@ -54,97 +54,11 @@ interface VerifyResponse {
   };
 }
 
-interface CheckoutConfig {
-  publicKey: string;
-  amount: number;
-  currency: string;
-  txRef: string;
-  mobile: string;
-}
-
 type View = "form" | "checkout" | "result";
 type ResultKind = "success" | "failed" | "cancelled" | "incomplete";
 
-const INLINE_SCRIPT = "https://js.chapa.co/v1/inline.js";
-
-const sanitizeChapaPublicKey = (value: unknown): string => {
-  return String(value ?? "")
-    .trim()
-    .replace(/^['"]+|['"]+$/g, "")
-    .replace(/[\r\n\t\s]+/g, "");
-};
-
-const sanitizeTxRef = (value: unknown): string => {
-  const cleaned = String(value ?? "")
-    .replace(/[^A-Za-z0-9-]/g, "")
-    .slice(0, 64);
-  return cleaned;
-};
-
-const sanitizeAmountString = (value: unknown): string => {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric > 0 ? String(numeric) : "0";
-};
-
-function loadChapaScript(): Promise<void> {
-  if (typeof window === "undefined") return Promise.resolve();
-  if (window.ChapaCheckout) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(`script[src="${INLINE_SCRIPT}"]`);
-    if (existing) {
-      existing.addEventListener("load", () => resolve());
-      existing.addEventListener("error", () => reject(new Error("Failed to load Chapa checkout")));
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = INLINE_SCRIPT;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load Chapa checkout"));
-    document.head.appendChild(script);
-  });
-}
-
 function formatBirr(amount: number) {
   return amount.toLocaleString("en-ET") + " Birr";
-}
-
-function getCheckoutBaseUrl(): string | undefined {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
-  if (configured) {
-    try {
-      const parsed = new URL(configured);
-      if (parsed.protocol === "https:" && !/^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/.test(parsed.hostname)) {
-        return parsed.origin;
-      }
-    } catch {
-      // Fall through to the live origin if the configured URL is invalid.
-    }
-  }
-
-  if (typeof window !== "undefined") {
-    const origin = window.location.origin.replace(/\/$/, "");
-    const host = new URL(origin).hostname;
-    if (origin.startsWith("https://") && !/^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/.test(host)) {
-      return origin;
-    }
-  }
-
-  if (process.env.NODE_ENV !== "production") {
-    return "http://localhost:3001";
-  }
-
-  return undefined;
-}
-
-function isPublicCallbackUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:") return false;
-    return !/^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/.test(parsed.hostname);
-  } catch {
-    return false;
-  }
 }
 
 /** Session length in hours/minutes, e.g. "2 hours" or "1h 30m". */
@@ -169,6 +83,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const [scheduleGroups, setScheduleGroups] = useState<ScheduleGroup[]>([]);
   const [coursesLoaded, setCoursesLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [scheduleError, setScheduleError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
   // Selections
@@ -189,7 +104,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const [submitting, setSubmitting] = useState(false);
   const [referenceId, setReferenceId] = useState("");
   const [amount, setAmount] = useState(0);
-  const [checkout, setCheckout] = useState<CheckoutConfig | null>(null);
   const [payError, setPayError] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [result, setResult] = useState<{ kind: ResultKind; message?: string; data?: VerifyResponse } | null>(null);
@@ -200,6 +114,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     if (!open) return;
     let cancelled = false;
     setLoadError("");
+    setScheduleError("");
     setCoursesLoaded(false);
 
     fetch("/api/courses")
@@ -230,15 +145,29 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         setCoursesLoaded(true);
       });
 
-    fetch("/api/schedules")
-      .then((r) => r.json())
-      .then((scheduleData) => {
-        if (cancelled) return;
-        if (scheduleData && Array.isArray(scheduleData.groups)) setScheduleGroups(scheduleData.groups);
-      })
-      .catch(() => {
-        // schedules are optional until the student reaches that step
-      });
+    const loadSchedules = async () => {
+      for (let attempt = 0; attempt < 2 && !cancelled; attempt += 1) {
+        try {
+          const response = await fetch("/api/schedules");
+          if (!response.ok) throw new Error(`Schedules request failed (${response.status})`);
+          const scheduleData = await response.json();
+          if (!scheduleData || !Array.isArray(scheduleData.groups)) {
+            throw new Error("Invalid schedules response");
+          }
+          if (!cancelled) {
+            setScheduleGroups(scheduleData.groups);
+            setScheduleError("");
+          }
+          return;
+        } catch {
+          if (attempt === 0 && !cancelled) {
+            await new Promise((resolve) => setTimeout(resolve, 1_000));
+          }
+        }
+      }
+      if (!cancelled) setScheduleError("We couldn't load schedules. Please check your connection and try again.");
+    };
+    void loadSchedules();
 
     return () => { cancelled = true; };
   }, [open, preselectedCourse, reloadKey]);
@@ -260,7 +189,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     setSelectedSessionId("");
     setReferenceId("");
     setAmount(0);
-    setCheckout(null);
     setPayError("");
     setVerifying(false);
     setResult(null);
@@ -371,31 +299,16 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         await verify(ref);
         return;
       }
-      if (res.ok && data.publicKey && data.txRef) {
-        // Sanitize before mounting. Inline.js charges exactly the amount
-        // string handed to it, and Chapa's charge endpoint answers a zero,
-        // negative or non-numeric amount with the same opaque "Invalid public
-        // key or the business can't accept payments at the moment" error. The
-        // server-computed amount is authoritative — fail rather than fall back
-        // to a possibly stale course price.
-        const serverAmount = Number(data.amount);
-        const amount = Number.isFinite(serverAmount) && serverAmount > 0 ? Math.round(serverAmount) : 0;
-        const publicKey = typeof data.publicKey === "string" ? data.publicKey.trim() : "";
-        if (!publicKey || !amount) {
-          setPayError(
-            !publicKey
-              ? "Payment is misconfigured (missing public key). Please try again later."
-              : "This registration has no valid amount to charge. Please contact support."
-          );
+      if (res.ok && typeof data.checkoutUrl === "string") {
+        const checkoutUrl = new URL(data.checkoutUrl);
+        if (
+          checkoutUrl.protocol === "https:" &&
+          ["checkout.chapa.co", "checkout.chapa.global"].includes(checkoutUrl.hostname)
+        ) {
+          window.location.assign(checkoutUrl.toString());
           return;
         }
-        setCheckout({
-          publicKey,
-          amount,
-          currency: data.currency || "ETB",
-          txRef: data.txRef,
-          mobile: data.mobile || "",
-        });
+        setPayError("Chapa returned an invalid checkout link. Please try again later.");
         return;
       }
       setPayError(data.error || "Unable to start payment. Please try again.");
@@ -476,74 +389,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     }
   };
 
-  // ── Chapa Inline.js mount ─────────────────────────────────
-  useEffect(() => {
-    if (view !== "checkout" || !checkout) return;
-    let cancelled = false;
-
-    loadChapaScript()
-      .then(() => {
-        if (cancelled) return;
-        if (!window.ChapaCheckout) {
-          setPayError("We couldn't load the secure payment form. Please try again.");
-          return;
-        }
-
-        const appUrl = getCheckoutBaseUrl();
-        if (!appUrl) {
-          setPayError("This deployment is missing a valid HTTPS app URL. Add NEXT_PUBLIC_APP_URL in Vercel and redeploy.");
-          return;
-        }
-
-        const callbackUrl = isPublicCallbackUrl(appUrl) ? `${appUrl}/api/webhooks/chapa` : undefined;
-        const returnUrl = new URL(`/payment/return?referenceId=${encodeURIComponent(referenceId)}`, appUrl);
-
-        const fullName = (fullNameRef.current?.value ?? "Customer").trim() || "Customer";
-        const givenName = fullName.split(/\s+/).filter(Boolean)[0] || "Customer";
-        const familyName = fullName.split(/\s+/).filter(Boolean).slice(1).join(" ") || "Customer";
-        const publicKey = sanitizeChapaPublicKey(checkout.publicKey);
-        const amount = sanitizeAmountString(checkout.amount);
-        const txRef = sanitizeTxRef(checkout.txRef);
-
-        if (!publicKey || Number(amount) <= 0 || !txRef) {
-          setPayError("Payment details are invalid. Please try again or contact support.");
-          return;
-        }
-
-        const chapa = new window.ChapaCheckout({
-          publicKey,
-          public_key: publicKey,
-          amount,
-          currency: "ETB",
-          tx_ref: txRef,
-          email: emailRef.current?.value?.trim() || "student@example.com",
-          first_name: givenName,
-          last_name: familyName,
-          mobile: checkout.mobile || undefined,
-          availablePaymentMethods: ["telebirr", "cbebirr", "ebirr", "mpesa", "chapa"],
-          customizations: { buttonText: `Pay ${formatBirr(checkout.amount)}` },
-          callbackUrl,
-          returnUrl: returnUrl.toString(),
-          onSuccessfulPayment: () => { verify(); },
-          onPaymentFailure: (message: string) => {
-            setResult({ kind: "failed", message: message || "The payment was not completed." });
-            setView("result");
-          },
-          onClose: () => { verify(); },
-        });
-        chapa.initialize("chapa-inline-form");
-      })
-      .catch(() => {
-        if (!cancelled) setPayError("We couldn't load the secure payment form. Please try again.");
-      });
-
-    return () => {
-      cancelled = true;
-      const container = document.getElementById("chapa-inline-form");
-      if (container) container.innerHTML = "";
-    };
-  }, [view, checkout, referenceId, verify]);
-
   // Poll while the checkout is open so a delayed webhook still resolves the
   // flow even if Inline.js's callback does not fire.
   useEffect(() => {
@@ -594,7 +439,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     setView("form");
     setResult(null);
     setPayError("");
-    setCheckout(null);
     setPaymentInFlight(false);
   };
 
@@ -705,9 +549,18 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                     <span className="text-[11px] font-medium text-gray-400">Availability</span>
                   </div>
                   {scheduleGroups.length === 0 ? (
-                    <div className="rounded-xl bg-warm-white px-4 py-3 text-sm text-gray-500">
-                      No schedule groups are open right now. Please try again later.
-                    </div>
+                    scheduleError ? (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-center">
+                        <p className="text-sm font-medium text-amber-800">{scheduleError}</p>
+                        <button onClick={() => setReloadKey((key) => key + 1)} className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-700">
+                          Try Again
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl bg-warm-white px-4 py-3 text-sm text-gray-500">
+                        No schedule groups are open right now. Please try again later.
+                      </div>
+                    )
                   ) : (
                     <div className="space-y-3">
                       {scheduleGroups.map((g) => {
@@ -860,7 +713,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
             </div>
           )}
 
-          {/* ───────────── CHECKOUT (Chapa Inline.js) ───────────── */}
+          {/* ───────────── CHECKOUT (Chapa Hosted) ───────────── */}
           {view === "checkout" && (
             <div className="space-y-4">
               <div className="text-center">
@@ -868,7 +721,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                   <CreditCard size={26} className="text-gold" />
                 </div>
                 <p className="text-sm text-gray-500">
-                  Paying <span className="font-semibold text-gold">{formatBirr(checkout?.amount ?? price)}</span> securely with Chapa
+                  Paying <span className="font-semibold text-gold">{formatBirr(amount || price)}</span> securely with Chapa
                 </p>
               </div>
 
@@ -876,11 +729,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                 <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-12 text-sm text-gray-500">
                   <Loader2 size={22} className="animate-spin text-gold" />
                   Confirming your payment with Chapa…
-                </div>
-              ) : checkout ? (
-                <div className="rounded-xl border border-gray-200 bg-white p-4">
-                  {/* Chapa Inline.js mounts its payment form into this container. */}
-                  <div id="chapa-inline-form" />
                 </div>
               ) : payError ? (
                 <div className="flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
@@ -890,14 +738,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
               ) : (
                 <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-12 text-sm text-gray-500">
                   <Loader2 size={22} className="animate-spin text-gold" />
-                  Preparing secure checkout…
-                </div>
-              )}
-
-              {payError && checkout && (
-                <div className="flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
-                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                  <span>{payError}</span>
+                  Redirecting to Chapa's secure checkout…
                 </div>
               )}
 
@@ -943,7 +784,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <dt className="text-gray-500">Amount</dt>
-                      <dd className="font-semibold text-navy">{formatBirr(result.data?.registration?.amount || checkout?.amount || price)}</dd>
+                      <dd className="font-semibold text-navy">{formatBirr(result.data?.registration?.amount || amount || price)}</dd>
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <dt className="text-gray-500">Payment Status</dt>

@@ -4,7 +4,7 @@
  * Unlike a unit test, this drives the REAL route handlers
  * (/api/registrations, /api/payments/chapa/init, /api/payments/verify,
  * /api/webhooks/chapa) against the REAL Neon database, with only Chapa's
- * network call (api.chapa.co/v1/transaction/verify) mocked. Webhook payloads
+ * network calls (Chapa v2 hosted init/verify) mocked. Webhook payloads
  * are signed with a real HMAC using CHAPA_WEBHOOK_SECRET.
  *
  * Real Chapa TEST-mode checkout (Inline.js + real sandbox) still requires real
@@ -25,52 +25,61 @@ for (const line of readFileSync(".env", "utf8").split("\n")) {
 }
 
 // Dummy TEST-mode-looking keys for the pipeline (never real, never charged).
-process.env.CHAPA_PUBLIC_KEY = "CHAPUBK_TEST-e2etest000000000000000000";
-process.env.CHAPA_SECRET_KEY = "CHASECK_TEST-e2etest000000000000000000";
+process.env.CHAPA_SECRET_KEY = "CHAPA_TEST_e2etest000000000000000000";
 process.env.CHAPA_WEBHOOK_SECRET = "e2e-webhook-secret";
-process.env.CHAPA_API_BASE_URL = "https://api.chapa.co";
 const env = process.env as Record<string, string | undefined>;
 env.NODE_ENV = env.NODE_ENV || "development";
 
-const CHAPA_BASE = "https://api.chapa.co";
+const CHAPA_V2_BASE = "https://api.chapa.global/v2";
 const WEBHOOK_SECRET = process.env.CHAPA_WEBHOOK_SECRET!;
 
 // ── Mock Chapa's network only ────────────────────────────────────────────────
 interface MockTx {
   status: "success" | "failed" | "cancelled" | "pending";
+  merchantReference: string;
+  chapaReference: string;
   amount?: number;
   currency?: string;
-  reference?: string;
   method?: string;
 }
 const mockTx = new Map<string, MockTx>();
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-  if (url.startsWith(`${CHAPA_BASE}/v1/transaction/verify/`)) {
-    const txRef = decodeURIComponent(url.split("/verify/")[1] || "");
-    const tx = mockTx.get(txRef);
+  if (url === `${CHAPA_V2_BASE}/payments/hosted` && init?.method === "POST") {
+    const payload = JSON.parse(String(init.body || "{}")) as { merchant_reference?: string };
+    const merchantReference = payload.merchant_reference || "missing-reference";
+    const chapaReference = `CHREF-${merchantReference}`;
+    return new Response(JSON.stringify({
+      status: "success",
+      message: "Payment initialized successfully",
+      data: {
+        checkout_url: `https://checkout.chapa.co/payment/${chapaReference}`,
+        chapa_reference: chapaReference,
+      },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }
+  if (url.startsWith(`${CHAPA_V2_BASE}/payments/`) && url.endsWith("/verify")) {
+    const chapaReference = decodeURIComponent(url.split("/payments/")[1]?.split("/verify")[0] || "");
+    const tx = mockTx.get(chapaReference);
     if (!tx) {
-      // Mirrors Chapa's LIVE TEST API: an unknown tx_ref returns HTTP 400 with
-      // "Invalid transaction reference" (the docs list a 404 instead, so both
-      // shapes must be handled).
-      return new Response(JSON.stringify({ message: "Invalid transaction reference", status: "failed", data: null }), {
-        status: 400,
+      return new Response(JSON.stringify({ status: "error", message: "Payment not found", data: null }), {
+        status: 404,
         headers: { "content-type": "application/json" },
       });
     }
     return new Response(
       JSON.stringify({
         status: "success",
-        message: "Payment details fetched successfully",
+        message: "Payment retrieved successfully",
         data: {
           status: tx.status,
           amount: tx.amount ?? 0,
           currency: tx.currency ?? "ETB",
-          reference: tx.reference ?? "CHAPAREFTEST",
-          tx_ref: txRef,
-          method: tx.method ?? "telebirr",
-          charge: 0,
+          chapa_reference: tx.chapaReference,
+          merchant_reference: tx.merchantReference,
+          payment_method: tx.method ?? "telebirr",
+          service_fee: 0,
           mode: "test",
         },
       }),
@@ -146,7 +155,9 @@ async function main() {
 
   async function init(referenceId: string, rotate = false) {
     const res = await initRoute(jsonReq("http://localhost/api/payments/chapa/init", { referenceId, rotate }));
-    return { status: res.status, body: await res.json() };
+    const body = await res.json();
+    const application = await prisma.application.findUnique({ where: { referenceId }, include: { payment: true } });
+    return { status: res.status, body, chapaReference: application?.payment?.chapaReference || "" };
   }
 
   async function verify(referenceId: string) {
@@ -155,7 +166,7 @@ async function main() {
   }
 
   async function sendWebhook(fields: Record<string, unknown>, signature?: string) {
-    const raw = JSON.stringify({ event: "charge.success", type: "API", ...fields });
+    const raw = JSON.stringify({ webhook_type: "payment", event: "payment.success", ...fields });
     const res = await webhookRoute(
       req("http://localhost/api/webhooks/chapa", {
         method: "POST",
@@ -183,28 +194,28 @@ async function main() {
   snapshot(schedule.id, schedule.enrolled);
   const enrolledBefore = schedule.enrolled;
 
-  // ══ 2. init returns server price + the registration's tx_ref ══════════════
-  console.log("\n2) Init (inline checkout config)");
+  // ══ 2. v2 hosted init returns a checkout URL and merchant reference ═══════
+  console.log("\n2. Init (v2 hosted checkout)");
   const i1 = await init(reg.body.referenceId);
   check("init returns 200", i1.status === 200, i1);
-  check("init returns public key", !!i1.body.publicKey, i1.body.publicKey);
-  check("init returns server amount (never client-supplied)", i1.body.amount === price, i1.body.amount);
-  check("first attempt reuses the registration tx_ref", i1.body.txRef === app1?.payment?.txRef, { init: i1.body.txRef, reg: app1?.payment?.txRef });
-  check("init never returns a secret key", !JSON.stringify(i1.body).includes("CHASECK"), i1.body);
+  check("init returns hosted checkout URL", i1.body.checkoutUrl?.startsWith("https://checkout.chapa.co/"), i1.body.checkoutUrl);
+  check("merchant_reference is server-generated", i1.body.merchantReference === app1?.payment?.txRef, { init: i1.body.merchantReference, reg: app1?.payment?.txRef });
+  check("init never returns a secret key", !JSON.stringify(i1.body).includes("CHAPA_TEST_"), i1.body);
 
-  const txRef1 = i1.body.txRef as string;
+  const txRef1 = i1.body.merchantReference as string;
+  const chapaRef1 = i1.chapaReference as string;
 
   // ══ 3. Successful payment: signed webhook → re-verify → PAID ══════════════
   console.log("\n3) Successful payment → webhook → server verification → PAID");
-  mockTx.set(txRef1, { status: "success", amount: price, currency: "ETB", reference: "CHAPAREF_OK_1" });
-  const w1 = await sendWebhook({ event: "charge.success", status: "success", tx_ref: txRef1, amount: price, currency: "ETB", payment_method: "telebirr" });
+  mockTx.set(chapaRef1, { status: "success", amount: price, currency: "ETB", merchantReference: txRef1, chapaReference: chapaRef1 });
+  const w1 = await sendWebhook({ event: "payment.success", status: "success", merchant_reference: txRef1, chapa_reference: chapaRef1, amount: price, currency: "ETB", payment_method: "telebirr" });
   check("signed webhook acknowledged 200", w1.status === 200, w1);
 
   const paidApp = await prisma.application.findUnique({ where: { referenceId: reg.body.referenceId }, include: { payment: true } });
   check("DATABASE: payment is SUCCESS", paidApp?.payment?.status === "SUCCESS", paidApp?.payment?.status);
   check("DATABASE: application is PAID", paidApp?.status === "PAID", paidApp?.status);
   check("DATABASE: paidAt recorded", !!paidApp?.payment?.paidAt, paidApp?.payment?.paidAt);
-  check("DATABASE: chapa reference stored", paidApp?.payment?.chapaReference === "CHAPAREF_OK_1", paidApp?.payment?.chapaReference);
+  check("DATABASE: chapa reference stored", paidApp?.payment?.chapaReference === chapaRef1, paidApp?.payment?.chapaReference);
   const afterPaid = await prisma.schedule.findUnique({ where: { id: schedule.id } });
   check("DATABASE: seat incremented once", afterPaid?.enrolled === enrolledBefore + 1, { before: enrolledBefore, after: afterPaid?.enrolled });
 
@@ -216,7 +227,7 @@ async function main() {
 
   // ══ 4. Duplicate webhook (idempotency) ════════════════════════════════════
   console.log("\n4) Duplicate webhook");
-  const w2 = await sendWebhook({ event: "charge.success", status: "success", tx_ref: txRef1, amount: price, currency: "ETB", payment_method: "telebirr" });
+  const w2 = await sendWebhook({ event: "payment.success", status: "success", merchant_reference: txRef1, chapa_reference: chapaRef1, amount: price, currency: "ETB", payment_method: "telebirr" });
   check("duplicate webhook acknowledged 200", w2.status === 200, w2);
   const afterDup = await prisma.schedule.findUnique({ where: { id: schedule.id } });
   check("duplicate webhook does NOT increment seat again", afterDup?.enrolled === enrolledBefore + 1, afterDup?.enrolled);
@@ -227,30 +238,30 @@ async function main() {
   console.log("\n5) Wrong amount");
   const regB = await register("wrongamt");
   const iB = await init(regB.body.referenceId, true);
-  mockTx.set(iB.body.txRef, { status: "success", amount: price + 1, currency: "ETB", reference: "CHAPAREF_WRONG" });
-  const wB = await sendWebhook({ event: "charge.success", status: "success", tx_ref: iB.body.txRef, amount: price + 1, currency: "ETB" });
+  mockTx.set(iB.chapaReference, { status: "success", amount: price + 1, currency: "ETB", merchantReference: iB.body.merchantReference, chapaReference: iB.chapaReference });
+  const wB = await sendWebhook({ event: "payment.success", status: "success", merchant_reference: iB.body.merchantReference, chapa_reference: iB.chapaReference, amount: price + 1, currency: "ETB" });
   check("wrong-amount webhook acknowledged 200", wB.status === 200, wB);
   const appB = await prisma.application.findUnique({ where: { referenceId: regB.body.referenceId }, include: { payment: true } });
   check("DATABASE: wrong amount does NOT mark PAID", appB?.status !== "PAID", appB?.status);
   check("DATABASE: wrong amount does NOT mark payment SUCCESS", appB?.payment?.status !== "SUCCESS", appB?.payment?.status);
 
-  // ══ 6. Invalid tx_ref ═════════════════════════════════════════════════════
-  console.log("\n6) Invalid tx_ref");
-  const wInv = await sendWebhook({ event: "charge.success", status: "success", tx_ref: "NALIK-does-not-exist", amount: price, currency: "ETB" });
-  check("unknown tx_ref acknowledged 200 (no processing)", wInv.status === 200, wInv);
-  check("no payment exists for the bogus tx_ref", (await prisma.payment.findUnique({ where: { txRef: "NALIK-does-not-exist" } })) === null);
+  // ══ 6. Invalid merchant_reference ═════════════════════════════════════════
+  console.log("\n6. Invalid merchant_reference");
+  const wInv = await sendWebhook({ event: "payment.success", status: "success", merchant_reference: "NALIK-does-not-exist", chapa_reference: "CHREF-NOT-FOUND", amount: price, currency: "ETB" });
+  check("unknown merchant_reference acknowledged 200 (no processing)", wInv.status === 200, wInv);
+  check("no payment exists for the bogus merchant_reference", (await prisma.payment.findUnique({ where: { txRef: "NALIK-does-not-exist" } })) === null);
 
   // ══ 7. Bad signature ══════════════════════════════════════════════════════
   console.log("\n7) Invalid webhook signature");
-  const wBad = await sendWebhook({ event: "charge.success", status: "success", tx_ref: txRef1, amount: price, currency: "ETB" }, "0".repeat(64));
+  const wBad = await sendWebhook({ event: "payment.success", status: "success", merchant_reference: txRef1, chapa_reference: chapaRef1, amount: price, currency: "ETB" }, "0".repeat(64));
   check("bad signature rejected with 401", wBad.status === 401, wBad.status);
 
   // ══ 8. Failed payment ═════════════════════════════════════════════════════
   console.log("\n8) Failed payment");
   const regC = await register("failed");
   const iC = await init(regC.body.referenceId, true);
-  mockTx.set(iC.body.txRef, { status: "failed", amount: price, currency: "ETB" });
-  const wC = await sendWebhook({ event: "charge.failed", status: "failed", tx_ref: iC.body.txRef, amount: price, currency: "ETB" });
+  mockTx.set(iC.chapaReference, { status: "failed", amount: price, currency: "ETB", merchantReference: iC.body.merchantReference, chapaReference: iC.chapaReference });
+  const wC = await sendWebhook({ event: "payment.failed", status: "failed", merchant_reference: iC.body.merchantReference, chapa_reference: iC.chapaReference, amount: price, currency: "ETB" });
   check("failed webhook acknowledged 200", wC.status === 200, wC);
   const appC = await prisma.application.findUnique({ where: { referenceId: regC.body.referenceId }, include: { payment: true } });
   check("DATABASE: failed payment is FAILED", appC?.payment?.status === "FAILED", appC?.payment?.status);
@@ -260,8 +271,8 @@ async function main() {
   console.log("\n9) Cancelled payment");
   const regD = await register("cancelled");
   const iD = await init(regD.body.referenceId, true);
-  mockTx.set(iD.body.txRef, { status: "cancelled", amount: price, currency: "ETB" });
-  await sendWebhook({ event: "charge.cancelled", status: "cancelled", tx_ref: iD.body.txRef, amount: price, currency: "ETB" });
+  mockTx.set(iD.chapaReference, { status: "cancelled", amount: price, currency: "ETB", merchantReference: iD.body.merchantReference, chapaReference: iD.chapaReference });
+  await sendWebhook({ event: "payment.cancelled", status: "cancelled", merchant_reference: iD.body.merchantReference, chapa_reference: iD.chapaReference, amount: price, currency: "ETB" });
   const appD = await prisma.application.findUnique({ where: { referenceId: regD.body.referenceId }, include: { payment: true } });
   check("DATABASE: cancelled payment is CANCELLED", appD?.payment?.status === "CANCELLED", appD?.payment?.status);
   check("DATABASE: cancelled payment keeps registration PENDING_PAYMENT", appD?.status === "PENDING_PAYMENT", appD?.status);
@@ -269,9 +280,9 @@ async function main() {
   // ══ 10. Retry after failure ═══════════════════════════════════════════════
   console.log("\n10) Retry after failure");
   const iRetry = await init(regC.body.referenceId, true);
-  check("retry mints a NEW tx_ref", iRetry.body.txRef && iRetry.body.txRef !== iC.body.txRef, { old: iC.body.txRef, new: iRetry.body.txRef });
-  mockTx.set(iRetry.body.txRef, { status: "success", amount: price, currency: "ETB", reference: "CHAPAREF_RETRY" });
-  await sendWebhook({ event: "charge.success", status: "success", tx_ref: iRetry.body.txRef, amount: price, currency: "ETB" });
+  check("retry mints a NEW merchant_reference", iRetry.body.merchantReference && iRetry.body.merchantReference !== iC.body.merchantReference, { old: iC.body.merchantReference, new: iRetry.body.merchantReference });
+  mockTx.set(iRetry.chapaReference, { status: "success", amount: price, currency: "ETB", merchantReference: iRetry.body.merchantReference, chapaReference: iRetry.chapaReference });
+  await sendWebhook({ event: "payment.success", status: "success", merchant_reference: iRetry.body.merchantReference, chapa_reference: iRetry.chapaReference, amount: price, currency: "ETB" });
   const appCRetry = await prisma.application.findUnique({ where: { referenceId: regC.body.referenceId }, include: { payment: true } });
   check("DATABASE: retried payment becomes SUCCESS", appCRetry?.payment?.status === "SUCCESS", appCRetry?.payment?.status);
   check("DATABASE: retried registration becomes PAID", appCRetry?.status === "PAID", appCRetry?.status);
@@ -280,7 +291,7 @@ async function main() {
   console.log("\n11) Page refresh while payment pending");
   const regE = await register("pending");
   const iE = await init(regE.body.referenceId, true);
-  mockTx.set(iE.body.txRef, { status: "pending", amount: price, currency: "ETB" });
+  mockTx.set(iE.chapaReference, { status: "pending", amount: price, currency: "ETB", merchantReference: iE.body.merchantReference, chapaReference: iE.chapaReference });
   const vE = await verify(regE.body.referenceId);
   check("verify returns PENDING (not PAID)", vE.body.status === "PENDING", vE.body.status);
   const appE = await prisma.application.findUnique({ where: { referenceId: regE.body.referenceId } });
@@ -291,19 +302,17 @@ async function main() {
   const vUnknown = await verify("NA-2026-ZZZZZZ");
   check("unknown referenceId returns 404", vUnknown.status === 404, vUnknown.status);
 
-  // ══ 13. LIVE-API quirk: unknown tx_ref (HTTP 400) ≠ error ═════════════════
-  // A registration that started a payment whose tx_ref Chapa does not know
-  // (charge UI closed before any charge) must stay PENDING, not 502/500.
-  console.log("\n13) tx_ref Chapa does not know (HTTP 400 'Invalid transaction reference')");
+  // ══ 13. Unknown Chapa reference remains pending ════════════════════════════
+  console.log("\n13. Chapa reference not indexed yet");
   const regF = await register("unknownref");
-  const iF = await init(regF.body.referenceId, true); // tx_ref deliberately NOT added to mockTx
+  const iF = await init(regF.body.referenceId, true); // reference deliberately NOT added to mockTx
   const vF = await verify(regF.body.referenceId);
-  check("verify returns 200 (not 502) when Chapa has no such tx_ref", vF.status === 200, vF.status);
-  check("verify reports PENDING for an unknown tx_ref", vF.body.status === "PENDING", vF.body.status);
+  check("verify returns 200 (not 502) when Chapa has no such reference", vF.status === 200, vF.status);
+  check("verify reports PENDING for an unknown reference", vF.body.status === "PENDING", vF.body.status);
   const appF = await prisma.application.findUnique({ where: { referenceId: regF.body.referenceId } });
   check("DATABASE: unknown tx_ref leaves registration PENDING_PAYMENT", appF?.status === "PENDING_PAYMENT", appF?.status);
-  const wF = await sendWebhook({ event: "charge.success", status: "success", tx_ref: iF.body.txRef, amount: price, currency: "ETB" });
-  check("webhook with unknown tx_ref is acknowledged 200 (no retry loop)", wF.status === 200, wF.status);
+  const wF = await sendWebhook({ event: "payment.success", status: "success", merchant_reference: iF.body.merchantReference, chapa_reference: iF.chapaReference, amount: price, currency: "ETB" });
+  check("webhook with unindexed reference is retried", wF.status === 503, wF.status);
   const appF2 = await prisma.application.findUnique({ where: { referenceId: regF.body.referenceId } });
   check("DATABASE: unknown tx_ref webhook does NOT mark PAID", appF2?.status !== "PAID", appF2?.status);
 

@@ -1,53 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
-  isChapaConfigured,
-  chapaConfigurationProblems,
-  chapaPublicKey,
+  chapaV2SecretKey,
+  createChapaHostedPayment,
   generateTxRef,
-  normalizePhoneForChapa,
+  normalizePhoneForChapaV2,
 } from "@/lib/payments/chapa";
 import { ensurePaymentForApplication } from "@/lib/payments/record";
 
 export const dynamic = "force-dynamic";
 
-// POST /api/payments/chapa/init — prepare an Inline.js checkout for a
-// registration.
-//
-// Inline.js charges through Chapa in the browser, so this endpoint does not
-// initialize anything with Chapa. It returns the PUBLIC key and the
-// authoritative, server-computed amount/tx_ref for the client to hand to
-// `new ChapaCheckout(...)`. The amount is read from the DB payment record
-// (never from the browser), and every attempt gets a fresh unique tx_ref.
+// POST /api/payments/chapa/init — create a v2 hosted checkout session.
 export async function POST(request: NextRequest) {
   try {
-    if (!isChapaConfigured()) {
+    const secretKey = chapaV2SecretKey();
+    if (!secretKey) {
       return NextResponse.json(
-        { error: "Online payments are temporarily unavailable. Please try again later." },
-        { status: 503 }
-      );
-    }
-
-    // Fail fast on swapped/invalid key formats. Otherwise the browser hands a
-    // bad key to Inline.js and Chapa's charge endpoint rejects it with the
-    // opaque "Invalid public key or the business can't accept payments at the
-    // moment" — much harder to diagnose than a server-side message.
-    const keyProblems = chapaConfigurationProblems();
-    if (keyProblems.length > 0) {
-      console.error("[chapa-init] Chapa configuration problems:", keyProblems);
-      return NextResponse.json(
-        {
-          error:
-            "Online payments are misconfigured (invalid Chapa keys). Check CHAPA_PUBLIC_KEY / CHAPA_SECRET_KEY in the deployment settings and redeploy.",
-        },
+        { error: "Online payments are not configured. Please try again later." },
         { status: 503 }
       );
     }
 
     const body = await request.json().catch(() => ({}));
     const referenceId = typeof body.referenceId === "string" ? body.referenceId.trim() : "";
-    // Retries (and any resume of an existing registration) mint a fresh
-    // tx_ref; Chapa rejects a tx_ref that has already been charged.
     const rotate = body.rotate === true;
     if (!referenceId) {
       return NextResponse.json({ error: "Missing referenceId" }, { status: 400 });
@@ -78,31 +53,68 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, alreadyPaid: true, status: "SUCCESS" });
     }
 
-    // The registration already minted a tx_ref before payment. Reuse it for
-    // the first attempt; on a retry mint a fresh one (Chapa rejects a reused
-    // tx_ref), so every attempt stays uniquely identifiable.
+    // V2 requires a unique merchant_reference for each payment attempt.
     const reuseExisting =
       !rotate && current.status === "PENDING" && !current.chapaReference && Boolean(current.txRef);
-    const txRef = reuseExisting ? (current.txRef as string) : generateTxRef(application.referenceId);
+    const merchantReference = reuseExisting ? (current.txRef as string) : generateTxRef(application.referenceId);
 
     await prisma.payment.update({
       where: { id: payment.id },
-      data: { status: "PENDING", txRef, chapaReference: null, notes: null },
+      data: { status: "PENDING", txRef: merchantReference, chapaReference: null, notes: null },
     });
+
+    const [firstName, ...lastNameParts] = application.fullName.trim().split(/\s+/).filter(Boolean);
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
+    const returnUrl = appUrl
+      ? `${appUrl}/payment/return?referenceId=${encodeURIComponent(application.referenceId)}`
+      : undefined;
+    const hosted = await createChapaHostedPayment(
+      {
+        amount: payment.amount,
+        currency: payment.currency,
+        merchant_reference: merchantReference,
+        customer: {
+          first_name: firstName || "Customer",
+          last_name: lastNameParts.join(" ") || "Student",
+          email: application.email,
+          phone_number: normalizePhoneForChapaV2(application.phone),
+        },
+        meta: { order_id: application.referenceId },
+        ...(returnUrl ? { return_url: returnUrl } : {}),
+      },
+      secretKey
+    );
+
+    if (!isAllowedCheckoutUrl(hosted.checkoutUrl)) {
+      console.error("[chapa-init] Chapa returned a non-allowlisted checkout URL");
+      return NextResponse.json({ error: "Chapa returned an invalid checkout URL." }, { status: 502 });
+    }
+
+    if (hosted.chapaReference) {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { chapaReference: hosted.chapaReference },
+      });
+    }
 
     return NextResponse.json({
       success: true,
       alreadyPaid: false,
-      publicKey: chapaPublicKey(),
-      amount: payment.amount,
-      currency: payment.currency,
-      txRef,
+      checkoutUrl: hosted.checkoutUrl,
+      merchantReference,
       referenceId: application.referenceId,
-      mobile: normalizePhoneForChapa(application.phone),
     });
   } catch (error) {
     console.error("Chapa init error:", error);
-    // Never surface internal error details to the browser.
     return NextResponse.json({ error: "Unable to start payment. Please try again." }, { status: 500 });
+  }
+}
+
+function isAllowedCheckoutUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && ["checkout.chapa.co", "checkout.chapa.global"].includes(url.hostname);
+  } catch {
+    return false;
   }
 }

@@ -1,21 +1,19 @@
-// ── Chapa Inline.js + server-side verification ─────────────────────────────
+// ── Chapa v2 hosted checkout + server-side verification ───────────────────
 // Official docs:
-//   Inline.js:  https://developer.chapa.co/integrations/inline-js
-//   Verify:     https://developer.chapa.co/integrations/verify-payments
-//   Webhooks:   https://developer.chapa.co/integrations/webhooks
+//   Hosted payments: https://docs.chapa.global/docs/v2/integrations/accept-payment
+//   Verify:          https://docs.chapa.global/docs/v2/integrations/verify-payment
+//   Webhooks:        https://docs.chapa.global/docs/v2/integrations/webhooks
 //
-// The checkout itself is Chapa's Inline.js (`https://js.chapa.co/v1/inline.js`),
-// rendered inside our page with the PUBLIC key. Inline.js charges through
-// Chapa's inline service; it never touches our secret key.
+// Hosted checkout sessions are created server-side with a secret key. The
+// browser receives only Chapa's checkout URL and redirects the customer there.
 //
-// Because the amount passed to Inline.js lives in the browser, it must never be
-// trusted. This module implements the authoritative server-side checks:
-//   Verify:  GET https://api.chapa.co/v1/transaction/verify/<tx_ref>
-//            Authorization: Bearer <CHAPA_SECRET_KEY>
-//   Webhook: POST to our endpoint, x-chapa-signature = HMAC-SHA256(secret, body)
+// Amount and currency come from the payment record. The server creates the
+// hosted session and verifies the provider reference before accepting payment.
+//   Initialize: POST https://api.chapa.global/v2/payments/hosted
+//   Verify:     GET https://api.chapa.global/v2/payments/<reference>/verify
+//   Webhook:    x-chapa-signature = HMAC-SHA256(secret, raw request body)
 //
-// Only the documented v1 endpoints are used here. No custom banking/card
-// interface and no invented endpoints.
+// No secret key is sent to the browser.
 
 import crypto from "crypto";
 
@@ -28,7 +26,7 @@ if (typeof window !== "undefined") {
   );
 }
 
-const CHAPA_BASE_URL = "https://api.chapa.co";
+const CHAPA_V2_BASE_URL = "https://api.chapa.global/v2";
 
 // ── Env / config ──────────────────────────────────────────────────────────
 
@@ -56,11 +54,12 @@ export function chapaPublicKey(): string | undefined {
 
 /** Webhook "secret hash" configured in the Chapa dashboard → Webhooks. */
 export function chapaWebhookSecret(): string | undefined {
-  return process.env.CHAPA_WEBHOOK_SECRET?.trim() || undefined;
+  const raw = process.env.CHAPA_WEBHOOK_SECRET;
+  return raw?.trim().replace(/^['"]+|['"]+$/g, "") || undefined;
 }
 
 export function isChapaConfigured(): boolean {
-  return Boolean(chapaSecretKey() && chapaPublicKey());
+  return Boolean(chapaV2SecretKey());
 }
 
 // ── Key format validation ─────────────────────────────────────────────────
@@ -70,7 +69,13 @@ export function isChapaConfigured(): boolean {
 // variants used by some dashboard exports. The app still rejects a secret key in
 // the public slot and any TEST/LIVE mix.
 const PUBLIC_KEY_RE = /^(?:(?:CHAPUBK|PUBK)[-_](TEST|LIVE)[-_]|CHAPA[-_](TEST|LIVE)[-_](?:PUB|PUBLIC)[-_])[A-Za-z0-9_-]+$/i;
-const SECRET_KEY_RE = /^(?:(?:CHASECK|SECK)[-_](TEST|LIVE)[-_]|CHAPA[-_](TEST|LIVE)[-_](?:PRIV|PRIVATE)[-_])[A-Za-z0-9_-]+$/i;
+const SECRET_KEY_RE = /^(?:(?:CHASECK|SECK)[-_](TEST|LIVE)[-_]|CHAPA[-_](TEST|LIVE)[-_](?:(?:PRIV|PRIVATE)[-_]|(?!PUB(?:LIC)?[-_])))[A-Za-z0-9_-]+$/i;
+const V2_SECRET_KEY_RE = /^CHAPA[-_](TEST|LIVE)[-_](?:(?:PRIV|PRIVATE)[-_])?(?!PUB(?:LIC)?[-_])[A-Za-z0-9_-]+$/i;
+
+export function chapaV2SecretKey(): string | undefined {
+  const key = chapaSecretKey();
+  return key && V2_SECRET_KEY_RE.test(key) ? key : undefined;
+}
 
 function cleanChapaKey(value: unknown): string {
   return (typeof value === "string" ? value : "")
@@ -89,7 +94,7 @@ export function normalizeChapaKey(value: unknown, kind: "public" | "secret"): st
   const regex = kind === "public" ? PUBLIC_KEY_RE : SECRET_KEY_RE;
   if (!regex.test(cleaned)) {
     throw new Error(
-      `${kind === "public" ? "CHAPA_PUBLIC_KEY" : "CHAPA_SECRET_KEY"} is invalid. Expected a Chapa public/secret key in CHAPUBK / CHASECK / CHAPA_TEST_PUB / CHAPA_TEST_PRIV format.`
+      `${kind === "public" ? "CHAPA_PUBLIC_KEY" : "CHAPA_SECRET_KEY"} is invalid. Expected a Chapa public key or a v1/v2 secret key.`
     );
   }
 
@@ -121,27 +126,26 @@ function describeKeyType(key: string): string {
 }
 
 /**
- * Human-readable misconfigurations; empty when both keys look right. Safe to
- * return to a browser — it names key TYPES and modes, never key values.
+ * Human-readable config problems. Safe to return to a browser — it names key
+ * TYPES and modes, never key values.
  */
 export function chapaConfigurationProblems(): string[] {
   const problems: string[] = [];
   const pub = chapaPublicKey();
-  const sec = chapaSecretKey();
+  const sec = chapaV2SecretKey();
 
-  if (!pub) problems.push("CHAPA_PUBLIC_KEY is not set");
-  else if (!PUBLIC_KEY_RE.test(pub))
+  if (pub && !PUBLIC_KEY_RE.test(pub))
     problems.push(
       `CHAPA_PUBLIC_KEY is ${describeKeyType(pub)} — Inline.js needs a CHAPUBK_TEST-/CHAPUBK_LIVE- or CHAPA_TEST_PUB-/CHAPA_LIVE_PUB- public key`
     );
-  if (!sec) problems.push("CHAPA_SECRET_KEY is not set");
+  if (!sec) problems.push("CHAPA_SECRET_KEY must be a Chapa v2 key (CHAPA_TEST_… or CHAPA_LIVE_…)");
   else if (!SECRET_KEY_RE.test(sec))
     problems.push(
-      `CHAPA_SECRET_KEY is ${describeKeyType(sec)} — server verification needs a CHASECK_TEST-/CHASECK_LIVE- or CHAPA_TEST_PRIV-/CHAPA_LIVE_PRIV- secret key`
+      `CHAPA_SECRET_KEY is ${describeKeyType(sec)} — v2 server requests need a CHAPA_TEST_ or CHAPA_LIVE_ secret key`
     );
 
   const pubMode = chapaPublicKeyMode();
-  const secMode = chapaSecretKeyMode();
+  const secMode = sec ? keyMode(V2_SECRET_KEY_RE, sec) : undefined;
   if (pubMode && secMode && pubMode !== secMode)
     problems.push(
       `Key mode mismatch: the public key is ${pubMode} but the secret key is ${secMode} — TEST and LIVE keys cannot be mixed`
@@ -150,12 +154,71 @@ export function chapaConfigurationProblems(): string[] {
   return problems;
 }
 
+export interface ChapaHostedPaymentRequest {
+  amount: number;
+  currency: string;
+  merchant_reference: string;
+  customer: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone_number?: string;
+  };
+  meta?: Record<string, string>;
+  return_url?: string;
+}
+
+interface ChapaHostedPaymentResponse {
+  status?: string;
+  message?: string;
+  data?: {
+    checkout_url?: string;
+    chapa_reference?: string;
+    reference?: string;
+  } | null;
+}
+
+export async function createChapaHostedPayment(
+  payload: ChapaHostedPaymentRequest,
+  configuredKey: string | undefined = chapaV2SecretKey()
+): Promise<{ checkoutUrl: string; chapaReference?: string }> {
+  if (!configuredKey) throw new Error("Chapa is not configured (CHAPA_SECRET_KEY missing)");
+  const key = normalizeChapaKey(configuredKey, "secret");
+  if (!V2_SECRET_KEY_RE.test(key)) throw new Error("CHAPA_SECRET_KEY must use a Chapa v2 key (CHAPA_TEST_… or CHAPA_LIVE_…)");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+
+  try {
+    const response = await fetch(`${CHAPA_V2_BASE_URL}/payments/hosted`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const body = (await response.json().catch(() => null)) as ChapaHostedPaymentResponse | null;
+    const checkoutUrl = body?.data?.checkout_url;
+    if (!response.ok || body?.status?.toLowerCase() !== "success" || !checkoutUrl) {
+      throw new Error(body?.message || `Chapa hosted payment initialization failed (HTTP ${response.status})`);
+    }
+
+    return {
+      checkoutUrl,
+      chapaReference: body.data?.chapa_reference || body.data?.reference || undefined,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // ── References & phone normalization ───────────────────────────────────────
 
 /**
- * Unique server-side transaction reference (Chapa `tx_ref`), generated per
- * payment attempt. Inline.js accepts it as the `tx_ref` option, which lets us
- * correlate Chapa's transaction (and webhooks) back to our Payment row.
+ * Unique merchant_reference generated per payment attempt and correlated with
+ * Chapa v2 verification responses and webhook events.
  */
 export function generateTxRef(referenceId: string): string {
   const stamp = Date.now().toString(36);
@@ -178,6 +241,14 @@ export function normalizePhoneForChapa(phone?: string): string {
   if (local.startsWith("251")) local = local.slice(3);
   else if (local.startsWith("0")) local = local.slice(1);
   return /^[97]\d{8}$/.test(local) ? local : "";
+}
+
+/** Normalizes Ethiopian phone numbers to the international format required by v2. */
+export function normalizePhoneForChapaV2(phone?: string): string | undefined {
+  if (!phone) return undefined;
+  const digits = phone.replace(/\D/g, "");
+  const local = digits.startsWith("251") ? digits.slice(3) : digits.startsWith("0") ? digits.slice(1) : digits;
+  return /^[97]\d{8}$/.test(local) ? `+251${local}` : undefined;
 }
 
 // ── Verify ─────────────────────────────────────────────────────────────────
@@ -212,37 +283,14 @@ function chapaMessage(body: unknown): string {
   return "";
 }
 
-/**
- * Classifies a failed verify response. Verified against Chapa's live TEST API
- * (Sept 2026) as well as their documented response list
- * (https://developer.chapa.co/integrations/responses):
- *
- *   documented  404  "Invalid transaction or Transaction not found"  → not-found
- *   documented  404  "Payment not paid yet"                          → pending
- *   observed    400  "Invalid transaction reference"                 → not-found
- *
- * Anything else (401 "Invalid API Key", "Live secret keys can't be used to
- * verify a test transaction", "Payments through API is disabled", …) is a real
- * error and must NOT be mistaken for "no such transaction" — otherwise we would
- * silently leave a payment pending instead of surfacing the misconfiguration.
- */
-function classifyVerifyFailure(status: number, message: string): "pending" | "not-found" | "error" {
-  const msg = message.toLowerCase();
-  if (msg.includes("not paid yet")) return "pending";
-  if (msg.includes("invalid transaction") || msg.includes("transaction not found")) return "not-found";
-  // Documented 404 with no message body → treat as an unknown transaction.
-  if (status === 404 && !msg) return "not-found";
-  return "error";
-}
-
 interface ChapaVerifyData {
   status?: string;
   amount?: number | string;
   currency?: string;
-  reference?: string;
-  tx_ref?: string;
-  method?: string;
-  charge?: number | string;
+  chapa_reference?: string;
+  merchant_reference?: string;
+  payment_method?: string;
+  service_fee?: number | string;
   mode?: string;
 }
 
@@ -253,62 +301,52 @@ interface ChapaVerifyResponse {
 }
 
 export async function verifyChapaTransaction(
-  txRef: string,
-  configuredKey: string | undefined = chapaSecretKey()
+  chapaReference: string,
+  configuredKey: string | undefined = chapaV2SecretKey()
 ): Promise<ChapaVerification> {
   if (!configuredKey) throw new Error("Chapa is not configured (CHAPA_SECRET_KEY missing)");
   const key = normalizeChapaKey(configuredKey, "secret");
-  // The secret key travels only in the Authorization header of this server-side
-  // call. The public key must NEVER be used here — Chapa answers a public key
-  // with 401 "Invalid API key", which our caller would misread as a failed
-  // payment rather than a configuration error.
+  if (!V2_SECRET_KEY_RE.test(key)) throw new Error("CHAPA_SECRET_KEY must use a Chapa v2 key (CHAPA_TEST_… or CHAPA_LIVE_…)");
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
-  let res: Response;
-  let body: ChapaVerifyResponse | null;
   try {
-    res = await fetch(
-      `${CHAPA_BASE_URL}/v1/transaction/verify/${encodeURIComponent(txRef)}`,
+    const response = await fetch(
+      `${CHAPA_V2_BASE_URL}/payments/${encodeURIComponent(chapaReference)}/verify`,
       {
         method: "GET",
-        headers: { Authorization: `Bearer ${key}` },
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json",
+        },
         cache: "no-store",
         signal: controller.signal,
       }
     );
-    body = (await res.json().catch(() => null)) as ChapaVerifyResponse | null;
+    const body = (await response.json().catch(() => null)) as ChapaVerifyResponse | null;
+    const data = body?.data;
+
+    if (!response.ok || !data) {
+      const message = chapaMessage(body);
+      if (response.status === 404 || /not found/i.test(message)) {
+        throw new PaymentNotFoundError(message || "Chapa payment not found");
+      }
+      throw new Error(message || `Chapa verify failed (HTTP ${response.status})`);
+    }
+
+    return {
+      status: String(data.status || "pending").trim().toLowerCase(),
+      chapaReference: String(data.chapa_reference || chapaReference),
+      txRef: String(data.merchant_reference || ""),
+      amount: Number(data.amount ?? 0),
+      currency: String(data.currency || "ETB"),
+      method: data.payment_method ? String(data.payment_method) : undefined,
+      charge: data.service_fee != null ? Math.round(Number(data.service_fee)) : undefined,
+      mode: data.mode ? String(data.mode) : undefined,
+    };
   } finally {
     clearTimeout(timeout);
   }
-
-  const data = body?.data;
-
-  if (!res.ok || !data) {
-    const message = chapaMessage(body);
-    switch (classifyVerifyFailure(res.status, message)) {
-      case "pending":
-        // A charge that is still being processed (or not yet paid) is not an
-        // error — report it as pending and let the caller keep the payment
-        // PENDING.
-        return { status: "pending", chapaReference: "", txRef, amount: 0, currency: "ETB" };
-      case "not-found":
-        throw new PaymentNotFoundError(message || "Chapa transaction not found");
-      default:
-        throw new Error(message || `Chapa verify failed (HTTP ${res.status})`);
-    }
-  }
-
-  return {
-    status: String(data.status || "").trim().toLowerCase() || "pending",
-    chapaReference: String(data.reference || ""),
-    txRef: String(data.tx_ref || txRef),
-    amount: Number(data.amount ?? 0),
-    currency: String(data.currency || "ETB"),
-    method: data.method ? String(data.method) : undefined,
-    charge: data.charge != null ? Math.round(Number(data.charge)) : undefined,
-    mode: data.mode ? String(data.mode) : undefined,
-  };
 }
 
 // ── Webhook signature ──────────────────────────────────────────────────────
@@ -319,31 +357,13 @@ function timingSafeHexEqual(a: string, b: string): boolean {
   return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
 }
 
-/**
- * Verifies an incoming Chapa webhook. Chapa sends:
- *   - `x-chapa-signature`: HMAC-SHA256 of the event payload, signed with the
- *     webhook secret hash.
- *   - `chapa-signature`:   HMAC-SHA256 of the secret itself, signed with the
- *     secret.
- * Either header matching is sufficient (as documented). Returns false when no
- * secret is configured so callers can decide how to fail.
- */
+/** Verifies the v2 HMAC signature against the exact raw request bytes. */
 export function isValidChapaWebhook(
-  rawBody: string | Buffer,
-  xSignature: string | null,
-  chapaSignature?: string | null
+  rawBody: Buffer,
+  xSignature: string | null
 ): boolean {
   const secret = chapaWebhookSecret();
-  if (!secret) return false;
-  const body = typeof rawBody === "string" ? Buffer.from(rawBody) : rawBody;
-
-  if (xSignature && /^[a-f0-9]{64}$/i.test(xSignature)) {
-    const expected = crypto.createHmac("sha256", secret).update(body).digest("hex");
-    if (timingSafeHexEqual(xSignature, expected)) return true;
-  }
-  if (chapaSignature && /^[a-f0-9]{64}$/i.test(chapaSignature)) {
-    const expected = crypto.createHmac("sha256", secret).update(secret).digest("hex");
-    if (timingSafeHexEqual(chapaSignature, expected)) return true;
-  }
-  return false;
+  if (!secret || !xSignature || !/^[a-f0-9]{64}$/i.test(xSignature)) return false;
+  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+  return timingSafeHexEqual(xSignature, expected);
 }

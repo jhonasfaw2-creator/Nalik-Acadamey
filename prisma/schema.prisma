@@ -94,21 +94,20 @@ model Application {
   @@index([status])
 }
 
-// ── Payments (Chapa Inline.js) ─────────────────────────
+// ── Payments (Chapa hosted checkout) ────────────────────
 // Payment lifecycle: PENDING → SUCCESS / FAILED / CANCELLED / INCOMPLETE
 //
-// The inline checkout runs in the browser against Chapa using a PUBLIC key;
-// the amount there is client-supplied and therefore untrusted. The only
-// source of truth is server-side verification (Chapa's verify endpoint) and
-// signed webhooks, both of which check amount + currency against this row.
+// Hosted checkout initialization and verification run server-side. The only
+// source of truth is Chapa's v2 verification endpoint and signed webhooks,
+// which check the amount and currency against this row.
 model Payment {
   id             String      @id @default(cuid())
   applicationId  String      @unique
   application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   amount         Int         // amount in Birr, calculated server-side from the course
   currency       String      @default("ETB")
-  txRef          String?     @unique // our unique tx_ref per attempt (Chapa "tx_ref")
-  chapaReference String?     // Chapa's internal reference (verify/webhook "reference")
+  txRef          String?     @unique // our unique merchant_reference per attempt
+  chapaReference String?     // Chapa v2 provider reference used for verification
   status         String      @default("PENDING") // PENDING, SUCCESS, FAILED, CANCELLED, INCOMPLETE
   method         String?     // payment method reported by Chapa (telebirr, cbebirr, …)
   charge         Int?        // Chapa transaction fee (Birr)

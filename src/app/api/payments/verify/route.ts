@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
-  chapaSecretKey,
+  chapaV2SecretKey,
   verifyChapaTransaction,
   PaymentNotFoundError,
 } from "@/lib/payments/chapa";
@@ -57,8 +57,8 @@ async function handle(request: NextRequest) {
       return NextResponse.json(buildSummary(application, payment));
     }
 
-    if (!payment.txRef) {
-      // No attempt initialized yet.
+    if (!payment.txRef || !payment.chapaReference) {
+      // Hosted checkout may not return Chapa's reference until its webhook arrives.
       return NextResponse.json(buildSummary(application, payment));
     }
 
@@ -70,7 +70,7 @@ async function handle(request: NextRequest) {
       );
     }
 
-    const secretKey = chapaSecretKey();
+    const secretKey = chapaV2SecretKey();
     if (!secretKey) {
       return NextResponse.json(
         { status: "ERROR", message: "Server CHAPA_SECRET_KEY configuration is invalid", error: "Server CHAPA_SECRET_KEY configuration is invalid" },
@@ -80,7 +80,7 @@ async function handle(request: NextRequest) {
 
     let verification;
     try {
-      verification = await verifyChapaTransaction(payment.txRef, secretKey);
+      verification = await verifyChapaTransaction(payment.chapaReference, secretKey);
     } catch (error) {
       if (error instanceof PaymentNotFoundError) {
         // Chapa does not know this tx_ref (yet). Stay pending.
@@ -97,6 +97,16 @@ async function handle(request: NextRequest) {
         },
         { status: 200 }
       );
+    }
+
+    if (verification.txRef && verification.txRef !== payment.txRef) {
+      console.error("Chapa verify merchant_reference mismatch for payment", payment.id);
+      return NextResponse.json({
+        ...buildSummary(application, payment),
+        status: "PENDING",
+        warning: "The verified transaction does not match this registration.",
+        code: "CHAPA_REFERENCE_MISMATCH",
+      });
     }
 
     await applyChapaPaymentResult(payment.id, {
