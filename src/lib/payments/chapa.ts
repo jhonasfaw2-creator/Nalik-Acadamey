@@ -183,7 +183,8 @@ export class ChapaHostedPaymentError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly providerCode?: string
+    readonly providerCode?: string,
+    readonly details?: ChapaHostedPaymentResponse | null
   ) {
     super(message);
     this.name = "ChapaHostedPaymentError";
@@ -217,7 +218,8 @@ export async function createChapaHostedPayment(
       throw new ChapaHostedPaymentError(
         body?.message || `Chapa hosted payment initialization failed (HTTP ${response.status})`,
         response.status,
-        body?.code
+        body?.code,
+        body
       );
     }
 

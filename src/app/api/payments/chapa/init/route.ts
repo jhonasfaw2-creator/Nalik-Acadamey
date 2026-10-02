@@ -45,6 +45,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Registration not found" }, { status: 404 });
     }
 
+    const email = application.email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      console.error("[chapa-init] Registration has an invalid customer email", { referenceId });
+      return NextResponse.json({ error: "A valid email address is required for payment." }, { status: 400 });
+    }
+
     // Legacy registrations (pre-online-payments) have no Payment row — create
     // the missing PENDING payment on the spot so they become payable.
     const payment = await ensurePaymentForApplication(application.id);
@@ -65,26 +71,42 @@ export async function POST(request: NextRequest) {
     // V2 requires a unique merchant_reference for each payment attempt.
     const reuseExisting =
       !rotate && current.status === "PENDING" && !current.chapaReference && Boolean(current.txRef);
-    const merchantReference = reuseExisting ? (current.txRef as string) : generateTxRef(application.referenceId);
+    const rawMerchantReference = reuseExisting ? (current.txRef as string) : generateTxRef(application.referenceId);
+    const merchantReference = rawMerchantReference.replace(/[^A-Za-z0-9-]/g, "");
+    if (!merchantReference) {
+      console.error("[chapa-init] Could not create a valid merchant_reference", { referenceId });
+      return NextResponse.json({ error: "Unable to create a valid payment reference." }, { status: 400 });
+    }
+
+    const rawAmount = String(payment.amount);
+    const amount = Number(rawAmount.replace(/[\s,]/g, ""));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      console.error("[chapa-init] Registration has an invalid amount", { referenceId });
+      return NextResponse.json({ error: "This registration has an invalid payment amount." }, { status: 400 });
+    }
 
     const [firstName, ...lastNameParts] = application.fullName.trim().split(/\s+/).filter(Boolean);
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
-    const returnUrl = appUrl
-      ? `${appUrl}/payment/return?referenceId=${encodeURIComponent(application.referenceId)}`
-      : undefined;
+    const appOrigin = getAppOrigin(request);
+    if (!appOrigin) {
+      console.error("[chapa-init] Could not determine an absolute return URL origin", { referenceId });
+      return NextResponse.json({ error: "Payment return URL is not configured correctly." }, { status: 500 });
+    }
+    const returnUrl = new URL("/payment/return", appOrigin);
+    returnUrl.searchParams.set("referenceId", application.referenceId);
+
     const hosted = await createChapaHostedPayment(
       {
-        amount: payment.amount,
-        currency: payment.currency,
+        amount,
+        currency: "ETB",
         merchant_reference: merchantReference,
         customer: {
-          first_name: firstName || "Customer",
-          last_name: lastNameParts.join(" ") || "Student",
-          email: application.email,
+          first_name: firstName || "Student",
+          last_name: lastNameParts.join(" ") || "Applicant",
+          email,
           phone_number: normalizePhoneForChapaV2(application.phone),
         },
         meta: { order_id: application.referenceId },
-        ...(returnUrl ? { return_url: returnUrl } : {}),
+        return_url: returnUrl.toString(),
       },
       secretKey
     );
@@ -101,13 +123,14 @@ export async function POST(request: NextRequest) {
           status: "PENDING",
           txRef: merchantReference,
           chapaReference: hosted.chapaReference,
+          currency: "ETB",
           notes: null,
         },
       });
     } else {
       await prisma.payment.update({
         where: { id: payment.id },
-        data: { status: "PENDING", txRef: merchantReference, chapaReference: null, notes: null },
+        data: { status: "PENDING", txRef: merchantReference, chapaReference: null, currency: "ETB", notes: null },
       });
     }
 
@@ -125,9 +148,13 @@ export async function POST(request: NextRequest) {
         httpStatus: error.status,
         providerCode: error.providerCode,
         message: error.message,
+        response: error.details,
       });
       return NextResponse.json(
-        { error: error.message || "Failed to initialize Chapa payment" },
+        {
+          error: error.message || "Failed to initialize Chapa payment",
+          details: error.details,
+        },
         { status: 400 }
       );
     }
@@ -140,6 +167,24 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ error: "Unable to start payment. Please try again." }, { status: 500 });
   }
+}
+
+function getAppOrigin(request: NextRequest): string | undefined {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/^['"]+|['"]+$/g, "");
+  if (configured) {
+    try {
+      const url = new URL(configured);
+      if (url.protocol === "https:" || url.protocol === "http:") return url.origin;
+    } catch {
+      console.error("[chapa-init] NEXT_PUBLIC_APP_URL is not an absolute URL");
+      return undefined;
+    }
+  }
+
+  const requestUrl = new URL(request.url);
+  return requestUrl.protocol === "https:" || requestUrl.protocol === "http:"
+    ? requestUrl.origin
+    : undefined;
 }
 
 function isAllowedCheckoutUrl(value: string): boolean {
