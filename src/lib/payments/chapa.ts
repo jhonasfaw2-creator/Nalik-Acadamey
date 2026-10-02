@@ -171,11 +171,23 @@ export interface ChapaHostedPaymentRequest {
 interface ChapaHostedPaymentResponse {
   status?: string;
   message?: string;
+  code?: string;
   data?: {
     checkout_url?: string;
     chapa_reference?: string;
     reference?: string;
   } | null;
+}
+
+export class ChapaHostedPaymentError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly providerCode?: string
+  ) {
+    super(message);
+    this.name = "ChapaHostedPaymentError";
+  }
 }
 
 export async function createChapaHostedPayment(
@@ -202,7 +214,11 @@ export async function createChapaHostedPayment(
     const body = (await response.json().catch(() => null)) as ChapaHostedPaymentResponse | null;
     const checkoutUrl = body?.data?.checkout_url;
     if (!response.ok || body?.status?.toLowerCase() !== "success" || !checkoutUrl) {
-      throw new Error(body?.message || `Chapa hosted payment initialization failed (HTTP ${response.status})`);
+      throw new ChapaHostedPaymentError(
+        body?.message || `Chapa hosted payment initialization failed (HTTP ${response.status})`,
+        response.status,
+        body?.code
+      );
     }
 
     return {

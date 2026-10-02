@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
+  ChapaHostedPaymentError,
   chapaV2SecretKey,
   createChapaHostedPayment,
   generateTxRef,
@@ -12,17 +13,25 @@ export const dynamic = "force-dynamic";
 
 // POST /api/payments/chapa/init — create a v2 hosted checkout session.
 export async function POST(request: NextRequest) {
+  let referenceId = "";
   try {
+    const rawKey = process.env.CHAPA_SECRET_KEY;
+    if (!rawKey) {
+      console.error("[chapa-init] CHAPA_SECRET_KEY is missing from environment variables.");
+      return NextResponse.json({ error: "Server misconfiguration: missing payment key" }, { status: 500 });
+    }
+
     const secretKey = chapaV2SecretKey();
     if (!secretKey) {
+      console.error("[chapa-init] CHAPA_SECRET_KEY is not a valid Chapa v2 server key.");
       return NextResponse.json(
-        { error: "Online payments are not configured. Please try again later." },
-        { status: 503 }
+        { error: "Server misconfiguration: CHAPA_SECRET_KEY must be a Chapa v2 key" },
+        { status: 500 }
       );
     }
 
     const body = await request.json().catch(() => ({}));
-    const referenceId = typeof body.referenceId === "string" ? body.referenceId.trim() : "";
+    referenceId = typeof body.referenceId === "string" ? body.referenceId.trim() : "";
     const rotate = body.rotate === true;
     if (!referenceId) {
       return NextResponse.json({ error: "Missing referenceId" }, { status: 400 });
@@ -58,11 +67,6 @@ export async function POST(request: NextRequest) {
       !rotate && current.status === "PENDING" && !current.chapaReference && Boolean(current.txRef);
     const merchantReference = reuseExisting ? (current.txRef as string) : generateTxRef(application.referenceId);
 
-    await prisma.payment.update({
-      where: { id: payment.id },
-      data: { status: "PENDING", txRef: merchantReference, chapaReference: null, notes: null },
-    });
-
     const [firstName, ...lastNameParts] = application.fullName.trim().split(/\s+/).filter(Boolean);
     const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
     const returnUrl = appUrl
@@ -93,7 +97,17 @@ export async function POST(request: NextRequest) {
     if (hosted.chapaReference) {
       await prisma.payment.update({
         where: { id: payment.id },
-        data: { chapaReference: hosted.chapaReference },
+        data: {
+          status: "PENDING",
+          txRef: merchantReference,
+          chapaReference: hosted.chapaReference,
+          notes: null,
+        },
+      });
+    } else {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: "PENDING", txRef: merchantReference, chapaReference: null, notes: null },
       });
     }
 
@@ -105,7 +119,25 @@ export async function POST(request: NextRequest) {
       referenceId: application.referenceId,
     });
   } catch (error) {
-    console.error("Chapa init error:", error);
+    if (error instanceof ChapaHostedPaymentError) {
+      console.error("[chapa-init] Chapa rejected hosted payment initialization:", {
+        referenceId,
+        httpStatus: error.status,
+        providerCode: error.providerCode,
+        message: error.message,
+      });
+      return NextResponse.json(
+        { error: error.message || "Failed to initialize Chapa payment" },
+        { status: 400 }
+      );
+    }
+
+    console.error("[chapa-init] Unexpected payment initialization failure:", {
+      referenceId: referenceId || undefined,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return NextResponse.json({ error: "Unable to start payment. Please try again." }, { status: 500 });
   }
 }
