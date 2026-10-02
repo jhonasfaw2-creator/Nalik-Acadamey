@@ -66,6 +66,25 @@ type ResultKind = "success" | "failed" | "cancelled" | "incomplete";
 
 const INLINE_SCRIPT = "https://js.chapa.co/v1/inline.js";
 
+const sanitizeChapaPublicKey = (value: unknown): string => {
+  return String(value ?? "")
+    .trim()
+    .replace(/^['"]+|['"]+$/g, "")
+    .replace(/[\r\n\t\s]+/g, "");
+};
+
+const sanitizeTxRef = (value: unknown): string => {
+  const cleaned = String(value ?? "")
+    .replace(/[^A-Za-z0-9_-]/g, "")
+    .slice(0, 64);
+  return cleaned || "NALIK-transaction";
+};
+
+const sanitizeAmountString = (value: unknown): string => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? String(Math.round(numeric)) : "0";
+};
+
 function loadChapaScript(): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
   if (window.ChapaCheckout) return Promise.resolve();
@@ -470,19 +489,23 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         const callbackUrl = isPublicCallbackUrl(appUrl) ? `${appUrl}/api/webhooks/chapa` : undefined;
         const returnUrl = new URL(`/payment/return?referenceId=${encodeURIComponent(referenceId)}`, appUrl);
 
+        const fullName = (fullNameRef.current?.value ?? "Customer").trim() || "Customer";
+        const givenName = fullName.split(/\s+/).filter(Boolean)[0] || "Customer";
+        const familyName = fullName.split(/\s+/).filter(Boolean).slice(1).join(" ") || "Customer";
+
         const chapa = new window.ChapaCheckout({
-          publicKey: checkout.publicKey,
-          // Stringified positive integer — Inline.js appends it to FormData
-          // as-is, so it must already be sanitized (done in openCheckout).
-          amount: String(checkout.amount),
-          currency: checkout.currency || "ETB",
-          tx_ref: checkout.txRef,
+          publicKey: sanitizeChapaPublicKey(checkout.publicKey),
+          public_key: sanitizeChapaPublicKey(checkout.publicKey),
+          amount: sanitizeAmountString(checkout.amount),
+          currency: "ETB",
+          tx_ref: sanitizeTxRef(checkout.txRef),
+          email: emailRef.current?.value?.trim() || "student@example.com",
+          first_name: givenName,
+          last_name: familyName,
           mobile: checkout.mobile || undefined,
           availablePaymentMethods: ["telebirr", "cbebirr", "ebirr", "mpesa", "chapa"],
           customizations: { buttonText: `Pay ${formatBirr(checkout.amount)}` },
           callbackUrl,
-          // A return URL keeps Inline.js from showing its own success popup
-          // before our server has verified the payment.
           returnUrl: returnUrl.toString(),
           onSuccessfulPayment: () => { verify(); },
           onPaymentFailure: (message: string) => {

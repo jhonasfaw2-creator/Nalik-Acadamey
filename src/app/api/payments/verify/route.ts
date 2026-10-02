@@ -70,9 +70,15 @@ async function handle(request: NextRequest) {
         // Chapa does not know this tx_ref (yet). Stay pending.
         return NextResponse.json(buildSummary(application, payment));
       }
-      console.error("Chapa verify error:", error);
+      const message = error instanceof Error ? error.message : "Verification temporarily unavailable.";
+      console.error("Chapa verify error:", message, error);
       return NextResponse.json(
-        { ...buildSummary(application, payment), error: "Verification temporarily unavailable. Please try again." },
+        {
+          ...buildSummary(application, payment),
+          error: message,
+          status: "ERROR",
+          code: "CHAPA_VERIFY_FAILED",
+        },
         { status: 502 }
       );
     }

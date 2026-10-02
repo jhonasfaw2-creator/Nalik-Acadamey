@@ -6,8 +6,9 @@
 export {};
 
 interface ChapaCheckoutOptions {
-  /** Chapa PUBLIC key (CHAPUBK_TEST-… / CHAPUBK_LIVE-…). Required. */
-  publicKey: string;
+  /** Chapa PUBLIC key (legacy or v2 format). Required. */
+  publicKey?: string;
+  public_key?: string;
   /** Amount to charge. Required. */
   amount: string | number;
   currency?: string;
@@ -15,6 +16,9 @@ interface ChapaCheckoutOptions {
   tx_ref?: string;
   /** Optional phone number to prefill (9-digit local Ethiopian format). */
   mobile?: string;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
   availablePaymentMethods?: string[];
   customizations?: {
     buttonText?: string;

@@ -32,14 +32,26 @@ const CHAPA_BASE_URL = "https://api.chapa.co";
 
 // ── Env / config ──────────────────────────────────────────────────────────
 
-/** Server-side secret key (CHASECK_TEST-… / CHASECK_LIVE-…). */
+/** Returns a cleaned Chapa secret key or undefined if it is absent. */
 export function chapaSecretKey(): string | undefined {
-  return process.env.CHAPA_SECRET_KEY?.trim() || undefined;
+  try {
+    const raw = process.env.CHAPA_SECRET_KEY;
+    if (!raw) return undefined;
+    return normalizeChapaKey(raw, "secret");
+  } catch {
+    return undefined;
+  }
 }
 
-/** Public key (CHAPUBK_TEST-… / CHAPUBK_LIVE-…) used by Inline.js in the browser. */
+/** Returns a cleaned Chapa public key or undefined if it is absent. */
 export function chapaPublicKey(): string | undefined {
-  return process.env.CHAPA_PUBLIC_KEY?.trim() || undefined;
+  try {
+    const raw = process.env.CHAPA_PUBLIC_KEY;
+    if (!raw) return undefined;
+    return normalizeChapaKey(raw, "public");
+  } catch {
+    return undefined;
+  }
 }
 
 /** Webhook "secret hash" configured in the Chapa dashboard → Webhooks. */
@@ -54,15 +66,38 @@ export function isChapaConfigured(): boolean {
 // ── Key format validation ─────────────────────────────────────────────────
 // Chapa keys have changed naming formats across versions. We accept both the
 // older CHAPUBK_/CHASECK_ names and the newer CHAPA_TEST_PUB_/CHAPA_TEST_PRIV_
-// family so valid keys are not rejected during checkout. The app still rejects
-// a secret key in the public slot and any TEST/LIVE mix.
-const PUBLIC_KEY_RE = /^(?:CHAPUBK[-_](TEST|LIVE)[-_]|CHAPA[-_](TEST|LIVE)[-_]PUB[-_])[A-Za-z0-9_-]+$/i;
-const SECRET_KEY_RE = /^(?:CHASECK[-_](TEST|LIVE)[-_]|CHAPA[-_](TEST|LIVE)[-_]PRIV[-_])[A-Za-z0-9_-]+$/i;
+// family as well as stripped/quoted values and the more compact PUBK_/SECK_
+// variants used by some dashboard exports. The app still rejects a secret key in
+// the public slot and any TEST/LIVE mix.
+const PUBLIC_KEY_RE = /^(?:(?:CHAPUBK|PUBK)[-_](TEST|LIVE)[-_]|CHAPA[-_](TEST|LIVE)[-_](?:PUB|PUBLIC)[-_])[A-Za-z0-9_-]+$/i;
+const SECRET_KEY_RE = /^(?:(?:CHASECK|SECK)[-_](TEST|LIVE)[-_]|CHAPA[-_](TEST|LIVE)[-_](?:PRIV|PRIVATE)[-_])[A-Za-z0-9_-]+$/i;
+
+export function normalizeChapaKey(value: unknown, kind: "public" | "secret"): string {
+  const raw = typeof value === "string" ? value : "";
+  const cleaned = raw
+    .trim()
+    .replace(/^['"]+|['"]+$/g, "")
+    .replace(/[\r\n\t\s]+/g, "");
+
+  if (!cleaned) {
+    throw new Error(`${kind === "public" ? "CHAPA_PUBLIC_KEY" : "CHAPA_SECRET_KEY"} is empty or missing`);
+  }
+
+  const regex = kind === "public" ? PUBLIC_KEY_RE : SECRET_KEY_RE;
+  if (!regex.test(cleaned)) {
+    throw new Error(
+      `${kind === "public" ? "CHAPA_PUBLIC_KEY" : "CHAPA_SECRET_KEY"} is invalid. Expected a Chapa public/secret key in CHAPUBK / CHASECK / CHAPA_TEST_PUB / CHAPA_TEST_PRIV format.`
+    );
+  }
+
+  return cleaned;
+}
 
 export type ChapaKeyMode = "TEST" | "LIVE";
 
 function keyMode(regex: RegExp, key: string): ChapaKeyMode | undefined {
-  return (key.match(regex)?.[1] as ChapaKeyMode) || undefined;
+  const match = key.match(regex);
+  return (match?.[1] || match?.[2]) as ChapaKeyMode | undefined;
 }
 
 export function chapaPublicKeyMode(): ChapaKeyMode | undefined {
