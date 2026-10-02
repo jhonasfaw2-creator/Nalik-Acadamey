@@ -51,6 +51,70 @@ export function isChapaConfigured(): boolean {
   return Boolean(chapaSecretKey() && chapaPublicKey());
 }
 
+// ── Key format validation ─────────────────────────────────────────────────
+// Chapa keys carry their mode in the prefix (CHAPUBK_TEST-… / CHASECK_LIVE-…).
+// When the wrong kind of key reaches the checkout — a secret key in the public
+// key slot, or a TEST key paired with a LIVE one — Chapa's inline charge
+// endpoint rejects it with the opaque browser error "Invalid public key or the
+// business can't accept payments at the moment". These helpers catch that
+// server-side so the operator gets an actionable message instead.
+
+const PUBLIC_KEY_RE = /^CHAPUBK[-_](TEST|LIVE)[-_][A-Za-z0-9]+$/;
+const SECRET_KEY_RE = /^CHASECK[-_](TEST|LIVE)[-_][A-Za-z0-9]+$/;
+
+export type ChapaKeyMode = "TEST" | "LIVE";
+
+function keyMode(regex: RegExp, key: string): ChapaKeyMode | undefined {
+  return (key.match(regex)?.[1] as ChapaKeyMode) || undefined;
+}
+
+export function chapaPublicKeyMode(): ChapaKeyMode | undefined {
+  const key = chapaPublicKey();
+  return key ? keyMode(PUBLIC_KEY_RE, key) : undefined;
+}
+
+export function chapaSecretKeyMode(): ChapaKeyMode | undefined {
+  const key = chapaSecretKey();
+  return key ? keyMode(SECRET_KEY_RE, key) : undefined;
+}
+
+/** Classifies a key's shape without ever exposing its value. */
+function describeKeyType(key: string): string {
+  if (/^CHASECK/i.test(key)) return "a CHASECK (secret) key";
+  if (/^CHAPUBK/i.test(key)) return "a CHAPUBK (public) key";
+  return "a key with an unrecognized prefix";
+}
+
+/**
+ * Human-readable misconfigurations; empty when both keys look right. Safe to
+ * return to a browser — it names key TYPES and modes, never key values.
+ */
+export function chapaConfigurationProblems(): string[] {
+  const problems: string[] = [];
+  const pub = chapaPublicKey();
+  const sec = chapaSecretKey();
+
+  if (!pub) problems.push("CHAPA_PUBLIC_KEY is not set");
+  else if (!PUBLIC_KEY_RE.test(pub))
+    problems.push(
+      `CHAPA_PUBLIC_KEY is ${describeKeyType(pub)} — Inline.js needs a CHAPUBK_TEST-/CHAPUBK_LIVE- public key`
+    );
+  if (!sec) problems.push("CHAPA_SECRET_KEY is not set");
+  else if (!SECRET_KEY_RE.test(sec))
+    problems.push(
+      `CHAPA_SECRET_KEY is ${describeKeyType(sec)} — server verification needs a CHASECK_TEST-/CHASECK_LIVE- secret key`
+    );
+
+  const pubMode = chapaPublicKeyMode();
+  const secMode = chapaSecretKeyMode();
+  if (pubMode && secMode && pubMode !== secMode)
+    problems.push(
+      `Key mode mismatch: the public key is ${pubMode} but the secret key is ${secMode} — TEST and LIVE keys cannot be mixed`
+    );
+
+  return problems;
+}
+
 // ── References & phone normalization ───────────────────────────────────────
 
 /**
@@ -156,6 +220,10 @@ interface ChapaVerifyResponse {
 export async function verifyChapaTransaction(txRef: string): Promise<ChapaVerification> {
   const key = chapaSecretKey();
   if (!key) throw new Error("Chapa is not configured (CHAPA_SECRET_KEY missing)");
+  // The secret key travels only in the Authorization header of this server-side
+  // call. The public key must NEVER be used here — Chapa answers a public key
+  // with 401 "Invalid API key", which our caller would misread as a failed
+  // payment rather than a configuration error.
 
   const res = await fetch(
     `${CHAPA_BASE_URL}/v1/transaction/verify/${encodeURIComponent(txRef)}`,

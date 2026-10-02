@@ -302,6 +302,13 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
       setPayError("Could not reach the payment service. Please try again.");
       return;
     }
+    // Error-only response (no status to apply) — surface it instead of
+    // silently treating it as "still pending" and waiting forever.
+    if (data.error && !data.status) {
+      setVerifying(false);
+      setPayError(data.error);
+      return;
+    }
     if (data.status === "SUCCESS") {
       setResult({ kind: "success", data });
       setView("result");
@@ -337,9 +344,26 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         return;
       }
       if (res.ok && data.publicKey && data.txRef) {
+        // Sanitize before mounting. Inline.js charges exactly the amount
+        // string handed to it, and Chapa's charge endpoint answers a zero,
+        // negative or non-numeric amount with the same opaque "Invalid public
+        // key or the business can't accept payments at the moment" error. The
+        // server-computed amount is authoritative — fail rather than fall back
+        // to a possibly stale course price.
+        const serverAmount = Number(data.amount);
+        const amount = Number.isFinite(serverAmount) && serverAmount > 0 ? Math.round(serverAmount) : 0;
+        const publicKey = typeof data.publicKey === "string" ? data.publicKey.trim() : "";
+        if (!publicKey || !amount) {
+          setPayError(
+            !publicKey
+              ? "Payment is misconfigured (missing public key). Please try again later."
+              : "This registration has no valid amount to charge. Please contact support."
+          );
+          return;
+        }
         setCheckout({
-          publicKey: data.publicKey,
-          amount: Number(data.amount) || (selectedCourse ? selectedCourse.discountPrice ?? selectedCourse.price : 0),
+          publicKey,
+          amount,
           currency: data.currency || "ETB",
           txRef: data.txRef,
           mobile: data.mobile || "",
@@ -352,7 +376,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     } finally {
       setPaymentInFlight(false);
     }
-  }, [paymentInFlight, verify, selectedCourse]);
+  }, [paymentInFlight, verify]);
 
   // ── PAY NOW: validate → create (or reuse) registration → checkout ─
   const validateInfo = (): Record<string, string> => {
@@ -448,8 +472,10 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
 
         const chapa = new window.ChapaCheckout({
           publicKey: checkout.publicKey,
+          // Stringified positive integer — Inline.js appends it to FormData
+          // as-is, so it must already be sanitized (done in openCheckout).
           amount: String(checkout.amount),
-          currency: checkout.currency,
+          currency: checkout.currency || "ETB",
           tx_ref: checkout.txRef,
           mobile: checkout.mobile || undefined,
           availablePaymentMethods: ["telebirr", "cbebirr", "ebirr", "mpesa", "chapa"],

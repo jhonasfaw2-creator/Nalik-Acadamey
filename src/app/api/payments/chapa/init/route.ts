@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
   isChapaConfigured,
+  chapaConfigurationProblems,
   chapaPublicKey,
   generateTxRef,
   normalizePhoneForChapa,
@@ -23,6 +24,22 @@ export async function POST(request: NextRequest) {
     if (!isChapaConfigured()) {
       return NextResponse.json(
         { error: "Online payments are temporarily unavailable. Please try again later." },
+        { status: 503 }
+      );
+    }
+
+    // Fail fast on swapped/invalid key formats. Otherwise the browser hands a
+    // bad key to Inline.js and Chapa's charge endpoint rejects it with the
+    // opaque "Invalid public key or the business can't accept payments at the
+    // moment" — much harder to diagnose than a server-side message.
+    const keyProblems = chapaConfigurationProblems();
+    if (keyProblems.length > 0) {
+      console.error("[chapa-init] Chapa configuration problems:", keyProblems);
+      return NextResponse.json(
+        {
+          error:
+            "Online payments are misconfigured (invalid Chapa keys). Check CHAPA_PUBLIC_KEY / CHAPA_SECRET_KEY in the deployment settings and redeploy.",
+        },
         { status: 503 }
       );
     }
