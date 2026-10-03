@@ -283,7 +283,15 @@ function readString(source: Record<string, unknown>, key: string): string | null
 
 function readNumber(source: Record<string, unknown>, key: string): number | null {
   const value = source[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  // Chapa v2 returns numeric fields (amount, service_fee) as strings in both
+  // the webhook payload and the verify response (e.g. "40000"). Accept both
+  // the native number form and the quoted-number form that the API sends.
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.replace(/[\s,]/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 // ── Client ────────────────────────────────────────────────────────────────
