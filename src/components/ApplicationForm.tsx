@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, CheckCircle, Loader2, AlertCircle, Calendar, Info, CreditCard } from "lucide-react";
+import { X, Loader2, Calendar, Info } from "lucide-react";
 
 interface CourseOption {
   id: string;
@@ -34,28 +34,6 @@ interface ApplicationFormProps {
   onClose: () => void;
   preselectedCourse?: string;
 }
-
-interface VerifyResponse {
-  status: string; // PENDING / SUCCESS / FAILED / CANCELLED / INCOMPLETE
-  error?: string;
-  message?: string;
-  registration?: {
-    referenceId: string;
-    fullName: string;
-    course: string | null;
-    schedule: string | null;
-    amount: number;
-    currency: string;
-    paymentStatus: string;
-    paymentMethod: string | null;
-    txRef: string | null;
-    chapaReference: string | null;
-    registrationStatus: string;
-  };
-}
-
-type View = "form" | "checkout" | "result";
-type ResultKind = "success" | "failed" | "cancelled" | "incomplete";
 
 function formatBirr(amount: number) {
   return amount.toLocaleString("en-ET") + " Birr";
@@ -96,18 +74,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const emailRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const ageRef = useRef<HTMLInputElement>(null);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [formError, setFormError] = useState("");
-
-  // Payment flow
-  const [view, setView] = useState<View>("form");
-  const [submitting, setSubmitting] = useState(false);
-  const [referenceId, setReferenceId] = useState("");
-  const [amount, setAmount] = useState(0);
-  const [payError, setPayError] = useState("");
-  const [verifying, setVerifying] = useState(false);
-  const [result, setResult] = useState<{ kind: ResultKind; message?: string; data?: VerifyResponse } | null>(null);
-  const [paymentInFlight, setPaymentInFlight] = useState(false);
 
   // ── Load courses + schedules ──────────────────────────────
   useEffect(() => {
@@ -179,37 +145,15 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     else dialog.close();
   }, [open]);
 
-  // The wizard is kept in memory across close/reopen so a student who steps
-  // away returns to exactly where they were. It is only reset once a payment
-  // has been confirmed.
-  const resetForm = useCallback(() => {
-    setView("form");
-    setSelectedCourseId("");
-    setSelectedGroupId("");
-    setSelectedSessionId("");
-    setReferenceId("");
-    setAmount(0);
-    setPayError("");
-    setVerifying(false);
-    setResult(null);
-    setErrors({});
-    setFormError("");
-    if (fullNameRef.current) fullNameRef.current.value = "";
-    if (emailRef.current) emailRef.current.value = "";
-    if (phoneRef.current) phoneRef.current.value = "";
-    if (ageRef.current) ageRef.current.value = "";
-  }, []);
-
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     const onDialogClose = () => {
-      if (result?.kind === "success") resetForm();
       onClose();
     };
     dialog.addEventListener("close", onDialogClose);
     return () => dialog.removeEventListener("close", onDialogClose);
-  }, [onClose, result, resetForm]);
+  }, [onClose]);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -219,7 +163,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const selectedGroup = scheduleGroups.find((g) => g.group === selectedGroupId) as ScheduleGroup | undefined;
   const selectedSession = selectedGroup?.sessions.find((s) => s.id === selectedSessionId);
   const selectedCourse = courses.find((c) => c.id === selectedCourseId);
-  const price = amount || (selectedCourse ? selectedCourse.discountPrice ?? selectedCourse.price : 0);
+  const price = selectedCourse ? selectedCourse.discountPrice ?? selectedCourse.price : 0;
   const duration = computeDuration(selectedSession?.startTime, selectedSession?.endTime);
   const scheduleText =
     selectedGroup && selectedSession
@@ -227,223 +171,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
       : "";
   const scheduleDays = selectedGroup?.days || "";
 
-  const checkStatus = useCallback(async (ref: string): Promise<VerifyResponse | null> => {
-    try {
-      const res = await fetch(`/api/payments/verify?referenceId=${encodeURIComponent(ref)}`, {
-        cache: "no-store",
-        signal: AbortSignal.timeout(12_000),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        const message = data?.message || data?.error || "Payment verification is temporarily unavailable.";
-        return { status: "ERROR", error: message, message };
-      }
-      return data;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const classify = (status: string): ResultKind =>
-    status === "SUCCESS" ? "success" : status === "CANCELLED" ? "cancelled" : status === "FAILED" ? "failed" : "incomplete";
-
-  // ── Server-side verification (the only source of "success") ─
-  const verify = useCallback(async (ref?: string) => {
-    const id = ref || referenceId;
-    if (!id) return;
-    setVerifying(true);
-    const data = await checkStatus(id);
-    if (!data) {
-      setVerifying(false);
-      setPayError("Could not reach the payment service. Please try again.");
-      return;
-    }
-    // Error-only response (no status to apply) — surface it instead of
-    // silently treating it as "still pending" and waiting forever.
-    if (data.status === "ERROR" || data.status === "error" || data.error) {
-      setVerifying(false);
-      setPayError(data.message || data.error || "Payment verification is temporarily unavailable.");
-      return;
-    }
-    if (data.status === "SUCCESS") {
-      setResult({ kind: "success", data });
-      setView("result");
-      return;
-    }
-    if (["FAILED", "CANCELLED", "INCOMPLETE"].includes(data.status)) {
-      setResult({ kind: classify(data.status), data });
-      setView("result");
-      return;
-    }
-    // Still pending — keep waiting in the checkout view.
-    setVerifying(false);
-  }, [referenceId, checkStatus]);
-
-  // ── Start / restart the Chapa Inline checkout ─────────────
-  const openCheckout = useCallback(async (ref: string, rotate: boolean) => {
-    if (paymentInFlight) return;
-    setPayError("");
-    setResult(null);
-    setVerifying(false);
-    setView("checkout");
-    setPaymentInFlight(true);
-    try {
-      const res = await fetch("/api/payments/chapa/init", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ referenceId: ref, rotate }),
-      });
-      const data = await res.json();
-
-      if (res.ok && data.alreadyPaid) {
-        await verify(ref);
-        return;
-      }
-      if (res.ok && typeof data.checkoutUrl === "string") {
-        const checkoutUrl = new URL(data.checkoutUrl);
-        if (
-          checkoutUrl.protocol === "https:" &&
-          ["checkout.chapa.co", "checkout.chapa.global"].includes(checkoutUrl.hostname)
-        ) {
-          window.location.assign(checkoutUrl.toString());
-          return;
-        }
-        setPayError("Chapa returned an invalid checkout link. Please try again later.");
-        return;
-      }
-      setPayError(data.error || "Unable to start payment. Please try again.");
-    } catch {
-      setPayError("Network error. Please check your connection and try again.");
-    } finally {
-      setPaymentInFlight(false);
-    }
-  }, [paymentInFlight, verify]);
-
-  // ── PAY NOW: validate → create (or reuse) registration → checkout ─
-  const validateInfo = (): Record<string, string> => {
-    const e: Record<string, string> = {};
-    const name = fullNameRef.current?.value?.trim() || "";
-    if (!name || name.length < 2) e.fullName = "Full name must be at least 2 characters";
-    const email = emailRef.current?.value?.trim() || "";
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = "Please enter a valid email";
-    const phone = phoneRef.current?.value?.trim() || "";
-    if (!phone || phone.length < 8) e.phone = "Phone must be at least 8 digits";
-    const age = Number(ageRef.current?.value?.trim() || 0);
-    if (!age || isNaN(age) || age < 10 || age > 99 || !Number.isInteger(age)) e.age = "Enter a valid age (10–99)";
-    return e;
-  };
-
-  const payNow = async () => {
-    setFormError("");
-    const validationErrors = validateInfo();
-    setErrors(validationErrors);
-    if (Object.keys(validationErrors).length > 0) {
-      setFormError("Please complete your information before paying.");
-      return;
-    }
-    if (!selectedCourseId) { setFormError("Please choose a course."); return; }
-    if (!selectedGroupId || !selectedSessionId) { setFormError("Please choose a schedule group and session."); return; }
-
-    setSubmitting(true);
-    try {
-      let ref = referenceId;
-      let createdNow = false;
-
-      // Create the registration once. If it already exists (unique email +
-      // course), reuse it — never create a duplicate.
-      if (!ref) {
-        const res = await fetch("/api/registrations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fullName: fullNameRef.current?.value?.trim(),
-            email: emailRef.current?.value?.trim(),
-            phone: phoneRef.current?.value?.trim(),
-            age: Number(ageRef.current?.value?.trim()),
-            courseId: selectedCourseId,
-            scheduleId: selectedSessionId,
-          }),
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          ref = data.referenceId;
-          setReferenceId(ref);
-          setAmount(data.amount || price);
-          createdNow = true;
-        } else if (res.status === 409 && data.referenceId) {
-          ref = data.referenceId;
-          setReferenceId(ref);
-          setAmount(price);
-        } else {
-          setFormError(data.error || "Something went wrong. Please try again.");
-          return;
-        }
-      }
-
-      // Reuse the tx_ref minted at registration only on this first attempt.
-      await openCheckout(ref, !createdNow);
-    } catch {
-      setFormError("Network error. Please check your connection and try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Poll while the checkout is open so a delayed webhook still resolves the
-  // flow even if Inline.js's callback does not fire.
-  useEffect(() => {
-    if (view !== "checkout" || !referenceId || result) return;
-    let cancelled = false;
-    let consecutiveUnresolvedChecks = 0;
-    let timeoutId: ReturnType<typeof setTimeout>;
-    const scheduleRetry = () => {
-      consecutiveUnresolvedChecks += 1;
-      const delay = Math.min(5_000 * 2 ** Math.min(consecutiveUnresolvedChecks - 1, 3), 30_000);
-      timeoutId = setTimeout(tick, delay);
-    };
-
-    const tick = async () => {
-      if (cancelled) return;
-      const data = await checkStatus(referenceId);
-      if (cancelled) return;
-
-      if (!data || data.status === "ERROR" || data.status === "error" || data.error) {
-        scheduleRetry();
-        return;
-      }
-
-      if (data.status === "SUCCESS") {
-        setResult({ kind: "success", data });
-        setView("result");
-      } else if (["FAILED", "CANCELLED", "INCOMPLETE"].includes(data.status)) {
-        setResult({ kind: classify(data.status), data });
-        setView("result");
-      } else {
-        scheduleRetry();
-      }
-    };
-    void tick();
-    return () => { cancelled = true; clearTimeout(timeoutId); };
-  }, [view, referenceId, result, checkStatus]);
-
-  const retry = () => {
-    if (paymentInFlight) return;
-    setResult(null);
-    setPayError("");
-    // A retry always mints a fresh tx_ref (reusing one that was already
-    // charged is rejected by Chapa).
-    if (referenceId) openCheckout(referenceId, true);
-  };
-
-  const backToForm = () => {
-    setView("form");
-    setResult(null);
-    setPayError("");
-    setPaymentInFlight(false);
-  };
-
   const fieldClass = "w-full rounded-xl border border-gray-200 bg-[#f9faf8] px-3.5 py-2.75 text-sm text-navy placeholder:text-gray-400 transition-all focus:border-gold focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold/20 disabled:bg-gray-50";
-  const errorClass = "mt-1 text-xs text-red-500";
   const steps = [
     { label: "Course", done: Boolean(selectedCourseId) },
     { label: "Schedule", done: Boolean(selectedSessionId) },
@@ -459,7 +187,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">Nalik Academy</p>
             <h2 className="mt-1 text-xl font-bold text-navy sm:text-2xl">
-              {view === "form" ? "Secure your seat" : view === "checkout" ? "Complete payment" : "Registration update"}
+              Register for a course
             </h2>
           </div>
           <button onClick={() => dialogRef.current?.close()} className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700" aria-label="Close">
@@ -468,8 +196,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         </div>
 
         <div className="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
-          {view === "form" && (
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_360px]">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_360px]">
               <div className="space-y-5">
                 <div className="rounded-2xl border border-[#efe7da] bg-[#fffaf1] p-3 sm:p-4">
                   <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">
@@ -487,13 +214,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                     ))}
                   </div>
                 </div>
-
-                {formError && (
-                  <div className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
-                    <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                    <span>{formError}</span>
-                  </div>
-                )}
 
                 <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
                   <div className="mb-3 flex items-center justify-between gap-3">
@@ -523,7 +243,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                               name="course"
                               value={c.id}
                               checked={isSelected}
-                              onChange={(e) => { setSelectedCourseId(e.target.value); setSelectedGroupId(""); setSelectedSessionId(""); setFormError(""); }}
+                              onChange={(e) => { setSelectedCourseId(e.target.value); setSelectedGroupId(""); setSelectedSessionId(""); }}
                               className="accent-gold"
                             />
                             <span className="flex-1">
@@ -573,7 +293,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                                 name="schedule-group"
                                 value={g.group}
                                 checked={groupSelected}
-                                onChange={() => { setSelectedGroupId(g.group); setSelectedSessionId(""); setFormError(""); }}
+                                onChange={() => { setSelectedGroupId(g.group); setSelectedSessionId(""); }}
                                 className="mt-0.5 accent-gold"
                               />
                               <span className="flex-1">
@@ -600,7 +320,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                                         name="schedule-session"
                                         value={s.id}
                                         checked={selectedSessionId === s.id}
-                                        onChange={() => { setSelectedSessionId(s.id); setFormError(""); }}
+                                        onChange={() => setSelectedSessionId(s.id)}
                                         disabled={isFull}
                                         className="mt-0.5 accent-gold"
                                       />
@@ -637,24 +357,20 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                     <div>
                       <label htmlFor="reg-name" className="mb-1.5 block text-sm font-medium text-gray-700">Full name <span className="text-gold">*</span></label>
                       <input ref={fullNameRef} id="reg-name" type="text" placeholder="e.g. Daniel Kebede" autoComplete="name" className={fieldClass} />
-                      {errors.fullName && <p className={errorClass}>{errors.fullName}</p>}
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <label htmlFor="reg-email" className="mb-1.5 block text-sm font-medium text-gray-700">Email <span className="text-gold">*</span></label>
                         <input ref={emailRef} id="reg-email" type="email" placeholder="you@example.com" autoComplete="email" className={fieldClass} />
-                        {errors.email && <p className={errorClass}>{errors.email}</p>}
                       </div>
                       <div>
                         <label htmlFor="reg-phone" className="mb-1.5 block text-sm font-medium text-gray-700">Phone <span className="text-gold">*</span></label>
                         <input ref={phoneRef} id="reg-phone" type="tel" placeholder="+251 9XX XXX XXX" autoComplete="tel" className={fieldClass} />
-                        {errors.phone && <p className={errorClass}>{errors.phone}</p>}
                       </div>
                     </div>
                     <div>
                       <label htmlFor="reg-age" className="mb-1.5 block text-sm font-medium text-gray-700">Age <span className="text-gold">*</span></label>
                       <input ref={ageRef} id="reg-age" type="number" min={10} max={99} placeholder="22" className={fieldClass} />
-                      {errors.age && <p className={errorClass}>{errors.age}</p>}
                     </div>
                   </div>
                 </section>
@@ -689,154 +405,24 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                         <span className="text-sm text-white/70">Total</span>
                         <span className="text-2xl font-bold text-gold">{price ? formatBirr(price) : "—"}</span>
                       </div>
-                      <p className="mt-2 text-[11px] text-white/65">Payment is processed securely through Chapa after review.</p>
+                      <p className="mt-2 text-[11px] text-white/65">Online checkout is temporarily paused.</p>
                     </div>
 
                     <button
-                      onClick={payNow}
-                      disabled={submitting || paymentInFlight}
+                      type="button"
+                      disabled
                       className="mt-4 w-full rounded-xl bg-gold px-5 py-3.5 text-base font-bold tracking-wide text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {submitting ? (
-                        <span className="inline-flex items-center justify-center gap-2"><Loader2 size={18} className="animate-spin" /> Processing…</span>
-                      ) : (
-                        "Continue to payment"
-                      )}
+                      Payments temporarily unavailable
                     </button>
                     <p className="mt-3 flex items-start gap-1.5 rounded-xl bg-white px-3 py-2 text-[11px] text-gray-500">
                       <Info size={12} className="mt-0.5 shrink-0 text-gold" />
-                      No additional fees. Chapa only charges once your payment is confirmed.
+                      Checkout is being reset before the new payment integration is added.
                     </p>
                   </div>
                 </div>
               </aside>
             </div>
-          )}
-
-          {/* ───────────── CHECKOUT (Chapa Hosted) ───────────── */}
-          {view === "checkout" && (
-            <div className="space-y-4">
-              <div className="text-center">
-                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-gold/10">
-                  <CreditCard size={26} className="text-gold" />
-                </div>
-                <p className="text-sm text-gray-500">
-                  Paying <span className="font-semibold text-gold">{formatBirr(amount || price)}</span> securely with Chapa
-                </p>
-              </div>
-
-              {verifying ? (
-                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-12 text-sm text-gray-500">
-                  <Loader2 size={22} className="animate-spin text-gold" />
-                  Confirming your payment with Chapa…
-                </div>
-              ) : payError ? (
-                <div className="flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
-                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                  <span>{payError}</span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-12 text-sm text-gray-500">
-                  <Loader2 size={22} className="animate-spin text-gold" />
-                  Redirecting to Chapa's secure checkout…
-                </div>
-              )}
-
-              {payError && (
-                <button onClick={retry} className="w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md">
-                  Try again
-                </button>
-              )}
-
-              <button onClick={backToForm} className="w-full rounded-lg border border-gray-200 px-5 py-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50">
-                Cancel payment
-              </button>
-            </div>
-          )}
-
-          {/* ───────────── RESULT ───────────── */}
-          {view === "result" && result && (
-            <div>
-              {result.kind === "success" ? (
-                <div className="text-center">
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-50">
-                    <CheckCircle size={28} className="text-green-500" />
-                  </div>
-                  <h3 className="text-xl font-bold text-navy">Payment Successful</h3>
-                  <p className="mt-1 text-sm text-gray-500">Your registration is confirmed. Welcome to Nalik Academy!</p>
-
-                  <div className="mt-5 space-y-2 rounded-xl border border-gray-200 p-4 text-left">
-                    <div className="flex items-center justify-between text-sm">
-                      <dt className="text-gray-500">Reference</dt>
-                      <dd className="font-semibold text-gold">{result.data?.registration?.referenceId || referenceId}</dd>
-                    </div>
-                    <div className="flex items-start justify-between gap-3 text-sm">
-                      <dt className="shrink-0 text-gray-500">Course</dt>
-                      <dd className="text-right font-medium text-navy">{result.data?.registration?.course || selectedCourse?.title || "N/A"}</dd>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <dt className="text-gray-500">Schedule</dt>
-                      <dd className="text-right font-medium text-navy">{scheduleText || "To be confirmed"}</dd>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <dt className="text-gray-500">Duration</dt>
-                      <dd className="font-medium text-navy">{duration || "—"}</dd>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <dt className="text-gray-500">Amount</dt>
-                      <dd className="font-semibold text-navy">{formatBirr(result.data?.registration?.amount || amount || price)}</dd>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <dt className="text-gray-500">Payment Status</dt>
-                      <dd className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
-                        <CheckCircle size={12} /> {result.data?.registration?.paymentStatus || "SUCCESS"}
-                      </dd>
-                    </div>
-                  </div>
-
-                  <button onClick={() => dialogRef.current?.close()} className="mt-5 w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md">
-                    Done
-                  </button>
-                  <a
-                    href={`/payment/return?referenceId=${encodeURIComponent(result.data?.registration?.referenceId || referenceId)}`}
-                    className="mt-2 block w-full text-center text-sm font-medium text-gray-500 transition-colors hover:text-gold"
-                  >
-                    View full confirmation →
-                  </a>
-                </div>
-              ) : (
-                <div className="text-center">
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50">
-                    <AlertCircle size={28} className="text-amber-500" />
-                  </div>
-                  <h3 className="text-lg font-bold text-navy">
-                    {result.kind === "failed" ? "Payment Failed" : result.kind === "cancelled" ? "Payment Cancelled" : "Payment Not Completed"}
-                  </h3>
-                  <p className="mx-auto mt-1 max-w-xs text-sm text-gray-500">
-                    {result.message ||
-                      (result.kind === "cancelled"
-                        ? "You cancelled the payment. Your registration is still saved and can be paid anytime."
-                        : "Your payment was not completed. You can try again — no charge is made until Chapa confirms the payment.")}
-                  </p>
-                  <p className="mx-auto mt-3 max-w-xs rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                    Your registration is saved as <span className="font-semibold">Pending Payment</span>. Retrying will not create a new registration.
-                  </p>
-                  <div className="mx-auto mt-4 max-w-xs rounded-lg bg-warm-white px-4 py-3 text-left">
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Reference ID</p>
-                    <p className="mt-0.5 text-sm font-bold text-gold">{referenceId}</p>
-                  </div>
-                  <div className="mt-5 space-y-2">
-                    <button onClick={retry} className="w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-md">
-                      Retry payment
-                    </button>
-                    <button onClick={backToForm} className="w-full rounded-lg border border-gray-200 px-5 py-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50">
-                      ← Back to registration
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
     </dialog>

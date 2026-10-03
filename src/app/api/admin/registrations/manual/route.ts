@@ -3,19 +3,17 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { readJson, isUniqueConstraintError } from "@/lib/http";
 import { generateUniqueReferenceId } from "@/lib/reference";
-import { generateTxRef } from "@/lib/payments/chapa";
 
 // ── Manual student enrollment (admin) ───────────────────────────────
 // POST /api/admin/registrations/manual — add a student who registered outside
-// the website (phone / in person). Reuses the SAME Application/Payment models
-// as online registrations so the student appears in the existing tables and
-// their reference ID works with the public /registration lookup.
+// the website (phone / in person). Reuses the SAME Application model as online
+// registrations so the student appears in the existing tables and their
+// reference ID works with the public /registration lookup.
 //
 // paymentStatus:
 //   "PAID"      → create the registration as already paid (cash/bank transfer).
-//                 Marks the payment SUCCESS and occupies a seat immediately.
-//   "PENDING"   → create as pending; the student can pay online later with
-//                 their reference ID, exactly like any other registration.
+//                 Occupies a seat immediately.
+//   "PENDING"   → create as pending; the student settles it out of band.
 
 const manualSchema = z.object({
   fullName: z.string().trim().min(2, "Full name must be at least 2 characters").max(120),
@@ -25,7 +23,6 @@ const manualSchema = z.object({
   courseId: z.string().min(1, "Course is required"),
   scheduleId: z.string().min(1, "Schedule session is required"),
   paymentStatus: z.enum(["PAID", "PENDING"]).default("PENDING"),
-  notes: z.string().max(500).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -41,7 +38,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const { fullName, email, phone, age, courseId, scheduleId, paymentStatus, notes } = parsed.data;
+    const { fullName, email, phone, age, courseId, scheduleId, paymentStatus } = parsed.data;
     const normalizedEmail = email.toLowerCase();
 
     // Course must exist and be active.
@@ -84,13 +81,11 @@ export async function POST(request: NextRequest) {
     const referenceId = await generateUniqueReferenceId(async (id) =>
       Boolean(await prisma.application.findUnique({ where: { referenceId: id }, select: { id: true } }))
     );
-    const txRef = generateTxRef(referenceId);
-    const amount = course.discountPrice ?? course.price;
     const now = new Date();
 
-    // Application + Payment + seat increment written atomically. A PAID manual
-    // enrollment follows the same invariants as applyChapaPaymentResult:
-    // payment SUCCESS, registration PAID, schedule.enrolled +1.
+    // Registration + seat increment written atomically. A PAID manual
+    // enrollment moves the registration to PAID and takes the seat in the same
+    // transaction, so the counts can never drift apart.
     const created = await prisma.$transaction(async (tx) => {
       const application = await tx.application.create({
         data: {
@@ -102,17 +97,7 @@ export async function POST(request: NextRequest) {
           courseId,
           scheduleId,
           status: paymentStatus === "PAID" ? "PAID" : "PENDING_PAYMENT",
-          payment: {
-            create: {
-              amount,
-              currency: "ETB",
-              status: paymentStatus === "PAID" ? "SUCCESS" : "PENDING",
-              txRef,
-              method: paymentStatus === "PAID" ? "manual" : null,
-              paidAt: paymentStatus === "PAID" ? now : null,
-              notes: notes || (paymentStatus === "PAID" ? "Manually enrolled by admin" : null),
-            },
-          },
+          paidAt: paymentStatus === "PAID" ? now : null,
         },
       });
       if (paymentStatus === "PAID") {

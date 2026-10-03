@@ -1,188 +1,172 @@
-// ── Shared, idempotent payment-result applier ──────────────────────────────
-// Both the webhook and the server-side verify route funnel into
-// applyChapaPaymentResult so state transitions (and the schedule seat
-// bookkeeping) happen exactly once:
-//   - A payment is marked SUCCESS only when amount + currency match the
-//     stored payment, and the registration moves to PAID at that moment.
-//   - The enrolled seat is incremented exactly once per registration, on the
-//     transition into SUCCESS.
-//   - A payment already SUCCESS is never downgraded; refs/method are refreshed.
-
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
+import type { PaymentStatus } from "@/lib/payments/chapa";
 
-/** Map a Chapa status (verify/webhook) to our Payment.status. */
-export function mapChapaStatus(status: string | undefined | null): string {
-  const raw = (status || "").toString().trim();
-  const tokens = raw
-    .split(/[\/|,&]+/)
-    .map((token) => token.trim().toLowerCase())
-    .filter(Boolean);
-
-  if (tokens.length > 0) {
-    for (const token of tokens) {
-      switch (token) {
-        case "success":
-        case "completed":
-          return "SUCCESS";
-        case "failed":
-        case "failure":
-          return "FAILED";
-        case "cancelled":
-        case "canceled":
-        case "reversed":
-        case "refunded":
-          return "CANCELLED";
-        case "incomplete":
-        case "abandoned":
-        case "timeout":
-          return "INCOMPLETE";
-        case "pending":
-          return "PENDING";
-      }
-    }
-  }
-
-  const s = raw.toLowerCase();
-  switch (s) {
-    case "success":
-    case "completed":
-      return "SUCCESS";
-    case "failed":
-    case "failure":
-      return "FAILED";
-    case "cancelled":
-    case "canceled":
-    case "reversed":
-    case "refunded":
-      return "CANCELLED";
-    case "incomplete":
-    case "abandoned":
-    case "timeout":
-      return "INCOMPLETE";
-    case "pending":
-      return "PENDING";
-    default:
-      return raw ? raw.toUpperCase() : "PENDING";
-  }
-}
+// ── Idempotent payment-result applier ─────────────────────────────────────
+// Shared by the verify route and the webhook so a payment settles exactly once
+// no matter how many signals arrive for it.
+//
+// Invariants:
+//   - A payment moves to SUCCESS only when Chapa reports success AND the
+//     amount and currency match what we stored. A browser callback carries no
+//     amount, so it can never settle a payment on its own.
+//   - The PENDING → SUCCESS claim uses a conditional updateMany, so under
+//     concurrent requests exactly one caller wins the transition. Only the
+//     winner flips the registration and takes a seat, which keeps
+//     schedule.enrolled from drifting.
+//   - A payment already SUCCESS is never downgraded; provider fields are
+//     refreshed so late webhooks still fill in the Chapa reference.
 
 export interface ApplyPaymentInput {
-  status: string; // mapped Payment.status (SUCCESS, FAILED, …)
-  chapaReference?: string;
-  txRef?: string;
-  amount?: number;
-  currency?: string;
-  method?: string;
-  charge?: number;
-  raw?: unknown;
+  status: PaymentStatus;
+  chapaReference?: string | null;
+  merchantReference?: string | null;
+  amount?: number | null;
+  currency?: string | null;
+  paymentMethod?: string | null;
+  serviceFee?: number | null;
 }
 
 export interface ApplyPaymentResult {
+  /** True when this call performed the PENDING → SUCCESS transition. */
   changed: boolean;
-  paymentStatus: string;
+  paymentStatus: PaymentStatus;
   applicationStatus: string;
   paid: boolean;
+  paidAt: Date | null;
+  /** Set when Chapa claimed success but the amount or currency disagreed. */
+  mismatch?: "amount" | "currency" | null;
+  /** True when the payment had already succeeded before this call. */
+  alreadyPaid?: boolean;
 }
 
-export async function applyChapaPaymentResult(
+export async function applyPaymentResult(
   paymentId: string,
   input: ApplyPaymentInput
 ): Promise<ApplyPaymentResult | null> {
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
-    include: { application: { include: { schedule: true } } },
+    select: {
+      id: true,
+      applicationId: true,
+      amount: true,
+      currency: true,
+      status: true,
+      paidAt: true,
+      chapaReference: true,
+      merchantReference: true,
+      paymentMethod: true,
+      serviceFee: true,
+      application: { select: { status: true, scheduleId: true } },
+    },
   });
   if (!payment) return null;
 
-  const app = payment.application;
-  const targetStatus = mapChapaStatus(input.status);
+  const providerFields = {
+    ...(input.chapaReference ? { chapaReference: input.chapaReference } : {}),
+    ...(input.merchantReference ? { merchantReference: input.merchantReference } : {}),
+    ...(input.paymentMethod ? { paymentMethod: input.paymentMethod } : {}),
+    ...(input.serviceFee != null ? { serviceFee: input.serviceFee } : {}),
+  };
 
-  // Already paid — never downgrade. Refresh provider fields, keep PAID.
+  // Already settled — refresh provider metadata, never downgrade.
   if (payment.status === "SUCCESS") {
-    const data: Prisma.PaymentUpdateInput = {};
-    if (input.chapaReference && input.chapaReference !== payment.chapaReference) data.chapaReference = input.chapaReference;
-    if (input.txRef && input.txRef !== payment.txRef) data.txRef = input.txRef;
-    if (input.method) data.method = input.method;
-    if (input.charge != null) data.charge = input.charge;
-    if (input.raw !== undefined) data.rawWebhook = input.raw as Prisma.InputJsonValue;
-    if (Object.keys(data).length > 0) {
-      await prisma.payment.update({ where: { id: paymentId }, data });
-    }
-    return { changed: false, paymentStatus: "SUCCESS", applicationStatus: app.status, paid: true };
+    await prisma.payment.update({ where: { id: paymentId }, data: providerFields });
+    return {
+      changed: false,
+      alreadyPaid: true,
+      paid: true,
+      paymentStatus: "SUCCESS",
+      applicationStatus: payment.application.status,
+      paidAt: payment.paidAt,
+    };
   }
 
-  // Security guard for success: amount + currency must match what we charged.
-  // A missing amount/currency is NOT treated as a match — an unsigned browser
-  // callback (which carries no amount) can therefore never settle a payment;
-  // only a verified source that reports the amount can.
-  if (targetStatus === "SUCCESS") {
+  if (input.status === "SUCCESS") {
+    // A missing amount or currency is NOT a match: only a verified server-side
+    // source that reports the charged figures can settle a payment.
     const amountMatches = input.amount != null && Math.round(input.amount) === payment.amount;
     const currencyMatches =
       Boolean(input.currency) &&
       input.currency!.toString().toUpperCase() === payment.currency.toUpperCase();
+
     if (!amountMatches || !currencyMatches) {
-      await prisma.payment.update({
+      await prisma.payment.update({ where: { id: paymentId }, data: providerFields });
+      return {
+        changed: false,
+        paid: false,
+        mismatch: !amountMatches ? "amount" : "currency",
+        paymentStatus: payment.status as PaymentStatus,
+        applicationStatus: payment.application.status,
+        paidAt: null,
+      };
+    }
+
+    const paidAt = new Date();
+
+    // Atomic claim: only the caller whose update actually changed a row goes on
+    // to confirm the registration and occupy a seat.
+    const claimed = await prisma.payment.updateMany({
+      where: { id: paymentId, status: { not: "SUCCESS" } },
+      data: { status: "SUCCESS", paidAt, ...providerFields },
+    });
+
+    if (claimed.count === 0) {
+      // Lost the race; the winner already settled it.
+      const settled = await prisma.payment.findUnique({
         where: { id: paymentId },
-        data: {
-          chapaReference: input.chapaReference || payment.chapaReference,
-          txRef: input.txRef || payment.txRef,
-          notes: `Rejected SUCCESS: amount/currency mismatch (got ${input.amount ?? "?"} ${input.currency ?? "?"}, expected ${payment.amount} ${payment.currency})`,
-          rawWebhook: input.raw !== undefined ? (input.raw as Prisma.InputJsonValue) : undefined,
-        },
+        select: { status: true, paidAt: true },
       });
-      return { changed: false, paymentStatus: payment.status, applicationStatus: app.status, paid: false };
+      return {
+        changed: false,
+        alreadyPaid: true,
+        paid: true,
+        paymentStatus: "SUCCESS",
+        applicationStatus: payment.application.status,
+        paidAt: settled?.paidAt ?? paidAt,
+      };
     }
 
-    const updates: Prisma.PrismaPromise<unknown>[] = [
-      prisma.payment.update({
-        where: { id: paymentId },
-        data: {
-          status: "SUCCESS",
-          chapaReference: input.chapaReference || payment.chapaReference,
-          txRef: input.txRef || payment.txRef,
-          method: input.method,
-          charge: input.charge,
-          rawWebhook: input.raw !== undefined ? (input.raw as Prisma.InputJsonValue) : undefined,
-          notes: null,
-          paidAt: new Date(),
-        },
-      }),
+    await prisma.$transaction([
       prisma.application.update({
-        where: { id: app.id },
-        // Never downgrade an already-CONFIRMED registration.
-        data: { status: app.status === "CONFIRMED" ? "CONFIRMED" : "PAID" },
+        where: { id: payment.applicationId },
+        data: { status: "CONFIRMED", paidAt },
       }),
-    ];
+      ...(payment.application.scheduleId
+        ? [
+            prisma.schedule.update({
+              where: { id: payment.application.scheduleId },
+              data: { enrolled: { increment: 1 } },
+            }),
+          ]
+        : []),
+    ]);
 
-    // Seat bookkeeping: increment exactly once, when a payment turns paid.
-    if (app.scheduleId) {
-      updates.push(
-        prisma.schedule.update({
-          where: { id: app.scheduleId },
-          data: { enrolled: { increment: 1 } },
-        })
-      );
-    }
-
-    await prisma.$transaction(updates);
-    return { changed: true, paymentStatus: "SUCCESS", applicationStatus: "PAID", paid: true };
+    return {
+      changed: true,
+      paid: true,
+      paymentStatus: "SUCCESS",
+      applicationStatus: "CONFIRMED",
+      paidAt,
+    };
   }
 
-  // Terminal non-success states — record them; registration stays PENDING.
-  if (targetStatus !== payment.status) {
+  // Terminal non-success states (FAILED / CANCELLED / INCOMPLETE / PENDING) are
+  // recorded so the admin list stays accurate. The registration is untouched:
+  // only a verified success may grant a seat.
+  if (input.status !== payment.status) {
     await prisma.payment.update({
       where: { id: paymentId },
-      data: {
-        status: targetStatus,
-        chapaReference: input.chapaReference || payment.chapaReference,
-        txRef: input.txRef || payment.txRef,
-        method: input.method,
-        rawWebhook: input.raw !== undefined ? (input.raw as Prisma.InputJsonValue) : undefined,
-      },
+      data: { status: input.status, ...providerFields },
     });
-    return { changed: true, paymentStatus: targetStatus, applicationStatus: app.status, paid: false };
+  } else if (Object.keys(providerFields).length > 0) {
+    await prisma.payment.update({ where: { id: paymentId }, data: providerFields });
   }
 
-  return { changed: false, paymentStatus: payment.status, applicationStatus: app.status, paid: false };
+  return {
+    changed: input.status !== payment.status,
+    paid: false,
+    paymentStatus: input.status,
+    applicationStatus: payment.application.status,
+    paidAt: null,
+  };
 }

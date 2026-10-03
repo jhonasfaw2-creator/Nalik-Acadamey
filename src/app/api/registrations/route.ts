@@ -2,17 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { readJson, isUniqueConstraintError } from "@/lib/http";
 import { registrationSchema } from "@/lib/validators";
-import { generateTxRef } from "@/lib/payments/chapa";
 import { generateUniqueReferenceId } from "@/lib/reference";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// POST /api/registrations — create a registration with a PENDING payment.
+// POST /api/registrations — create a registration.
 //
 // The amount is ALWAYS calculated server-side from the course in the database
-// (discount price when active, otherwise list price). The browser never sends
-// a price; Inline.js only ever receives the amount this endpoint later returns.
+// (discount price when active, otherwise list price). The browser never sends a
+// price. The registration is created as PENDING_PAYMENT; an admin moves it to
+// PAID/CONFIRMED when payment is settled.
 export async function POST(request: NextRequest) {
   try {
     const body = await readJson(request);
@@ -88,14 +88,6 @@ export async function POST(request: NextRequest) {
       Boolean(await prisma.application.findUnique({ where: { referenceId: id }, select: { id: true } }))
     );
 
-    // Mint the unique Chapa tx_ref now, before any payment is attempted.
-    // It is generated server-side from the reference ID and stored on the
-    // payment row; the browser only ever receives it to hand to Inline.js.
-    const txRef = generateTxRef(referenceId);
-
-    // Registration + PENDING payment are written in a single atomic create via
-    // the nested relation, so we never leave an orphaned application or an
-    // application without a payment record.
     let application: { id: string; referenceId: string };
     try {
       application = await prisma.application.create({
@@ -110,14 +102,6 @@ export async function POST(request: NextRequest) {
           previousExperience: previousExperience || "",
           motivation: motivation || "",
           status: "PENDING_PAYMENT",
-          payment: {
-            create: {
-              amount: paymentAmount,
-              currency: "ETB",
-              status: "PENDING",
-              txRef,
-            },
-          },
         },
       });
     } catch (error) {

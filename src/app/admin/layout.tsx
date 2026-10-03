@@ -3,14 +3,13 @@
 import { useState, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { LogOut, ExternalLink, Menu, LayoutDashboard, GraduationCap, Calendar, Users, DollarSign, Settings } from "lucide-react";
+import { LogOut, ExternalLink, Menu, LayoutDashboard, GraduationCap, Calendar, Users, Settings } from "lucide-react";
 
 const NAV_SECTIONS = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { label: "Courses", href: "/admin/courses", icon: GraduationCap },
   { label: "Schedules", href: "/admin/schedules", icon: Calendar },
   { label: "Registrations", href: "/admin/registrations", icon: Users },
-  { label: "Payments", href: "/admin/payments", icon: DollarSign },
   { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 

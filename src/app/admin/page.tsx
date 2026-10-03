@@ -9,8 +9,7 @@ export default function AdminDashboard() {
     pending: 0,
     paid: 0,
     confirmed: 0,
-    totalPayments: 0,
-    paidPayments: 0,
+    paidRegistrations: 0,
     totalRevenue: 0,
     activeCourses: 0,
   });
@@ -21,18 +20,20 @@ export default function AdminDashboard() {
     setError("");
     Promise.all([
       fetch("/api/admin/registrations").then((r) => { if (!r.ok) throw new Error("Failed to load registrations"); return r.json(); }),
-      fetch("/api/admin/payments").then((r) => { if (!r.ok) throw new Error("Failed to load payments"); return r.json(); }),
       fetch("/api/admin/courses").then((r) => { if (!r.ok) throw new Error("Failed to load courses"); return r.json(); }),
-    ]).then(([regData, payData, courses]) => {
-      const paid = (payData || []).filter((p: { status: string }) => p.status === "SUCCESS");
+    ]).then(([regData, courses]) => {
+      const registrations: {
+        status: string;
+        payment: { amount: number | null; status: string } | null;
+      }[] = regData.applications || [];
+      const paidRows = registrations.filter((r) => r.payment?.status === "SUCCESS");
       setStats({
-        totalRegistrations: regData.applications?.length || 0,
+        totalRegistrations: registrations.length,
         pending: regData.statusCounts?.PENDING_PAYMENT || 0,
         paid: regData.statusCounts?.PAID || 0,
         confirmed: regData.statusCounts?.CONFIRMED || 0,
-        totalPayments: (payData || []).length,
-        paidPayments: paid.length,
-        totalRevenue: paid.reduce((sum: number, p: { amount: number }) => sum + p.amount, 0),
+        paidRegistrations: paidRows.length,
+        totalRevenue: paidRows.reduce((sum, r) => sum + (r.payment?.amount || 0), 0),
         activeCourses: (courses || []).filter((c: { active: boolean }) => c.active).length,
       });
       setLoading(false);
@@ -57,7 +58,7 @@ export default function AdminDashboard() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-navy">Dashboard</h1>
-      <p className="mt-1 text-sm text-gray-500">Registration and payment overview.</p>
+      <p className="mt-1 text-sm text-gray-500">Registration and enrollment overview.</p>
 
       {error && (
         <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 flex items-center justify-between">
@@ -96,7 +97,7 @@ export default function AdminDashboard() {
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Paid Revenue</p>
                 <p className="mt-1 text-2xl font-bold text-gold">{formatBirr(stats.totalRevenue)}</p>
-                <p className="mt-0.5 text-xs text-gray-400">{stats.paidPayments} of {stats.totalPayments} payments successful</p>
+                <p className="mt-0.5 text-xs text-gray-400">{stats.paidRegistrations} of {stats.totalRegistrations} registrations paid</p>
               </div>
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gold/10">
                 <DollarSign size={22} className="text-gold" />
@@ -105,14 +106,10 @@ export default function AdminDashboard() {
           </div>
 
           {/* Quick links */}
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <a href="/admin/registrations" className="rounded-xl border border-gray-200 bg-white p-5 transition-shadow hover:shadow-md">
               <h3 className="font-semibold text-navy">Registrations</h3>
               <p className="mt-1 text-sm text-gray-500">View and manage student registrations.</p>
-            </a>
-            <a href="/admin/payments" className="rounded-xl border border-gray-200 bg-white p-5 transition-shadow hover:shadow-md">
-              <h3 className="font-semibold text-navy">Payments</h3>
-              <p className="mt-1 text-sm text-gray-500">Track Chapa payment status and references.</p>
             </a>
             <a href="/admin/courses" className="rounded-xl border border-gray-200 bg-white p-5 transition-shadow hover:shadow-md">
               <h3 className="font-semibold text-navy">Courses</h3>

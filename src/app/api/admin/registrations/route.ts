@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { derivePayment } from "@/lib/registration";
 
 // GET /api/admin/registrations — list all registrations
 export async function GET(request: NextRequest) {
@@ -19,8 +20,6 @@ export async function GET(request: NextRequest) {
         { email: { contains: search } },
         { phone: { contains: search } },
         { referenceId: { contains: search } },
-        { payment: { is: { txRef: { contains: search } } } },
-        { payment: { is: { chapaReference: { contains: search } } } },
       ];
     }
 
@@ -31,20 +30,9 @@ export async function GET(request: NextRequest) {
       prisma.application.findMany({
         where,
         include: {
-          course: { select: { id: true, title: true } },
+          course: { select: { id: true, title: true, price: true, discountPrice: true } },
           schedule: {
             select: { id: true, group: true, session: true, days: true, startTime: true, endTime: true },
-          },
-          payment: {
-            select: {
-              amount: true,
-              currency: true,
-              status: true,
-              method: true,
-              txRef: true,
-              chapaReference: true,
-              paidAt: true,
-            },
           },
         },
         orderBy: { createdAt: "desc" },
@@ -57,7 +45,18 @@ export async function GET(request: NextRequest) {
     const statusCounts: Record<string, number> = {};
     for (const c of counts) statusCounts[c.status] = c._count;
 
-    return NextResponse.json({ applications, statusCounts });
+    // There is no Payment table any more, so the admin list keeps its existing
+    // `payment` field by deriving it from the registration status.
+    const withPayment = applications.map(({ course, paidAt, ...application }) => ({
+      ...application,
+      payment: derivePayment({
+        registrationStatus: application.status,
+        paidAt,
+        course,
+      }),
+    }));
+
+    return NextResponse.json({ applications: withPayment, statusCounts });
   } catch (error) {
     console.error("Admin registrations fetch error:", error);
     return NextResponse.json({ error: "Failed to load registrations" }, { status: 500 });

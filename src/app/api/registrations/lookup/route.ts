@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkAndIncrement } from "@/lib/rateLimit";
+import { derivePayment } from "@/lib/registration";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +14,7 @@ export const dynamic = "force-dynamic";
 //     tracking number.
 //   - Strict per-IP rate limiting (20/min) blunts brute-force guessing.
 //   - The response exposes ONLY schedule/enrollment data. No email, no phone,
-//     no age, no tx_ref, no chapaReference, no amount-audit fields — a leaked
-//     ID reveals nothing further.
+//     no age, and no internal identifiers — a leaked ID reveals nothing further.
 export async function GET(request: NextRequest) {
   const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
@@ -43,18 +43,10 @@ export async function GET(request: NextRequest) {
         referenceId: true,
         fullName: true,
         status: true,
-        course: { select: { title: true } },
+        paidAt: true,
+        course: { select: { title: true, price: true, discountPrice: true } },
         schedule: {
           select: { group: true, session: true, days: true, startTime: true, endTime: true, startDate: true },
-        },
-        payment: {
-          select: {
-            status: true,
-            amount: true,
-            currency: true,
-            paidAt: true,
-            // txRef / chapaReference deliberately NOT selected.
-          },
         },
       },
     });
@@ -66,7 +58,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const payment = application.payment;
+    const payment = derivePayment({
+      registrationStatus: application.status,
+      paidAt: application.paidAt,
+      course: application.course,
+    });
 
     return NextResponse.json({
       found: true,
@@ -86,11 +82,11 @@ export async function GET(request: NextRequest) {
                 : null,
             }
           : null,
-        amount: payment?.amount ?? null,
-        currency: payment?.currency ?? null,
-        paymentStatus: payment?.status ?? "PENDING",
+        amount: payment.amount,
+        currency: payment.currency,
+        paymentStatus: payment.status,
         registrationStatus: application.status,
-        paidAt: payment?.paidAt ? payment.paidAt.toISOString() : null,
+        paidAt: payment.paidAt,
       },
     });
   } catch (error) {

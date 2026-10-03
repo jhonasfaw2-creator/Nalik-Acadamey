@@ -92,9 +92,9 @@ const manualData = await manual.json().catch(() => ({}));
 check("manual PAID enrollment created", manual.status === 201 && manualData.success, JSON.stringify(manualData));
 const ref = manualData?.application?.referenceId;
 
-const dbApp = await prisma.application.findUnique({ where: { referenceId: ref }, include: { payment: true } });
+const dbApp = await prisma.application.findUnique({ where: { referenceId: ref } });
 check("registration status is PAID", dbApp?.status === "PAID");
-check("payment marked SUCCESS (manual)", dbApp?.payment?.status === "SUCCESS" && dbApp?.payment?.method === "manual");
+check("paidAt stamped for manual PAID", dbApp?.paidAt != null);
 const schedAfter = await prisma.schedule.findUnique({ where: { id: schedule.id } });
 check("seat occupied (enrolled +1)", schedAfter.enrolled === schedule.enrolled + 1, `${schedule.enrolled}→${schedAfter.enrolled}`);
 
@@ -115,8 +115,8 @@ const manual2 = await fetch(`${BASE}/api/admin/registrations/manual`, {
 });
 const manual2Data = await manual2.json().catch(() => ({}));
 check("manual PENDING enrollment created", manual2.status === 201, JSON.stringify(manual2Data));
-const dbApp2 = await prisma.application.findUnique({ where: { referenceId: manual2Data?.application?.referenceId }, include: { payment: true } });
-check("pending manual stays PENDING_PAYMENT / PENDING", dbApp2?.status === "PENDING_PAYMENT" && dbApp2?.payment?.status === "PENDING");
+const dbApp2 = await prisma.application.findUnique({ where: { referenceId: manual2Data?.application?.referenceId } });
+check("pending manual stays PENDING_PAYMENT / PENDING", dbApp2?.status === "PENDING_PAYMENT" && dbApp2?.paidAt == null);
 
 const dup = await fetch(`${BASE}/api/admin/registrations/manual`, {
   method: "POST",

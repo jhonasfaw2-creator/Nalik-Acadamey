@@ -101,7 +101,7 @@ export default function AdminSettings() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-navy">Settings</h1>
-          <p className="mt-1 text-sm text-gray-500">Academy info, payment details, and contact settings.</p>
+          <p className="mt-1 text-sm text-gray-500">Academy info and contact settings.</p>
         </div>
         <div className="flex items-center gap-3">
           {saved && <span className="text-sm font-medium text-green-600">Saved</span>}
@@ -213,24 +213,19 @@ export default function AdminSettings() {
           </form>
         </div>
 
-        {/* Payment Settings */}
+        {/* Enrollment Settings */}
         <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Payment Settings</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Enrollment Settings</h2>
           <p className="text-sm text-gray-600">
-            Student payments use Chapa&apos;s hosted checkout (created server-side) and are confirmed
-            by server-side verification and signed webhooks.
-            Chapa keys are configured with environment variables on the server; they are never
-            stored in this database.
+            Student registrations are created as <strong>Pending Payment</strong>. There is no online
+            payment provider: settle cash or bank-transfer registrations here by moving a
+            registration to <strong>Paid</strong>, which marks it enrolled and takes a seat.
           </p>
           <ul className="mt-3 space-y-1 text-xs text-gray-500">
-            <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">CHAPA_SECRET_KEY</code>: v2 server key used for hosted checkout and verification (CHAPA_TEST_... / CHAPA_LIVE_...)</li>
-            <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">CHAPA_WEBHOOK_SECRET</code>: secret hash set in Chapa → Webhooks, used to verify signatures</li>
-            <li>• <code className="rounded bg-gray-100 px-1.5 py-0.5">NEXT_PUBLIC_APP_URL</code>: public app URL used as the hosted checkout return URL</li>
+            <li>• <strong>Pending Payment</strong>: registered, not yet settled, no seat held</li>
+            <li>• <strong>Paid</strong>: settled out of band, enrolled, seat held</li>
+            <li>• <strong>Confirmed</strong>: paid and reviewed by an admin</li>
           </ul>
-          <p className="mt-3 text-xs text-gray-400">
-            Payments are confirmed automatically (webhook + server-side verification); the amount and
-            currency are always re-checked against the stored registration before a payment is accepted.
-          </p>
         </div>
       </div>
     </div>

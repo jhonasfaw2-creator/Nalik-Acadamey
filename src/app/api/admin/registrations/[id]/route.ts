@@ -6,9 +6,9 @@ import type { Prisma } from "@prisma/client";
 // PUT /api/admin/registrations/[id] — update registration status and/or
 // reassign course + schedule.
 //
-// Payment status is owned by the payment record (set only by Chapa
-// verification/webhooks); this endpoint only moves the registration between
-// the review states.
+// Reassignment also moves the paid state: `paidAt` is cleared when a paid or
+// confirmed registration is sent back to PENDING_PAYMENT, and stamped when it
+// is moved to PAID or CONFIRMED, so the paid timestamp stays truthful.
 //
 // Schedule reassignment keeps seat bookkeeping correct: when the schedule
 // changes, the old session's enrolled count is decremented and the new one
@@ -55,16 +55,25 @@ export async function PUT(
 
     const existing = await prisma.application.findUnique({
       where: { id },
-      select: { id: true, scheduleId: true, status: true },
+      select: { id: true, scheduleId: true, status: true, paidAt: true },
     });
     if (!existing) {
       return NextResponse.json({ error: "Registration not found" }, { status: 404 });
     }
 
-    const data: { status?: string; courseId?: string; scheduleId?: string } = {};
+    const data: { status?: string; courseId?: string; scheduleId?: string; paidAt?: Date | null } = {};
     if (typeof status === "string") data.status = status;
     if (typeof courseId === "string") data.courseId = courseId;
     if (typeof scheduleId === "string") data.scheduleId = scheduleId;
+    // Stamp the first time a registration becomes paid; clear it if it is sent
+    // back to pending. A later PAID after CONFIRMED keeps the original stamp.
+    if (typeof status === "string") {
+      const nowPaid = status === "PAID" || status === "CONFIRMED";
+      const wasPaid = existing.status === "PAID" || existing.status === "CONFIRMED";
+      if (nowPaid && !existing.paidAt) data.paidAt = new Date();
+      else if (!nowPaid) data.paidAt = null;
+      else if (wasPaid) data.paidAt = existing.paidAt;
+    }
 
     // Seat bookkeeping when the schedule actually changes.
     const holdsSeat = existing.status === "PAID" || existing.status === "CONFIRMED";

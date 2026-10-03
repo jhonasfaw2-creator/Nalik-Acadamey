@@ -1,138 +1,316 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import {
-  chapaV2SecretKey,
-  verifyChapaTransaction,
-  PaymentNotFoundError,
-} from "@/lib/payments/chapa";
-import { applyChapaPaymentResult, mapChapaStatus } from "@/lib/payments/apply";
-import { ensurePaymentForApplication } from "@/lib/payments/record";
+import { checkAndIncrement } from "@/lib/rateLimit";
+import { verifyPayment, ChapaApiError, ChapaConfigError } from "@/lib/payments/chapa";
+import { applyPaymentResult } from "@/lib/payments/apply";
 
 export const dynamic = "force-dynamic";
 
 // GET/POST /api/payments/verify — authoritative server-side verification.
 //
-// Finds the payment for a registration (by referenceId), verifies its stored
-// tx_ref against Chapa's verify endpoint and, when Chapa confirms success (and
-// the amount + currency match the stored payment), marks the payment SUCCESS
-// and the registration PAID. The browser (Inline.js success callback) is a
-// signal only and is never trusted on its own.
-async function handle(request: NextRequest) {
-  try {
-    const searchParams = request.nextUrl.searchParams;
-    const body = request.method === "POST" ? await request.json().catch(() => ({})) : {};
-    const referenceId =
-      (typeof body.referenceId === "string" ? body.referenceId.trim() : "") ||
-      searchParams.get("referenceId")?.trim() ||
-      "";
+// Identifies the payment by registration reference ID or merchant reference,
+// asks Chapa what actually happened, and settles the registration only when
+// Chapa confirms success and the amount and currency match what we stored.
+//
+// The browser is a signal, never proof: a redirect back from checkout or a
+// client-side callback cannot mark anything paid on its own.
+//
+// Transient provider problems (network failure, 5xx, or a 404 while Chapa is
+// still propagating the transaction) answer 200 with status PENDING so a
+// polling client keeps polling instead of treating them as a hard failure.
 
-    if (!referenceId) {
-      return NextResponse.json({ error: "Missing referenceId" }, { status: 400 });
+/** Generous enough for a polling return page, tight enough to protect Chapa. */
+const RATE_LIMIT = 60;
+const RATE_WINDOW_MS = 60_000;
+
+interface VerificationTarget {
+  paymentId: string;
+  referenceId: string;
+  applicationId: string;
+  applicationStatus: string;
+  merchantReference: string | null;
+  paymentStatus: string;
+  amount: number;
+  currency: string;
+  paymentMethod: string | null;
+  chapaReference: string | null;
+  paidAt: Date | null;
+  course: { title: string } | null;
+  schedule: {
+    group: string;
+    session: string;
+    days: string;
+    startTime: string;
+    endTime: string;
+  } | null;
+}
+
+/**
+ * Response body for a settled or in-flight payment. Deliberately excludes
+ * student PII (name, email, phone): this endpoint is public and the
+ * reference ID is the only capability presented.
+ */
+function buildSummary(target: VerificationTarget) {
+  return {
+    referenceId: target.referenceId,
+    registrationStatus: target.applicationStatus,
+    course: target.course?.title || null,
+    schedule: target.schedule
+      ? `SCHEDULE ${target.schedule.group}: ${target.schedule.session} (${target.schedule.days}, ${target.schedule.startTime}–${target.schedule.endTime})`
+      : null,
+    amount: target.amount,
+    currency: target.currency,
+    paymentStatus: target.paymentStatus,
+    paymentMethod: target.paymentMethod,
+    merchantReference: target.merchantReference,
+    chapaReference: target.chapaReference,
+    paidAt: target.paidAt ? target.paidAt.toISOString() : null,
+  };
+}
+
+/** 200 + PENDING keeps a polling client alive through a transient problem. */
+function pendingResponse(
+  target: VerificationTarget,
+  extra: { warning?: string; code?: string } = {}
+) {
+  return NextResponse.json(
+    { status: "PENDING", registration: buildSummary(target), ...extra },
+    { status: 200 }
+  );
+}
+
+async function handle(request: NextRequest) {
+  let referenceId = "";
+  let merchantReference = "";
+
+  try {
+    const search = request.nextUrl.searchParams;
+    const body = request.method === "POST" ? await request.json().catch(() => ({})) : {};
+    const bag = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+
+    const pick = (name: string): string => {
+      const fromBody = bag[name];
+      if (typeof fromBody === "string" && fromBody.trim()) return fromBody.trim();
+      return search.get(name)?.trim() || "";
+    };
+
+    referenceId = pick("referenceId").toUpperCase();
+    merchantReference = pick("merchantReference");
+
+    if (!referenceId && !merchantReference) {
+      return NextResponse.json(
+        { error: "A referenceId or merchantReference is required." },
+        { status: 400 }
+      );
     }
 
-    const application = await prisma.application.findUnique({
-      where: { referenceId },
-      // Deliberately minimal: this endpoint is public, so it never returns
-      // student PII (name / email / phone).
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    if (!checkAndIncrement(`verify:${ip}`, RATE_LIMIT, RATE_WINDOW_MS)) {
+      return NextResponse.json(
+        { status: "PENDING", error: "Too many verification attempts. Try again shortly." },
+        { status: 429 }
+      );
+    }
+
+    const payment = await prisma.payment.findFirst({
+      where: referenceId
+        ? { application: { referenceId } }
+        : { merchantReference },
       select: {
         id: true,
-        referenceId: true,
         status: true,
-        course: { select: { title: true, price: true, discountPrice: true, discountLabel: true } },
-        schedule: { select: { group: true, session: true, days: true, startTime: true, endTime: true } },
+        amount: true,
+        currency: true,
+        paymentMethod: true,
+        merchantReference: true,
+        chapaReference: true,
+        paidAt: true,
+        application: {
+          select: {
+            id: true,
+            referenceId: true,
+            status: true,
+            course: { select: { title: true } },
+            schedule: {
+              select: { group: true, session: true, days: true, startTime: true, endTime: true },
+            },
+          },
+        },
       },
     });
-    if (!application) {
-      return NextResponse.json({ error: "Registration not found" }, { status: 404 });
-    }
 
-    // Legacy registrations (pre-online-payments) have no Payment row.
-    const payment = await ensurePaymentForApplication(application.id);
     if (!payment) {
-      return NextResponse.json({ error: "Registration not found" }, { status: 404 });
+      return NextResponse.json({ error: "Registration not found." }, { status: 404 });
     }
 
-    // Already confirmed — short-circuit with the summary.
+    const target: VerificationTarget = {
+      paymentId: payment.id,
+      referenceId: payment.application.referenceId,
+      applicationId: payment.application.id,
+      applicationStatus: payment.application.status,
+      merchantReference: payment.merchantReference,
+      paymentStatus: payment.status,
+      amount: payment.amount,
+      currency: payment.currency,
+      paymentMethod: payment.paymentMethod,
+      chapaReference: payment.chapaReference,
+      paidAt: payment.paidAt,
+      course: payment.application.course,
+      schedule: payment.application.schedule,
+    };
+
+    // Already settled — answer from the database without calling Chapa.
     if (payment.status === "SUCCESS") {
-      return NextResponse.json(buildSummary(application, payment));
+      return NextResponse.json({
+        status: "SUCCESS",
+        registration: buildSummary(target),
+      });
     }
 
-    if (!payment.txRef || !payment.chapaReference) {
-      // Hosted checkout may not return Chapa's reference until its webhook arrives.
-      return NextResponse.json(buildSummary(application, payment));
-    }
-
-    const configuredSecret = process.env.CHAPA_SECRET_KEY?.trim().replace(/^['"]|['"]$/g, "");
-    if (!configuredSecret) {
-      return NextResponse.json(
-        { status: "ERROR", message: "Server missing CHAPA_SECRET_KEY configuration", error: "Server missing CHAPA_SECRET_KEY configuration" },
-        { status: 500 }
-      );
-    }
-
-    const secretKey = chapaV2SecretKey();
-    if (!secretKey) {
-      return NextResponse.json(
-        { status: "ERROR", message: "Server CHAPA_SECRET_KEY configuration is invalid", error: "Server CHAPA_SECRET_KEY configuration is invalid" },
-        { status: 500 }
-      );
+    // Nothing to verify against yet: checkout was never initialized for this
+    // registration, or the reference has not been minted.
+    if (!payment.merchantReference) {
+      return pendingResponse(target, { code: "NOT_INITIALIZED" });
     }
 
     let verification;
     try {
-      verification = await verifyChapaTransaction(payment.chapaReference, secretKey);
+      verification = await verifyPayment(payment.merchantReference);
     } catch (error) {
-      if (error instanceof PaymentNotFoundError) {
-        // Chapa does not know this tx_ref (yet). Stay pending.
-        return NextResponse.json(buildSummary(application, payment));
+      if (error instanceof ChapaConfigError) {
+        console.error("[verify] Chapa configuration error:", {
+          referenceId: referenceId || undefined,
+          message: error.message,
+        });
+        return NextResponse.json(
+          { error: "Payment verification is not configured on this server." },
+          { status: 500 }
+        );
       }
-      console.error("Chapa verify error:", error);
-      const message = "Verification temporarily unavailable. Please try again.";
-      return NextResponse.json(
-        {
-          ...buildSummary(application, payment),
-          status: "PENDING",
-          warning: message,
-          code: "CHAPA_VERIFY_RETRYING",
-        },
-        { status: 200 }
-      );
+
+      if (error instanceof ChapaApiError) {
+        // Chapa documents that a freshly created payment can briefly be
+        // unknown, and that transient faults should be retried — both stay
+        // PENDING rather than failing the poll.
+        const transient =
+          error.httpStatus === undefined ||
+          error.httpStatus === 404 ||
+          error.httpStatus >= 500;
+
+        console.error("[verify] Chapa verification call failed:", {
+          referenceId: target.referenceId,
+          httpStatus: error.httpStatus,
+          providerCode: error.code,
+          message: error.message,
+          transient,
+        });
+
+        if (transient) {
+          return pendingResponse(target, {
+            warning: "Verification is temporarily unavailable. Retrying.",
+            code: "CHAPA_VERIFY_RETRYING",
+          });
+        }
+        return NextResponse.json(
+          { error: "Payment verification is currently unavailable." },
+          { status: 502 }
+        );
+      }
+      throw error;
     }
 
-    if (verification.txRef && verification.txRef !== payment.txRef) {
-      console.error("Chapa verify merchant_reference mismatch for payment", payment.id);
+    // The verified transaction must belong to this registration. A mismatch
+    // means the reference was reused or tampered with — never settle on it.
+    if (
+      verification.merchantReference &&
+      verification.merchantReference !== payment.merchantReference
+    ) {
+      console.error("[verify] merchant_reference mismatch", {
+        referenceId: target.referenceId,
+        expected: payment.merchantReference,
+        received: verification.merchantReference,
+      });
       return NextResponse.json({
-        ...buildSummary(application, payment),
-        status: "PENDING",
-        warning: "The verified transaction does not match this registration.",
-        code: "CHAPA_REFERENCE_MISMATCH",
+        status: "FAILED",
+        code: "REFERENCE_MISMATCH",
+        registration: buildSummary(target),
       });
     }
 
-    await applyChapaPaymentResult(payment.id, {
-      status: mapChapaStatus(verification.status),
+    const applied = await applyPaymentResult(payment.id, {
+      status: verification.status,
       chapaReference: verification.chapaReference,
-      txRef: verification.txRef || payment.txRef || undefined,
+      merchantReference: verification.merchantReference,
       amount: verification.amount,
       currency: verification.currency,
-      method: verification.method,
-      charge: verification.charge,
-      raw: verification,
+      paymentMethod: verification.paymentMethod,
+      serviceFee: verification.serviceFee,
     });
 
-    // Re-read to return fresh state (payment AND application status — the
-    // application may have just flipped PENDING → PAID above).
-    const [updated, updatedApplication] = await Promise.all([
-      prisma.payment.findUnique({ where: { id: payment.id } }),
-      prisma.application.findUnique({ where: { id: application.id }, select: { status: true } }),
+    if (!applied) {
+      return NextResponse.json({ error: "Registration not found." }, { status: 404 });
+    }
+
+    if (applied.mismatch) {
+      // Chapa says success but the figures disagree with what we stored. Do
+      // NOT grant access; surface it for manual reconciliation.
+      console.error("[verify] Rejected SUCCESS on amount/currency mismatch", {
+        referenceId: target.referenceId,
+        mismatch: applied.mismatch,
+        expected: { amount: payment.amount, currency: payment.currency },
+        received: {
+          amount: verification.amount,
+          currency: verification.currency,
+          chapaReference: verification.chapaReference,
+        },
+      });
+      return NextResponse.json({
+        status: "FAILED",
+        code: "AMOUNT_MISMATCH",
+        error: "The verified payment does not match this registration.",
+        registration: buildSummary({ ...target, paymentStatus: applied.paymentStatus }),
+      });
+    }
+
+    // Re-read so the response reflects the committed state.
+    const [freshPayment, freshApplication] = await Promise.all([
+      prisma.payment.findUnique({
+        where: { id: payment.id },
+        select: {
+          status: true,
+          paymentMethod: true,
+          merchantReference: true,
+          chapaReference: true,
+          paidAt: true,
+        },
+      }),
+      prisma.application.findUnique({
+        where: { id: payment.application.id },
+        select: { status: true },
+      }),
     ]);
-    return NextResponse.json(
-      buildSummary({ ...application, status: updatedApplication?.status ?? application.status }, updated ?? payment)
-    );
+
+    return NextResponse.json({
+      status: freshPayment?.status ?? applied.paymentStatus,
+      registration: buildSummary({
+        ...target,
+        applicationStatus: freshApplication?.status ?? applied.applicationStatus,
+        paymentStatus: freshPayment?.status ?? applied.paymentStatus,
+        paymentMethod: freshPayment?.paymentMethod ?? target.paymentMethod,
+        merchantReference: freshPayment?.merchantReference ?? target.merchantReference,
+        chapaReference: freshPayment?.chapaReference ?? target.chapaReference,
+        paidAt: freshPayment?.paidAt ?? applied.paidAt,
+      }),
+    });
   } catch (error) {
-    console.error("Payment verify error:", error);
+    console.error("[verify] Unexpected verification failure:", {
+      referenceId: referenceId || merchantReference || undefined,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      message: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
-      { status: "ERROR", error: "Failed to verify payment", message: "Failed to verify payment", code: "VERIFY_HANDLER_FAILED" },
+      { status: "ERROR", error: "Failed to verify payment." },
       { status: 500 }
     );
   }
@@ -144,41 +322,4 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   return handle(request);
-}
-
-function buildSummary(
-  application: {
-    referenceId: string;
-    status: string;
-    course: { title: string; price: number; discountPrice: number | null; discountLabel: string | null } | null;
-    schedule: { group: string; session: string; days: string; startTime: string; endTime: string } | null;
-  },
-  payment: {
-    amount: number;
-    currency: string;
-    status: string;
-    txRef: string | null;
-    chapaReference: string | null;
-    method: string | null;
-    paidAt: Date | null;
-  }
-): Record<string, unknown> {
-  return {
-    status: payment.status,
-    registration: {
-      referenceId: application.referenceId,
-      registrationStatus: application.status,
-      course: application.course?.title || null,
-      schedule: application.schedule
-        ? `SCHEDULE ${application.schedule.group}: ${application.schedule.session} (${application.schedule.days}, ${application.schedule.startTime}–${application.schedule.endTime})`
-        : null,
-      amount: payment.amount,
-      currency: payment.currency,
-      paymentStatus: payment.status,
-      paymentMethod: payment.method,
-      txRef: payment.txRef,
-      chapaReference: payment.chapaReference,
-      paidAt: payment.paidAt,
-    },
-  };
 }

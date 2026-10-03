@@ -2,6 +2,35 @@
 // Used by /payment/return (confirmation), /registration (public lookup),
 // and the lookup API so every surface formats data identically.
 
+export interface DerivedPayment {
+  amount: number | null;
+  currency: string;
+  status: string; // SUCCESS once the registration is paid or confirmed
+  paidAt: string | null;
+}
+
+/**
+ * Payment fields are no longer persisted — there is no payment provider and no
+ * Payment table. The paid state lives entirely on Application.status. This
+ * derives the payment-shaped view that the lookup API, the admin list, and the
+ * shared enrollment components still consume, so no frontend contract changes.
+ */
+export function derivePayment(input: {
+  registrationStatus: string;
+  paidAt?: Date | string | null;
+  course?: { price: number; discountPrice: number | null } | null;
+}): DerivedPayment {
+  const paid =
+    input.registrationStatus === "PAID" || input.registrationStatus === "CONFIRMED";
+  const course = input.course ?? null;
+  return {
+    amount: course ? (course.discountPrice ?? course.price) : null,
+    currency: "ETB",
+    status: paid ? "SUCCESS" : "PENDING",
+    paidAt: input.paidAt ? new Date(input.paidAt).toISOString() : null,
+  };
+}
+
 export interface RegistrationSummary {
   referenceId: string;
   fullName: string;

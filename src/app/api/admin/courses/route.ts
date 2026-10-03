@@ -102,7 +102,7 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ error: "Course not found" }, { status: 404 });
       }
       // Foreign key constraint: the course has dependent records (schedules,
-      // applications, payments) that must be removed first.
+      // applications) that must be removed first.
       console.error("Admin course delete error:", error);
       return NextResponse.json(
         { error: "Cannot delete this course because it has active schedules or registrations. Remove those first." },

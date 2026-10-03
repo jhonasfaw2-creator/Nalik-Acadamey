@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, CalendarPlus, Printer, AlertCircle, Loader2 } from "lucide-react";
 import RegistrationDetails from "@/components/RegistrationDetails";
+import CheckoutButton from "@/components/checkout-button";
 import type { RegistrationSummary } from "@/lib/registration";
 
 type LookupState = "idle" | "loading" | "found" | "error";
@@ -143,11 +144,15 @@ export default function RegistrationLookupClient() {
             <div className="mt-8">
               <RegistrationDetails registration={registration} highlightReference />
 
-              {/* Unpaid hint */}
+              {/* Unpaid: offer checkout right here */}
               {registration.paymentStatus !== "SUCCESS" && (
-                <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3.5 text-sm text-amber-700">
-                  Your payment hasn&apos;t been completed yet. You can finish paying from the{" "}
-                  <a href="/" className="font-semibold underline underline-offset-2">home page</a> — your seat is held until then.
+                <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 px-4 py-4">
+                  <p className="text-sm text-amber-700">
+                    Your payment hasn&apos;t been completed yet. Your seat is held until then.
+                  </p>
+                  <div className="mt-3">
+                    <CheckoutButton referenceId={registration.referenceId} />
+                  </div>
                 </div>
               )}
 
