@@ -1,8 +1,12 @@
 import { Suspense } from "react";
-import PaymentReturnClient from "./PaymentReturnClient";
+import PaymentCompleteClient from "@/app/payment/complete/PaymentCompleteClient";
+
+// Compatibility shim: the Chapa dashboard's return_url points here. Render the
+// canonical v2 confirmation page so there is a single return flow. Chapa's own
+// redirect parameters are preserved in the URL and read by the client.
 
 export const metadata = {
-  title: "Enrollment Confirmation",
+  title: "Payment Confirmation",
   robots: { index: false, follow: false },
 };
 
@@ -15,7 +19,7 @@ export default function PaymentReturnPage() {
         </div>
       }
     >
-      <PaymentReturnClient />
+      <PaymentCompleteClient />
     </Suspense>
   );
 }

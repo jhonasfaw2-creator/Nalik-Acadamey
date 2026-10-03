@@ -82,6 +82,7 @@ function pendingResponse(
 async function handle(request: NextRequest) {
   let referenceId = "";
   let merchantReference = "";
+  let chapaReference = "";
 
   try {
     const search = request.nextUrl.searchParams;
@@ -95,11 +96,16 @@ async function handle(request: NextRequest) {
     };
 
     referenceId = pick("referenceId").toUpperCase();
-    merchantReference = pick("merchantReference");
+    // Chapa's return redirect carries our merchant reference as tx_ref/trxref;
+    // accept those aliases so a plain redirect can be verified as well.
+    merchantReference =
+      pick("merchantReference") || pick("tx_ref") || pick("trxref") || pick("trx_ref");
+    chapaReference =
+      pick("chapaReference") || pick("chapa_reference") || pick("ref_id") || pick("reference");
 
-    if (!referenceId && !merchantReference) {
+    if (!referenceId && !merchantReference && !chapaReference) {
       return NextResponse.json(
-        { error: "A referenceId or merchantReference is required." },
+        { error: "A referenceId, merchantReference or chapaReference is required." },
         { status: 400 }
       );
     }
@@ -116,7 +122,9 @@ async function handle(request: NextRequest) {
     const payment = await prisma.payment.findFirst({
       where: referenceId
         ? { application: { referenceId } }
-        : { merchantReference },
+        : merchantReference
+          ? { merchantReference }
+          : { chapaReference },
       select: {
         id: true,
         status: true,
@@ -168,15 +176,20 @@ async function handle(request: NextRequest) {
       });
     }
 
+    // Prefer Chapa's own reference: v2 verification resolves the Chapa
+    // reference returned at init/webhook. Fall back to our merchant reference
+    // for transactions Chapa indexed under it.
+    const verifyReference = payment.chapaReference || payment.merchantReference;
+
     // Nothing to verify against yet: checkout was never initialized for this
     // registration, or the reference has not been minted.
-    if (!payment.merchantReference) {
+    if (!verifyReference) {
       return pendingResponse(target, { code: "NOT_INITIALIZED" });
     }
 
     let verification;
     try {
-      verification = await verifyPayment(payment.merchantReference);
+      verification = await verifyPayment(verifyReference);
     } catch (error) {
       if (error instanceof ChapaConfigError) {
         console.error("[verify] Chapa configuration error:", {

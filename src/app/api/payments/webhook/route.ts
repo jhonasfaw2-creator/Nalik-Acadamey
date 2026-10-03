@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { mapChapaStatus } from "@/lib/payments/chapa";
+import { verifyPayment } from "@/lib/payments/chapa";
 import { applyPaymentResult } from "@/lib/payments/apply";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +13,11 @@ export const dynamic = "force-dynamic";
 // before verifying would produce a different byte sequence and reject every
 // legitimate event.
 //
-// The signature is the authentication boundary: once it verifies, the payload
-// is trusted as coming from Chapa, and settlement still additionally requires
-// the amount and currency to match what we stored. Applying through
+// The signature is the authentication boundary: once it verifies, the event is
+// trusted as coming from Chapa. The payload is still treated as a signal, not
+// proof: the transaction is re-verified with Chapa server-to-server and the
+// state change is driven from that verified data, so settlement additionally
+// requires the amount and currency to match what we stored. Applying through
 // applyPaymentResult keeps this path idempotent and shares the exactly-once
 // seat bookkeeping with /api/payments/verify, so a webhook and a poll racing
 // each other can never double-enroll a student.
@@ -111,7 +113,7 @@ export async function POST(request: NextRequest) {
 
     const payment = await prisma.payment.findUnique({
       where: { merchantReference },
-      select: { id: true, status: true, amount: true, currency: true },
+      select: { id: true, status: true, amount: true, currency: true, chapaReference: true },
     });
     if (!payment) {
       // Nothing to settle. Answer 200 so Chapa stops retrying; the verify
@@ -123,16 +125,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true, ignored: "unknown_reference" });
     }
 
-    const status = mapChapaStatus(event.status);
+    // The signature authenticates the event, but the payload alone is never
+    // proof: re-query Chapa server-to-server and settle from the VERIFIED data.
+    // This is what confirms a payment when the customer closed the browser
+    // before the redirect ever happened.
+    const eventChapaReference = toText(event.chapa_reference);
+    const verifyReference = payment.chapaReference || eventChapaReference || merchantReference;
+
+    let authoritative;
+    try {
+      authoritative = await verifyPayment(verifyReference);
+    } catch (error) {
+      // Transient provider problems (including a not-yet-indexed payment)
+      // answer non-2xx so Chapa retries; settling on the payload alone would
+      // defeat the point of verifying.
+      console.error("[chapa-webhook] Re-verification failed; requesting retry", {
+        merchantReference,
+        verifyReference,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return NextResponse.json({ received: false, retry: true }, { status: 503 });
+    }
 
     const applied = await applyPaymentResult(payment.id, {
-      status,
-      chapaReference: toText(event.chapa_reference),
-      merchantReference,
-      amount: toNumber(event.amount),
-      currency: toText(event.currency),
-      paymentMethod: toText(event.payment_method),
-      serviceFee: toNumber(event.service_fee),
+      status: authoritative.status,
+      chapaReference: authoritative.chapaReference ?? eventChapaReference,
+      merchantReference: authoritative.merchantReference ?? merchantReference,
+      amount: authoritative.amount,
+      currency: authoritative.currency,
+      paymentMethod: authoritative.paymentMethod,
+      serviceFee: authoritative.serviceFee,
     });
 
     if (!applied) {
@@ -151,9 +173,9 @@ export async function POST(request: NextRequest) {
         mismatch: applied.mismatch,
         expected: { amount: payment.amount, currency: payment.currency },
         received: {
-          amount: toNumber(event.amount),
-          currency: toText(event.currency),
-          chapaReference: toText(event.chapa_reference),
+          amount: authoritative.amount,
+          currency: authoritative.currency,
+          chapaReference: authoritative.chapaReference ?? eventChapaReference,
         },
       });
       return NextResponse.json({ received: true, status: "FAILED", mismatch: applied.mismatch });

@@ -190,6 +190,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Canonical Chapa v2 paths. /payment/return and /api/webhooks/chapa remain
+    // as compatibility shims for a dashboard still pointing at the older URLs.
     const returnUrl = new URL("/payment/complete", origin);
     returnUrl.searchParams.set("referenceId", application.referenceId);
     const callbackUrl = new URL("/api/payments/webhook", origin).toString();

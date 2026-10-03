@@ -58,15 +58,16 @@ export type ChapaKeyKind = "secret" | "public";
 /**
  * Accepted key prefixes per kind.
  *
- * v2 issues `CHAPA_TEST_…` / `CHAPA_LIVE_…` for the secret key (see the
- * Authorization header in the v2 docs). The v1 `CHASECK_…` and `CHAPUBK_…`
- * forms are still accepted so a dashboard key copied from an older project
- * keeps working. An unrecognised prefix throws with the accepted list, so a
- * future Chapa key format fails loudly and legibly instead of being silently
- * rejected at the API.
+ * This integration targets Chapa API v2 exclusively, so only the v2 key
+ * formats are accepted: `CHAPA_TEST_…` / `CHAPA_LIVE_…` for the secret key
+ * (see the Authorization header in the v2 docs). The legacy v1 `CHASECK-…`
+ * secret is deliberately rejected — it will not authenticate against the v2
+ * API — so a misconfigured key fails loudly at startup/unset time instead of
+ * surfacing as an opaque 401 at checkout. An unrecognised prefix throws with
+ * the accepted list, so a future key format fails legibly too.
  */
 const KEY_PREFIXES: Record<ChapaKeyKind, readonly string[]> = {
-  secret: ["CHAPA_TEST_", "CHAPA_LIVE_", "CHASECK_TEST_", "CHASECK_LIVE_"],
+  secret: ["CHAPA_TEST_", "CHAPA_LIVE_"],
   public: ["CHAPUBK_TEST_", "CHAPUBK_LIVE_"],
 };
 
@@ -343,21 +344,23 @@ export async function initiatePayment(
 /**
  * Verifies a payment with Chapa. The only trustworthy signal that money moved.
  *
- * GET /v2/payments/<reference>/verify — Chapa accepts our merchant reference
- * on this endpoint; verification also returns its own `chapa_reference`.
+ * GET /v2/payments/<reference>/verify — v2 resolves the Chapa reference
+ * (`chapa_reference`) returned at initialization or via webhook. Callers
+ * should pass that when they have it and fall back to our merchant reference
+ * otherwise; verification also returns the provider's own `chapa_reference`.
  *
  * Callers MUST additionally check that the returned amount and currency match
  * what was expected, and that the payment has not already been applied.
  */
 export async function verifyPayment(
-  merchantReference: string
+  reference: string
 ): Promise<ChapaVerification> {
-  if (!merchantReference?.trim()) {
-    throw new ChapaConfigError("A merchant reference is required to verify.");
+  if (!reference?.trim()) {
+    throw new ChapaConfigError("A reference is required to verify.");
   }
 
   const data = await chapaFetch<Record<string, unknown>>(
-    `/payments/${encodeURIComponent(merchantReference.trim())}/verify`,
+    `/payments/${encodeURIComponent(reference.trim())}/verify`,
     { method: "GET" }
   );
 

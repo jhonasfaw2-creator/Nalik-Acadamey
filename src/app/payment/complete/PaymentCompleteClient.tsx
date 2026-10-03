@@ -26,7 +26,6 @@ import CheckoutButton from "@/components/checkout-button";
 import {
   formatDate,
   formatTime,
-  looksLikeReferenceId,
   type RegistrationSummary,
 } from "@/lib/registration";
 
@@ -68,7 +67,26 @@ function formatStamp(iso: string | null): string {
 
 export default function PaymentCompleteClient() {
   const searchParams = useSearchParams();
-  const referenceId = (searchParams.get("referenceId") || "").trim().toUpperCase();
+
+  // The redirect from Chapa's hosted checkout can arrive on this page directly
+  // (our return_url) or via the dashboard-configured /payment/return shim. The
+  // reference may be our own referenceId, Chapa's merchant reference
+  // (tx_ref / trxref) or its Chapa reference (chapa_reference / reference /
+  // ref_id). Accept any of them so a redirect always resolves instead of
+  // failing.
+  const firstParam = (...names: string[]): string => {
+    for (const name of names) {
+      const value = searchParams.get(name)?.trim();
+      if (value) return value;
+    }
+    return "";
+  };
+
+  const referenceId = firstParam("referenceId").toUpperCase();
+  const merchantReference = firstParam("tx_ref", "trxref", "trx_ref", "merchant_reference");
+  const chapaReference = firstParam("chapa_reference", "reference", "ref_id");
+  /** Identifier to display and retry with before verification returns one. */
+  const displayReference = referenceId || merchantReference.toUpperCase();
 
   const [phase, setPhase] = useState<Phase>("checking");
   const [registration, setRegistration] = useState<RegistrationSummary | null>(null);
@@ -119,10 +137,15 @@ export default function PaymentCompleteClient() {
   );
 
   useEffect(() => {
-    if (!looksLikeReferenceId(referenceId)) {
+    if (!referenceId && !merchantReference && !chapaReference) {
       setPhase("invalid");
       return;
     }
+
+    const verifyQuery = new URLSearchParams();
+    if (referenceId) verifyQuery.set("referenceId", referenceId);
+    if (merchantReference) verifyQuery.set("merchantReference", merchantReference);
+    if (chapaReference) verifyQuery.set("chapaReference", chapaReference);
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -138,11 +161,17 @@ export default function PaymentCompleteClient() {
       watching = false;
       setPhase(next);
       if (next === "success" || next === "failed") {
-        void loadReceipt(referenceId, {
+        // Verification returns the canonical registration ID; the redirect
+        // parameter may have been a merchant or Chapa reference instead.
+        const resolvedId =
+          typeof fromVerify?.referenceId === "string" && fromVerify.referenceId
+            ? fromVerify.referenceId
+            : displayReference;
+        void loadReceipt(resolvedId, {
           merchantReference:
             typeof fromVerify?.merchantReference === "string"
               ? fromVerify.merchantReference
-              : referenceId,
+              : displayReference,
           chapaReference:
             typeof fromVerify?.chapaReference === "string" ? fromVerify.chapaReference : null,
         });
@@ -177,10 +206,9 @@ export default function PaymentCompleteClient() {
       if (cancelled) return;
 
       try {
-        const res = await fetch(
-          `/api/payments/verify?referenceId=${encodeURIComponent(referenceId)}`,
-          { cache: "no-store" }
-        );
+        const res = await fetch(`/api/payments/verify?${verifyQuery.toString()}`, {
+          cache: "no-store",
+        });
         const data = await res.json().catch(() => null);
         if (cancelled) return;
 
@@ -211,7 +239,7 @@ export default function PaymentCompleteClient() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [referenceId, retryKey, loadReceipt]);
+  }, [referenceId, merchantReference, chapaReference, retryKey, loadReceipt]);
 
   const retry = () => {
     setRegistration(null);
@@ -223,7 +251,7 @@ export default function PaymentCompleteClient() {
   const rows: { label: string; value: string; mono?: boolean }[] = [
     { label: "Amount paid", value: formatBirr(registration?.amount ?? null, registration?.currency ?? null) },
     { label: "Transaction reference", value: refs.chapaReference || "—", mono: true },
-    { label: "Merchant reference", value: refs.merchantReference || referenceId, mono: true },
+    { label: "Merchant reference", value: refs.merchantReference || displayReference, mono: true },
     { label: "Confirmed on", value: formatStamp(registration?.paidAt ?? null) },
   ];
 
@@ -308,7 +336,7 @@ export default function PaymentCompleteClient() {
                   <Download size={15} /> Download Receipt
                 </button>
                 <a
-                  href={`/registration?id=${encodeURIComponent(referenceId)}`}
+                  href={`/registration?id=${encodeURIComponent(displayReference)}`}
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-navy/15 bg-white px-4 py-3 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
                 >
                   <LayoutDashboard size={15} /> Go to Dashboard
@@ -332,11 +360,11 @@ export default function PaymentCompleteClient() {
                 <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                   Registration ID
                 </p>
-                <p className="mt-0.5 font-mono text-sm font-bold text-gold">{referenceId}</p>
+                <p className="mt-0.5 font-mono text-sm font-bold text-gold">{displayReference}</p>
               </div>
 
               <div className="mx-auto mt-5 max-w-sm">
-                <CheckoutButton referenceId={referenceId} label="Retry Payment" />
+                <CheckoutButton referenceId={displayReference} label="Retry Payment" />
               </div>
 
               <button
@@ -372,11 +400,11 @@ export default function PaymentCompleteClient() {
                 <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                   Registration ID
                 </p>
-                <p className="mt-0.5 font-mono text-sm font-bold text-gold">{referenceId}</p>
+                <p className="mt-0.5 font-mono text-sm font-bold text-gold">{displayReference}</p>
               </div>
 
               <div className="mx-auto mt-5 max-w-sm print:hidden">
-                <CheckoutButton referenceId={referenceId} label="Pay again" />
+                <CheckoutButton referenceId={displayReference} label="Pay again" />
               </div>
 
               <div className="mt-5 flex flex-col items-center gap-2 print:hidden">
@@ -388,7 +416,7 @@ export default function PaymentCompleteClient() {
                   <Loader2 size={15} /> Check again
                 </button>
                 <a
-                  href={`/registration?id=${encodeURIComponent(referenceId)}`}
+                  href={`/registration?id=${encodeURIComponent(displayReference)}`}
                   className="text-sm text-gray-500 underline underline-offset-2 transition-colors hover:text-gold"
                 >
                   View your registration
