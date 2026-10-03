@@ -138,6 +138,19 @@ export interface InitiatePaymentInput {
   /** Free-form internal metadata for reconciliation. */
   meta?: Record<string, string>;
   currency?: typeof DEFAULT_CURRENCY;
+  /**
+   * Browser return URL — where Chapa redirects the customer after checkout.
+   * Overrides the Redirect URL configured in the Chapa dashboard for this
+   * specific transaction. Chapa appends tx_ref and chapa_reference as query
+   * parameters so the return page can identify the payment.
+   */
+  return_url?: string;
+  /**
+   * Server-to-server webhook URL for this transaction. Chapa will POST the
+   * payment event to this URL in addition to (or instead of) the dashboard-
+   * configured webhook endpoint.
+   */
+  callback_url?: string;
 }
 
 /** Normalized hosted-session result. Field names mirror the Chapa response. */
@@ -303,12 +316,14 @@ function readNumber(source: Record<string, unknown>, key: string): number | null
  * Amount is always supplied by the caller from the database, never from the
  * browser.
  *
- * Chapa v2 hosted checkout carries no redirect/callback fields in this request:
- * the documented body is amount/currency/merchant_reference/customer/meta. The
- * browser return URL and the webhook endpoint are configured per business in
- * the Chapa dashboard, and Chapa appends the transaction parameters to the
- * configured Redirect URL. Those parameters are a UX signal only — the payment
- * is settled exclusively from server-side verification and signed webhooks.
+ * `return_url` overrides the Redirect URL from the Chapa dashboard for this
+ * transaction; Chapa appends tx_ref and chapa_reference so the return page
+ * can identify the payment. `callback_url` is the server-to-server webhook
+ * target for this transaction.
+ *
+ * The payment is settled from server-side verification (the return page polls
+ * /api/payments/verify) and from signed webhooks — the redirect itself is
+ * a UX signal only.
  */
 export async function initiatePayment(
   input: InitiatePaymentInput
@@ -328,6 +343,8 @@ export async function initiatePayment(
       merchant_reference: input.merchantReference,
       customer: input.customer,
       ...(input.meta ? { meta: input.meta } : {}),
+      ...(input.return_url ? { return_url: input.return_url } : {}),
+      ...(input.callback_url ? { callback_url: input.callback_url } : {}),
     },
   });
 

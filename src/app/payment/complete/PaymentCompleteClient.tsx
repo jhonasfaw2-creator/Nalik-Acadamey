@@ -31,8 +31,8 @@ import {
 
 type Phase = "invalid" | "checking" | "success" | "failed" | "pending";
 
-const POLL_INTERVAL_MS = 3_000;
-const MAX_ATTEMPTS = 5;
+const POLL_INTERVAL_MS = 2_000;
+const MAX_ATTEMPTS = 6;
 
 /**
  * After the burst, the page keeps checking slowly in the background so the

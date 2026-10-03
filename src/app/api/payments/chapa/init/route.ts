@@ -164,11 +164,21 @@ export async function POST(request: NextRequest) {
 
     const { firstName, lastName } = splitName(application.fullName);
 
-    // Chapa v2 hosted checkout takes no redirect/callback fields. The browser
-    // return URL and the webhook endpoint are configured per business in the
-    // Chapa dashboard, and Chapa appends the transaction parameters to the
-    // configured Redirect URL. Send only the documented v2 fields; the payment
-    // is settled from server-side verification and signed webhooks.
+    // Derive the app origin from the request so the URLs work both on Vercel
+    // preview deployments and on the canonical production domain. The
+    // NEXT_PUBLIC_APP_URL env var is used as a fallback for edge cases where
+    // the Host header is unreliable (e.g. direct lambda invocations).
+    const host = request.headers.get("host") ?? "";
+    const proto = request.headers.get("x-forwarded-proto") ?? "https";
+    const origin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "")
+      || `${proto}://${host}`;
+
+    // return_url  — where Chapa redirects the browser after checkout.
+    //               We pass referenceId so PaymentCompleteClient can poll
+    //               /api/payments/verify immediately without guessing the ID.
+    // callback_url — server-to-server webhook for this transaction; Chapa will
+    //               POST the payment event here in addition to the dashboard
+    //               webhook endpoint.
     const hosted = await initiatePayment({
       amount: payment.amount,
       merchantReference,
@@ -186,6 +196,8 @@ export async function POST(request: NextRequest) {
             }
           : {}),
       },
+      return_url: `${origin}/payment/complete?referenceId=${encodeURIComponent(application.referenceId)}`,
+      callback_url: `${origin}/api/payments/webhook`,
     });
 
     // Re-read before writing: a webhook may have settled this payment while we
