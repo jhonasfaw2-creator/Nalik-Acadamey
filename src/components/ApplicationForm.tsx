@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Loader2, Calendar, Info } from "lucide-react";
+import { X, Loader2, Calendar, CreditCard, AlertCircle } from "lucide-react";
 
 interface CourseOption {
   id: string;
@@ -74,6 +74,14 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const emailRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const ageRef = useRef<HTMLInputElement>(null);
+
+  // Payment
+  const [isPaying, setIsPaying] = useState(false);
+  const [formError, setFormError] = useState("");
+  // Set once the registration exists. Kept so a retry after a failed payment
+  // handoff re-attempts only the payment instead of creating a second
+  // registration (which the (email, courseId) unique index would reject).
+  const [registeredRef, setRegisteredRef] = useState("");
 
   // ── Load courses + schedules ──────────────────────────────
   useEffect(() => {
@@ -178,6 +186,90 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     { label: "Details", done: Boolean(fullNameRef.current?.value || emailRef.current?.value || phoneRef.current?.value || ageRef.current?.value) },
     { label: "Review", done: false },
   ];
+
+  // A different course or schedule means a different registration, so any
+  // reference already issued no longer applies.
+  useEffect(() => {
+    setRegisteredRef("");
+    setFormError("");
+  }, [selectedCourseId, selectedSessionId]);
+
+  const handlePay = useCallback(async () => {
+    if (isPaying) return;
+
+    if (!selectedCourseId || !selectedSessionId) {
+      setFormError("Choose a course and a schedule before paying.");
+      return;
+    }
+
+    setIsPaying(true);
+    setFormError("");
+
+    try {
+      let referenceId = registeredRef;
+
+      if (!referenceId) {
+        const res = await fetch("/api/registrations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fullName: fullNameRef.current?.value.trim() ?? "",
+            email: emailRef.current?.value.trim() ?? "",
+            phone: phoneRef.current?.value.trim() ?? "",
+            age: Number(ageRef.current?.value),
+            courseId: selectedCourseId,
+            scheduleId: selectedSessionId,
+          }),
+        });
+        const data = await res.json().catch(() => null);
+
+        // 409 means this email already registered for this course. The server
+        // returns the existing reference, so let them finish paying rather than
+        // dead-ending on an error.
+        if (res.status === 409 && data?.referenceId) {
+          referenceId = data.referenceId;
+        } else if (!res.ok) {
+          setFormError(data?.error || "We couldn't complete your registration. Please try again.");
+          setIsPaying(false);
+          return;
+        } else {
+          referenceId = data?.referenceId;
+        }
+
+        if (!referenceId) {
+          setFormError("We couldn't get your registration ID. Please try again.");
+          setIsPaying(false);
+          return;
+        }
+        setRegisteredRef(referenceId);
+      }
+
+      // Hand the confirmed registration to Chapa. The server reads the amount
+      // and customer details from the database, never from the browser.
+      const payRes = await fetch("/api/payments/chapa/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ referenceId }),
+      });
+      const payData = await payRes.json().catch(() => null);
+
+      if (!payRes.ok || !payData?.checkout_url) {
+        setFormError(
+          payData?.alreadyPaid
+            ? "This registration is already paid — check your confirmation."
+            : payData?.error || "We couldn't start the payment. Please try again."
+        );
+        setIsPaying(false);
+        return;
+      }
+
+      // Chapa's hosted checkout owns the page from here.
+      window.location.href = payData.checkout_url;
+    } catch {
+      setFormError("Something went wrong connecting to the payment service. Please try again.");
+      setIsPaying(false);
+    }
+  }, [isPaying, registeredRef, selectedCourseId, selectedSessionId]);
 
   return (
     <dialog ref={dialogRef} className="backdrop:bg-black/60 rounded-[28px] p-0 max-w-5xl w-[calc(100%-1.5rem)] max-h-[92vh]">
@@ -405,20 +497,31 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                         <span className="text-sm text-white/70">Total</span>
                         <span className="text-2xl font-bold text-gold">{price ? formatBirr(price) : "—"}</span>
                       </div>
-                      <p className="mt-2 text-[11px] text-white/65">Online checkout is temporarily paused.</p>
+                      <p className="mt-2 text-[11px] text-white/65">
+                        You&apos;ll be redirected to Chapa&apos;s secure checkout to complete payment.
+                      </p>
                     </div>
+
+                    {formError && (
+                      <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-[11px] text-red-600" role="alert">
+                        <AlertCircle size={12} className="mt-0.5 shrink-0 text-red-500" />
+                        <span>{formError}</span>
+                      </div>
+                    )}
 
                     <button
                       type="button"
-                      disabled
-                      className="mt-4 w-full rounded-xl bg-gold px-5 py-3.5 text-base font-bold tracking-wide text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={handlePay}
+                      disabled={isPaying}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gold px-5 py-3.5 text-base font-bold tracking-wide text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Payments temporarily unavailable
+                      {isPaying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
+                      {isPaying
+                        ? "Redirecting to Chapa…"
+                        : price
+                          ? `Pay ${formatBirr(price)} with Chapa`
+                          : "Pay with Chapa"}
                     </button>
-                    <p className="mt-3 flex items-start gap-1.5 rounded-xl bg-white px-3 py-2 text-[11px] text-gray-500">
-                      <Info size={12} className="mt-0.5 shrink-0 text-gold" />
-                      Checkout is being reset before the new payment integration is added.
-                    </p>
                   </div>
                 </div>
               </aside>

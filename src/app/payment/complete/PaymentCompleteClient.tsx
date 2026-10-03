@@ -1,13 +1,14 @@
 "use client";
 
-// ── Payment return / confirmation (/payment/complete) ─────────────────
+// ── Payment confirmation (/payment/complete) ──────────────────────────
 // Chapa redirects the student back here after hosted checkout. The redirect is
-// only a signal, so this page polls the server until it has verified the
-// payment with Chapa, then shows the receipt.
+// only a signal, so this page asks the server — which verifies with Chapa — and
+// shows a receipt once the payment is confirmed.
 //
 // Polling is a convenience, not the source of truth: the webhook confirms the
-// payment independently, so closing this tab never loses a payment. That is why
-// a timeout ends in "still processing" rather than "failed".
+// payment independently. That is why running out of attempts ends in "still
+// being processed" rather than "failed", and why that state promises the
+// status will update on its own.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -17,20 +18,52 @@ import {
   Clock3,
   Loader2,
   AlertCircle,
-  CalendarPlus,
-  Printer,
+  Download,
+  LayoutDashboard,
 } from "lucide-react";
 import RegistrationDetails from "@/components/RegistrationDetails";
 import CheckoutButton from "@/components/checkout-button";
-import { looksLikeReferenceId, type RegistrationSummary } from "@/lib/registration";
+import {
+  formatDate,
+  formatTime,
+  looksLikeReferenceId,
+  type RegistrationSummary,
+} from "@/lib/registration";
 
-type Phase = "invalid" | "checking" | "success" | "cancelled" | "failed" | "timeout";
+type Phase = "invalid" | "checking" | "success" | "failed" | "pending";
 
 const POLL_INTERVAL_MS = 3_000;
-const POLL_TIMEOUT_MS = 120_000;
+const MAX_ATTEMPTS = 5;
 
-function formatBirr(amount: number | null): string {
-  return amount == null ? "—" : amount.toLocaleString("en-ET") + " Birr";
+/**
+ * After the burst, the page keeps checking slowly in the background so the
+ * "it will update automatically" promise is real: a payment the webhook
+ * confirms a minute later flips this page to the receipt on its own.
+ */
+const WATCH_INTERVAL_MS = 10_000;
+const WATCH_TIMEOUT_MS = 5 * 60_000;
+
+/** Fields the receipt needs that RegistrationSummary does not carry. */
+interface ReceiptRefs {
+  merchantReference: string | null;
+  chapaReference: string | null;
+}
+
+function formatBirr(amount: number | null, currency: string | null): string {
+  if (amount == null) return "—";
+  const code = currency || "ETB";
+  return `${amount.toLocaleString("en-ET")} ${code}`;
+}
+
+/** "2 Oct 2026, 5:04 PM" for the paid-at stamp. */
+function formatStamp(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${formatDate(iso)}, ${d.toLocaleTimeString("en-GB", {
+    hour: "numeric",
+    minute: "2-digit",
+  })}`;
 }
 
 export default function PaymentCompleteClient() {
@@ -39,42 +72,51 @@ export default function PaymentCompleteClient() {
 
   const [phase, setPhase] = useState<Phase>("checking");
   const [registration, setRegistration] = useState<RegistrationSummary | null>(null);
+  const [refs, setRefs] = useState<ReceiptRefs>({ merchantReference: null, chapaReference: null });
   const [detailError, setDetailError] = useState("");
-  const [elapsed, setElapsed] = useState(0);
+  const [attempt, setAttempt] = useState(0);
   const [retryKey, setRetryKey] = useState(0);
-  const startedAt = useRef(0);
 
   /** Loads the full summary so the receipt card has name, days and start date. */
-  const loadReceipt = useCallback(async (id: string) => {
-    try {
-      const res = await fetch(`/api/registrations/lookup?id=${encodeURIComponent(id)}`, {
-        cache: "no-store",
+  const loadReceipt = useCallback(
+    async (id: string, extra: ReceiptRefs) => {
+      setRefs({
+        merchantReference: extra.merchantReference,
+        chapaReference: extra.chapaReference,
       });
-      const data = await res.json().catch(() => null);
-      if (!data?.found || !data.registration) {
-        setDetailError("Payment confirmed, but we couldn't load your details.");
-        return;
+      try {
+        const res = await fetch(`/api/registrations/lookup?id=${encodeURIComponent(id)}`, {
+          cache: "no-store",
+        });
+        const data = await res.json().catch(() => null);
+        if (!data?.found || !data.registration) {
+          setDetailError("Payment confirmed, but we couldn't load your registration details.");
+          return;
+        }
+        const reg = data.registration;
+        setRegistration({
+          referenceId: reg.referenceId,
+          fullName: reg.fullName,
+          course: reg.course,
+          scheduleDays: reg.schedule?.days ?? null,
+          scheduleSession: reg.schedule
+            ? { group: reg.schedule.group, label: reg.schedule.session }
+            : null,
+          startTime: reg.schedule?.startTime ?? null,
+          endTime: reg.schedule?.endTime ?? null,
+          startDate: reg.schedule?.startDate ?? null,
+          amount: reg.amount,
+          currency: reg.currency,
+          paymentStatus: reg.paymentStatus,
+          registrationStatus: reg.registrationStatus,
+          paidAt: reg.paidAt,
+        });
+      } catch {
+        setDetailError("Payment confirmed, but we couldn't load your registration details.");
       }
-      const reg = data.registration;
-      setRegistration({
-        referenceId: reg.referenceId,
-        fullName: reg.fullName,
-        course: reg.course,
-        scheduleDays: reg.schedule?.days ?? null,
-        scheduleSession: reg.schedule ? { group: reg.schedule.group, label: reg.schedule.session } : null,
-        startTime: reg.schedule?.startTime ?? null,
-        endTime: reg.schedule?.endTime ?? null,
-        startDate: reg.schedule?.startDate ?? null,
-        amount: reg.amount,
-        currency: reg.currency,
-        paymentStatus: reg.paymentStatus,
-        registrationStatus: reg.registrationStatus,
-        paidAt: reg.paidAt,
-      });
-    } catch {
-      setDetailError("Payment confirmed, but we couldn't load your details.");
-    }
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
     if (!looksLikeReferenceId(referenceId)) {
@@ -84,35 +126,56 @@ export default function PaymentCompleteClient() {
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    startedAt.current = Date.now();
+    let tries = 0;
+    let watching = false;
+    const watchStartedAt = { value: 0 };
+
     setPhase("checking");
+    setAttempt(1);
 
-    const tick = () => {
-      if (!cancelled) setElapsed(Math.round((Date.now() - startedAt.current) / 1000));
-    };
-    const ticker = setInterval(tick, 1000);
-
-    const stop = (next: Phase) => {
-      clearInterval(ticker);
-      if (!cancelled) setPhase(next);
-    };
-
-    const settle = async (next: Phase) => {
-      stop(next);
-      await loadReceipt(referenceId);
-    };
-
-    const scheduleNextPoll = () => {
+    const finish = (next: Phase, fromVerify?: Record<string, unknown>) => {
       if (cancelled) return;
-      if (Date.now() - startedAt.current >= POLL_TIMEOUT_MS) {
-        stop("timeout");
+      watching = false;
+      setPhase(next);
+      if (next === "success" || next === "failed") {
+        void loadReceipt(referenceId, {
+          merchantReference:
+            typeof fromVerify?.merchantReference === "string"
+              ? fromVerify.merchantReference
+              : referenceId,
+          chapaReference:
+            typeof fromVerify?.chapaReference === "string" ? fromVerify.chapaReference : null,
+        });
+      }
+    };
+
+    /** Burst of 5 quick checks, then a slow background watch. */
+    const scheduleNext = () => {
+      if (cancelled) return;
+
+      if (!watching) {
+        tries += 1;
+        if (tries >= MAX_ATTEMPTS) {
+          watching = true;
+          watchStartedAt.value = Date.now();
+          setPhase("pending");
+          timer = setTimeout(poll, WATCH_INTERVAL_MS);
+          return;
+        }
+        setAttempt(tries + 1);
+        timer = setTimeout(poll, POLL_INTERVAL_MS);
         return;
       }
-      timer = setTimeout(poll, POLL_INTERVAL_MS);
+
+      // Watching: keep going until the grace period expires, then stop quietly
+      // and leave the page on "being processed" rather than flipping to failed.
+      if (Date.now() - watchStartedAt.value >= WATCH_TIMEOUT_MS) return;
+      timer = setTimeout(poll, WATCH_INTERVAL_MS);
     };
 
     const poll = async () => {
       if (cancelled) return;
+
       try {
         const res = await fetch(
           `/api/payments/verify?referenceId=${encodeURIComponent(referenceId)}`,
@@ -121,25 +184,24 @@ export default function PaymentCompleteClient() {
         const data = await res.json().catch(() => null);
         if (cancelled) return;
 
+        const reg = (data?.registration ?? {}) as Record<string, unknown>;
         const status = typeof data?.status === "string" ? data.status.toUpperCase() : "";
 
         if (status === "SUCCESS") {
-          await settle("success");
+          finish("success", reg);
           return;
         }
-        if (status === "CANCELLED") {
-          await settle("cancelled");
+        if (status === "FAILED" || status === "CANCELLED" || status === "INCOMPLETE") {
+          finish("failed", reg);
           return;
         }
-        if (status === "FAILED" || status === "INCOMPLETE") {
-          await settle("failed");
-          return;
-        }
-        // PENDING, a rate limit, or a transient provider fault: keep polling.
-        // The server deliberately answers 200 + PENDING for all of these.
-        scheduleNextPoll();
+
+        // PENDING, a rate limit, a transient provider fault, or a response with
+        // no status at all (e.g. a server misconfiguration). Never treat any of
+        // those as a failed payment.
+        scheduleNext();
       } catch {
-        if (!cancelled) scheduleNextPoll();
+        scheduleNext();
       }
     };
 
@@ -147,7 +209,6 @@ export default function PaymentCompleteClient() {
 
     return () => {
       cancelled = true;
-      clearInterval(ticker);
       if (timer) clearTimeout(timer);
     };
   }, [referenceId, retryKey, loadReceipt]);
@@ -155,15 +216,22 @@ export default function PaymentCompleteClient() {
   const retry = () => {
     setRegistration(null);
     setDetailError("");
-    setElapsed(0);
+    setAttempt(0);
     setRetryKey((k) => k + 1);
   };
+
+  const rows: { label: string; value: string; mono?: boolean }[] = [
+    { label: "Amount paid", value: formatBirr(registration?.amount ?? null, registration?.currency ?? null) },
+    { label: "Transaction reference", value: refs.chapaReference || "—", mono: true },
+    { label: "Merchant reference", value: refs.merchantReference || referenceId, mono: true },
+    { label: "Confirmed on", value: formatStamp(registration?.paidAt ?? null) },
+  ];
 
   return (
     <div className="flex min-h-screen flex-col bg-warm-white">
       <main className="flex flex-1 items-start justify-center px-4 py-12 sm:py-16">
         <div className="w-full max-w-md">
-          <div className="text-center">
+          <div className="text-center print:hidden">
             <a href="/" className="inline-flex items-center gap-2.5">
               <img src="/assets/logo.jpeg" alt="Nalik Academy" className="h-9 w-9 rounded-lg object-cover" />
               <span className="text-lg font-bold text-navy">Nalik Academy</span>
@@ -181,11 +249,11 @@ export default function PaymentCompleteClient() {
                 seconds.
               </p>
               <p className="mt-4 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-500">
-                You can close this tab — we confirm payments by webhook too, so your seat is held
+                You can close this tab — we also confirm payments by webhook, so your seat is held
                 either way.
               </p>
               <p className="mt-3 font-mono text-[11px] text-gray-400">
-                {referenceId} · {elapsed}s
+                {referenceId} · check {attempt} of {MAX_ATTEMPTS}
               </p>
             </div>
           )}
@@ -202,18 +270,24 @@ export default function PaymentCompleteClient() {
                 </p>
               </div>
 
-              {registration && (
-                <>
-                  <div className="mt-6 flex items-center justify-between rounded-xl border border-gray-200 bg-white px-5 py-3.5">
-                    <span className="text-sm text-gray-500">Amount paid</span>
-                    <span className="text-lg font-bold text-gold">
-                      {formatBirr(registration.amount)}
+              {/* Receipt */}
+              <div className="mt-6 divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                {rows.map((row) => (
+                  <div key={row.label} className="flex items-start justify-between gap-4 px-5 py-3.5">
+                    <span className="shrink-0 text-sm text-gray-500">{row.label}</span>
+                    <span
+                      className={`text-right text-sm font-medium text-navy ${row.mono ? "font-mono text-xs" : ""}`}
+                    >
+                      {row.value}
                     </span>
                   </div>
-                  <div className="mt-3">
-                    <RegistrationDetails registration={registration} highlightReference />
-                  </div>
-                </>
+                ))}
+              </div>
+
+              {registration && (
+                <div className="mt-3">
+                  <RegistrationDetails registration={registration} highlightReference />
+                </div>
               )}
 
               {detailError && (
@@ -223,58 +297,47 @@ export default function PaymentCompleteClient() {
                 </p>
               )}
 
-              <div className="mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                <a
-                  href={`/api/registrations/lookup/ics?id=${encodeURIComponent(referenceId)}`}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-navy/15 bg-white px-4 py-3 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
-                >
-                  <CalendarPlus size={15} /> Add to Calendar
-                </a>
+              <div className="mt-5 grid grid-cols-1 gap-2.5 print:hidden sm:grid-cols-2">
+                {/* Opens the browser print dialog, where "Save as PDF" produces
+                    a copyable receipt file. */}
                 <button
                   type="button"
                   onClick={() => window.print()}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-gold px-4 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover"
+                >
+                  <Download size={15} /> Download Receipt
+                </button>
+                <a
+                  href={`/registration?id=${encodeURIComponent(referenceId)}`}
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-navy/15 bg-white px-4 py-3 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
                 >
-                  <Printer size={15} /> Print Receipt
-                </button>
+                  <LayoutDashboard size={15} /> Go to Dashboard
+                </a>
               </div>
             </div>
           )}
 
-          {(phase === "failed" || phase === "cancelled") && (
+          {phase === "failed" && (
             <div className="mt-10 text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-50">
-                {phase === "cancelled" ? (
-                  <Clock3 size={32} className="text-amber-500" />
-                ) : (
-                  <XCircle size={32} className="text-red-500" />
-                )}
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-50">
+                <XCircle size={32} className="text-red-500" />
               </div>
-              <h1 className="mt-5 text-2xl font-bold text-navy">
-                {phase === "cancelled" ? "Payment Cancelled" : "Payment Not Completed"}
-              </h1>
+              <h1 className="mt-5 text-2xl font-bold text-navy">Payment Not Completed</h1>
               <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-gray-600">
-                {phase === "cancelled"
-                  ? "You cancelled the payment, so no charge was made."
-                  : "We couldn't confirm the payment. No charge has been taken by us."}
+                Chapa did not complete this payment, so no charge was made. Your registration is
+                still saved.
               </p>
 
-              <div className="mx-auto mt-4 max-w-sm rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-amber-700">
+              <div className="mx-auto mt-4 max-w-sm rounded-xl border border-gray-200 bg-white px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                   Registration ID
                 </p>
                 <p className="mt-0.5 font-mono text-sm font-bold text-gold">{referenceId}</p>
               </div>
 
               <div className="mx-auto mt-5 max-w-sm">
-                <CheckoutButton referenceId={referenceId} label="Try paying again" />
+                <CheckoutButton referenceId={referenceId} label="Retry Payment" />
               </div>
-
-              {registration && (
-                <div className="mt-6 text-left">
-                  <RegistrationDetails registration={registration} />
-                </div>
-              )}
 
               <button
                 type="button"
@@ -286,39 +349,51 @@ export default function PaymentCompleteClient() {
             </div>
           )}
 
-          {phase === "timeout" && (
+          {phase === "pending" && (
             <div className="mt-10 text-center">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-50">
                 <Clock3 size={32} className="text-amber-500" />
               </div>
-              <h1 className="mt-5 text-2xl font-bold text-navy">Still Confirming</h1>
+              <h1 className="mt-5 text-2xl font-bold text-navy">Payment Being Processed</h1>
               <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-gray-600">
-                This is taking longer than usual. Your registration is saved and Chapa notifies us
-                directly, so your seat is held even if you close this page.
+                Chapa is still confirming this payment. Your registration is saved and your seat is
+                held — this page will update automatically once the payment is confirmed, so there
+                is nothing you need to do.
               </p>
+
+              <div className="mx-auto mt-5 max-w-sm rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+                <span className="inline-flex items-center gap-1.5 text-xs text-amber-700">
+                  <Loader2 size={12} className="animate-spin" />
+                  Still checking in the background — no action needed.
+                </span>
+              </div>
+
               <div className="mx-auto mt-4 max-w-sm rounded-xl border border-gray-200 bg-white px-4 py-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
                   Registration ID
                 </p>
                 <p className="mt-0.5 font-mono text-sm font-bold text-gold">{referenceId}</p>
               </div>
-              <button
-                type="button"
-                onClick={retry}
-                className="mt-5 inline-flex items-center gap-2 rounded-lg bg-gold px-6 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover"
-              >
-                <Loader2 size={15} /> Check again
-              </button>
-              <p className="mt-4 text-sm text-gray-500">
-                You can also{" "}
+
+              <div className="mx-auto mt-5 max-w-sm print:hidden">
+                <CheckoutButton referenceId={referenceId} label="Pay again" />
+              </div>
+
+              <div className="mt-5 flex flex-col items-center gap-2 print:hidden">
+                <button
+                  type="button"
+                  onClick={retry}
+                  className="inline-flex items-center gap-2 rounded-lg border border-navy/15 bg-white px-6 py-3 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
+                >
+                  <Loader2 size={15} /> Check again
+                </button>
                 <a
                   href={`/registration?id=${encodeURIComponent(referenceId)}`}
-                  className="font-semibold text-gold underline underline-offset-2"
+                  className="text-sm text-gray-500 underline underline-offset-2 transition-colors hover:text-gold"
                 >
-                  look up your registration
-                </a>{" "}
-                at any time.
-              </p>
+                  View your registration
+                </a>
+              </div>
             </div>
           )}
 

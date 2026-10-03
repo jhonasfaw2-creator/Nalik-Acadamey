@@ -183,3 +183,29 @@ img {
     scroll-behavior: auto;
   }
 }
+
+/* ── Printing the payment receipt ─────────────────────────────────
+   "Download Receipt" opens the browser print dialog, where "Save as
+   PDF" produces a copyable receipt. Chrome and Safari backgrounds are
+   transparent by default, so every colour is forced to print ink. */
+@media print {
+  body {
+    background: #fff !important;
+  }
+
+  /* Drop the page furniture and keep only the receipt itself. */
+  header, nav, footer, .print\:hidden {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  /* Borders and text must be ink, not transparent background paint. */
+  * {
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
