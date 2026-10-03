@@ -135,12 +135,6 @@ export interface InitiatePaymentInput {
   /** Our unique reference for this attempt. Must be unique per attempt. */
   merchantReference: string;
   customer: ChapaCustomer;
-  /** Where Chapa sends the customer after checkout. */
-  returnUrl: string;
-  /** Server endpoint Chapa calls when the payment settles. */
-  callbackUrl?: string;
-  /** Shown as the checkout page title. */
-  title?: string;
   /** Free-form internal metadata for reconciliation. */
   meta?: Record<string, string>;
   currency?: typeof DEFAULT_CURRENCY;
@@ -300,6 +294,13 @@ function readNumber(source: Record<string, unknown>, key: string): number | null
  * POST /v2/payments/hosted → the browser is redirected to `checkout_url`.
  * Amount is always supplied by the caller from the database, never from the
  * browser.
+ *
+ * Chapa v2 hosted checkout carries no redirect/callback fields in this request:
+ * the documented body is amount/currency/merchant_reference/customer/meta. The
+ * browser return URL and the webhook endpoint are configured per business in
+ * the Chapa dashboard, and Chapa appends the transaction parameters to the
+ * configured Redirect URL. Those parameters are a UX signal only — the payment
+ * is settled exclusively from server-side verification and signed webhooks.
  */
 export async function initiatePayment(
   input: InitiatePaymentInput
@@ -310,9 +311,6 @@ export async function initiatePayment(
   if (!input.merchantReference?.trim()) {
     throw new ChapaConfigError("Chapa merchant_reference is required.");
   }
-  if (!input.returnUrl?.trim()) {
-    throw new ChapaConfigError("Chapa return_url is required.");
-  }
 
   const data = await chapaFetch<Record<string, unknown>>("/payments/hosted", {
     method: "POST",
@@ -321,9 +319,6 @@ export async function initiatePayment(
       currency: input.currency ?? DEFAULT_CURRENCY,
       merchant_reference: input.merchantReference,
       customer: input.customer,
-      return_url: input.returnUrl,
-      ...(input.callbackUrl ? { callback_url: input.callbackUrl } : {}),
-      ...(input.title ? { customization: { title: input.title } } : {}),
       ...(input.meta ? { meta: input.meta } : {}),
     },
   });

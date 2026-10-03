@@ -68,12 +68,13 @@ function formatStamp(iso: string | null): string {
 export default function PaymentCompleteClient() {
   const searchParams = useSearchParams();
 
-  // The redirect from Chapa's hosted checkout can arrive on this page directly
-  // (our return_url) or via the dashboard-configured /payment/return shim. The
-  // reference may be our own referenceId, Chapa's merchant reference
-  // (tx_ref / trxref) or its Chapa reference (chapa_reference / reference /
-  // ref_id). Accept any of them so a redirect always resolves instead of
-  // failing.
+  // Chapa v2 redirects the customer to the Redirect URL configured in the
+  // dashboard (here /payment/return, which renders this page) and appends the
+  // transaction parameters to it. The reference may arrive as our merchant
+  // reference (merchant_reference / tx_ref / trxref) or Chapa's own reference
+  // (chapa_reference / reference / ref_id). Accept any of them — the value is
+  // only used to IDENTIFY the payment; the status always comes from
+  // server-side verification, never from these parameters.
   const firstParam = (...names: string[]): string => {
     for (const name of names) {
       const value = searchParams.get(name)?.trim();

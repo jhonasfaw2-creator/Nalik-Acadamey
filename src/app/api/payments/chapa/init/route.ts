@@ -53,25 +53,6 @@ function splitName(fullName: string): { firstName: string; lastName: string } {
   };
 }
 
-/** Absolute origin for provider callbacks, preferring the configured value. */
-function getAppOrigin(request: NextRequest): string | null {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/^["']+|["']+$/g, "");
-  if (configured) {
-    try {
-      const url = new URL(configured);
-      if (url.protocol === "https:" || url.protocol === "http:") return url.origin;
-    } catch {
-      return null;
-    }
-  }
-  try {
-    const { origin, protocol } = new URL(request.url);
-    return protocol === "https:" || protocol === "http:" ? origin : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Returns the registration's Payment row, creating a PENDING one when a
  * registration predates online payments. Safe under concurrent requests: a
@@ -149,15 +130,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const origin = getAppOrigin(request);
-    if (!origin) {
-      console.error("[chapa-init] Could not resolve an absolute origin", { referenceId });
-      return NextResponse.json(
-        { error: "Payment return URL is not configured correctly." },
-        { status: 500 }
-      );
-    }
-
     const payment = await getOrCreatePendingPayment(
       application.id,
       application.course.discountPrice ?? application.course.price
@@ -190,14 +162,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Chapa redirects the customer back to /payment/return and posts webhooks
-    // to /api/webhooks/chapa. The referenceId is carried through so the
-    // confirmation page can verify the payment immediately.
-    const returnUrl = new URL("/payment/return", origin);
-    returnUrl.searchParams.set("referenceId", application.referenceId);
-    const callbackUrl = new URL("/api/webhooks/chapa", origin).toString();
     const { firstName, lastName } = splitName(application.fullName);
 
+    // Chapa v2 hosted checkout takes no redirect/callback fields. The browser
+    // return URL and the webhook endpoint are configured per business in the
+    // Chapa dashboard, and Chapa appends the transaction parameters to the
+    // configured Redirect URL. Send only the documented v2 fields; the payment
+    // is settled from server-side verification and signed webhooks.
     const hosted = await initiatePayment({
       amount: payment.amount,
       merchantReference,
@@ -207,9 +178,6 @@ export async function POST(request: NextRequest) {
         email,
         phone_number: phone,
       },
-      returnUrl: returnUrl.toString(),
-      callbackUrl,
-      title: application.course.title,
       meta: {
         reference_id: application.referenceId,
         ...(application.schedule
