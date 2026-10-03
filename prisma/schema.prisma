@@ -102,17 +102,25 @@ model Application {
 //
 // amount is minted server-side from the course price, so the value we expect
 // is always available to re-check against what Chapa reports.
+//
+// Three columns keep their pre-v2 database names via @map. They were renamed
+// in this model, and renaming in Prisma without @map would make `prisma db
+// push` drop the column and add a new one — wiping the merchant reference,
+// method and fee of every payment already collected. Mapping keeps the data.
 model Payment {
   id                String      @id @default(cuid())
   applicationId     String      @unique
   application       Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   amount            Int // amount in the payment currency, calculated server-side
   currency          String      @default("ETB")
-  merchantReference String?     @unique // our unique reference per attempt
+  merchantReference String?     @unique @map("txRef") // our unique reference per attempt
   chapaReference    String? // Chapa's own payment reference, from verify/webhook
   status            String      @default("PENDING") // PENDING, SUCCESS, FAILED, CANCELLED, INCOMPLETE
-  paymentMethod     String? // telebirr, cbebirr, card, …
-  serviceFee        Int? // fee charged by Chapa
+  paymentMethod     String?     @map("method") // telebirr, cbebirr, card, …
+  serviceFee        Int?        @map("charge") // fee charged by Chapa
+  // Retained from the pre-v2 model purely as an audit trail. No longer written.
+  rawWebhook        Json?
+  notes             String?
   paidAt            DateTime? // set when the payment reaches SUCCESS
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
