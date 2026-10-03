@@ -190,11 +190,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Canonical Chapa v2 paths. /payment/return and /api/webhooks/chapa remain
-    // as compatibility shims for a dashboard still pointing at the older URLs.
-    const returnUrl = new URL("/payment/complete", origin);
+    // Chapa redirects the customer back to /payment/return and posts webhooks
+    // to /api/webhooks/chapa. The referenceId is carried through so the
+    // confirmation page can verify the payment immediately.
+    const returnUrl = new URL("/payment/return", origin);
     returnUrl.searchParams.set("referenceId", application.referenceId);
-    const callbackUrl = new URL("/api/payments/webhook", origin).toString();
+    const callbackUrl = new URL("/api/webhooks/chapa", origin).toString();
     const { firstName, lastName } = splitName(application.fullName);
 
     const hosted = await initiatePayment({
