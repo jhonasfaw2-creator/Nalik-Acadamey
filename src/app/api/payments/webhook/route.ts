@@ -2,11 +2,10 @@ import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyPayment, ChapaApiError, ChapaConfigError } from "@/lib/payments/chapa";
 
 export const dynamic = "force-dynamic";
 
-const SIGNATURE_PATTERN = /^[a-f0-9]{64}$/i;
+const SIGNATURE_PATTERN = /^[a-f0-9]{64}\$/i;
 
 function hmac(secret: string, body: string): string {
   return crypto.createHmac("sha256", secret).update(body).digest("hex");
@@ -22,7 +21,7 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 function checkSignature(rawBody: string, request: NextRequest): "valid" | "absent" | "malformed" | "invalid" | "no-secret" {
-  const secret = process.env.CHAPA_WEBHOOK_SECRET?.trim().replace(/^["']+|["']+$/g, "");
+  const secret = process.env.CHAPA_WEBHOOK_SECRET?.trim().replace(/^["']+|["']+\$/g, "");
   if (!secret) return "no-secret";
 
   const received =
@@ -33,6 +32,8 @@ function checkSignature(rawBody: string, request: NextRequest): "valid" | "absen
   if (!SIGNATURE_PATTERN.test(received.trim())) return "malformed";
 
   const candidate = received.trim();
+  
+  // Chapa expects the validation calculated over the exact raw HTTP text body
   const expected = hmac(secret, rawBody);
   return timingSafeEqual(candidate, expected) ? "valid" : "invalid";
 }
@@ -67,14 +68,15 @@ async function applyPaymentResult(
   const chapaReference = verification.chapa_reference;
   const paymentMethod = verification.payment_method;
   const serviceFee = verification.service_fee;
+  
   const verifiedPaidAt = verification.updated_at || verification.created_at
     ? new Date(verification.updated_at ?? verification.created_at!)
     : null;
+    
   const paidAt = verifiedPaidAt && !Number.isNaN(verifiedPaidAt.getTime())
     ? verifiedPaidAt
     : new Date();
 
-  // Check amount matches what we expect
   const existingTx = await tx.transaction.findUnique({
     where: { id: transactionId },
     select: { amount: true, currency: true, status: true, txRef: true },
@@ -83,6 +85,7 @@ async function applyPaymentResult(
   if (!existingTx) {
     throw new Error("Transaction not found");
   }
+  
   if (verification.tx_ref !== existingTx.txRef) {
     throw new Error(`Verified payment reference mismatch for transaction ${transactionId}`);
   }
@@ -95,6 +98,7 @@ async function applyPaymentResult(
       throw new Error(`Verified payment currency mismatch for transaction ${transactionId}`);
     }
   }
+  
   if (existingTx.status === "SUCCESS" && status !== "SUCCESS") {
     return { paymentStatus: "SUCCESS", changed: false };
   }
@@ -119,7 +123,6 @@ async function applyPaymentResult(
     data: updateData,
   });
 
-  // Update registration status
   if (status === "SUCCESS") {
     const registration = await tx.registration.findUnique({
       where: { id: registrationId },
@@ -133,14 +136,13 @@ async function applyPaymentResult(
           data: { status: "PAID", paidAt },
         })
       : { count: 0 };
+      
     if (paidTransition.count > 0 && registration.scheduleId) {
       await tx.schedule.update({
         where: { id: registration.scheduleId },
         data: { enrolled: { increment: 1 } },
       });
     }
-  } else if (status === "FAILED" || status === "CANCELLED") {
-    // Keep registration as PENDING, allow retry
   }
 
   return { paymentStatus: status, changed: true };
@@ -152,10 +154,9 @@ export async function POST(request: NextRequest) {
 
   try {
     rawBody = await request.text();
-
     const sigResult = checkSignature(rawBody, request);
 
-    console.info("[chapa-webhook] incoming", {
+    console.info("[chapa-webhook] incoming validation log:", {
       sigResult,
       hasXChapaSignature: !!request.headers.get("x-chapa-signature"),
       hasChapaSignature: !!request.headers.get("chapa-signature"),
@@ -190,13 +191,16 @@ export async function POST(request: NextRequest) {
     const eventName = toText(event.event);
 
     if (webhookType !== "payment") {
-      console.info("[chapa-webhook] Ignored non-payment event", { eventName, webhookType });
+      console.info("[chapa-webhook] Ignored non-payment event type", { eventName, webhookType });
       return NextResponse.json({ received: true, ignored: webhookType ?? "unknown" });
     }
 
-    const txRef = toText(event.tx_ref) ?? toText(event.merchant_reference);
+    // Safe extraction fallback matching nesting variants of the payload
+    const eventData = (event.data && typeof event.data === "object" ? event.data : {}) as Record<string, unknown>;
+    const txRef = toText(eventData.merchant_reference) ?? toText(eventData.tx_ref) ?? toText(event.tx_ref);
+    
     if (!txRef) {
-      console.error("[chapa-webhook] Payment event had no tx_ref", { eventName });
+      console.error("[chapa-webhook] Payment event contained no reference fields", { eventName });
       return NextResponse.json({ error: "Missing tx_ref." }, { status: 400 });
     }
 
@@ -209,17 +213,15 @@ export async function POST(request: NextRequest) {
         currency: true,
         chapaReference: true,
         registrationId: true,
-        registration: { select: { id: true, referenceId: true, status: true } },
       },
     });
 
     if (!transaction) {
-      console.warn("[chapa-webhook] No transaction matches tx_ref", { txRef, eventName });
+      console.warn("[chapa-webhook] No matching reference record found inside local database", { txRef, eventName });
       return NextResponse.json({ received: true, ignored: "unknown_reference" });
     }
 
-    // Re-verify server-to-server with Chapa
-    const chapaReference = toText(event.chapa_reference);
+    const chapaReference = toText(eventData.chapa_reference) ?? toText(event.chapa_reference);
     if (chapaReference && !transaction.chapaReference) {
       try {
         await prisma.transaction.update({
@@ -227,43 +229,48 @@ export async function POST(request: NextRequest) {
           data: { chapaReference },
         });
       } catch (e) {
-        console.error("[chapa-webhook] Could not store chapa_reference from event", {
+        console.error("[chapa-webhook] Failed setting chapaReference meta baseline", {
           txRef,
           message: e instanceof Error ? e.message : String(e),
         });
       }
     }
 
-    let authoritative: VerificationResult;
-    try {
-      const verifyRef = chapaReference ?? txRef;
-      authoritative = await verifyPayment(verifyRef);
-    } catch (error) {
-      console.error("[chapa-webhook] Re-verification failed", {
-        txRef,
-        verifyRef: chapaReference ?? txRef,
-        message: error instanceof Error ? error.message : String(error),
-      });
-      return NextResponse.json({ received: false, retry: true }, { status: 503 });
-    }
+    // Explicit payload mapping to VerificationResult configuration model
+    const chapaStatus = toText(eventData.status) ?? toText(event.status) ?? "PENDING";
+    const verificationPayload: VerificationResult = {
+      status: chapaStatus,
+      amount: typeof eventData.amount === "number" ? eventData.amount : typeof event.amount === "number" ? event.amount : null,
+      currency: toText(eventData.currency) ?? toText(event.currency),
+      tx_ref: txRef,
+      chapa_reference: chapaReference,
+      payment_method: toText(eventData.payment_method) ?? toText(event.payment_method),
+      service_fee: typeof eventData.charge === "number" ? eventData.charge : null,
+      created_at: toText(eventData.created_at) ?? toText(event.created_at),
+      updated_at: toText(eventData.updated_at) ?? toText(event.updated_at),
+      raw: event,
+    };
 
-    const applied = await prisma.$transaction(async (tx) => {
-      return applyPaymentResult(tx, transaction.id, authoritative, transaction.registration.id);
+    // Execute database operations inside a strict, awaited serial transaction context
+    const executionResult = await prisma.\$transaction(async (tx) => {
+      return await applyPaymentResult(
+        tx,
+        transaction.id,
+        verificationPayload,
+        transaction.registrationId
+      );
     });
 
-    console.info("[chapa-webhook] Event applied", {
+    console.info("[chapa-webhook] Database records synchronized successfully:", {
       txRef,
-      eventName,
-      status: applied.paymentStatus,
-      changed: applied.changed,
+      status: executionResult.paymentStatus,
+      changed: executionResult.changed,
     });
 
-    return NextResponse.json({ received: true, status: applied.paymentStatus });
+    return NextResponse.json({ received: true, state: executionResult.paymentStatus });
+
   } catch (error) {
-    console.error("[chapa-webhook] Unexpected failure:", {
-      errorName: error instanceof Error ? error.name : "UnknownError",
-      message: error instanceof Error ? error.message : String(error),
-    });
-    return NextResponse.json({ received: false }, { status: 500 });
+    console.error("[chapa-webhook] Fatal runtime handler exception:", error);
+    return NextResponse.json({ error: "Internal Server Processing Error" }, { status: 500 });
   }
 }

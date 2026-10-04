@@ -28,16 +28,6 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // /_next/static files are content-hashed, so immutable is correct.
-        source: "/_next/static/:path*",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
-          },
-        ],
-      },
-      {
         source: "/api/:path*",
         headers: [
           {
