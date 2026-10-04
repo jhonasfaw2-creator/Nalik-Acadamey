@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
             referenceId: true,
             fullName: true,
             status: true,
+            scheduleId: true,
             course: { select: { id: true, title: true } },
           },
         },
@@ -110,10 +111,24 @@ export async function GET(request: NextRequest) {
         }
 
         if (isSuccess) {
-          await tx.registration.update({
+          const registration = await tx.registration.findUnique({
             where: { id: transaction.registration.id },
-            data: { status: "PAID", paidAt },
+            select: { status: true, scheduleId: true },
           });
+          if (!registration) throw new Error("Registration not found");
+
+          const paidTransition = registration.status === "PENDING"
+            ? await tx.registration.updateMany({
+                where: { id: transaction.registration.id, status: "PENDING" },
+                data: { status: "PAID", paidAt },
+              })
+            : { count: 0 };
+          if (paidTransition.count > 0 && registration.scheduleId) {
+            await tx.schedule.update({
+              where: { id: registration.scheduleId },
+              data: { enrolled: { increment: 1 } },
+            });
+          }
         }
       });
     }

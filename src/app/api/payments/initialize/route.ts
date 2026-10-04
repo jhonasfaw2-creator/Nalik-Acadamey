@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
       phone_number: phone.trim(),
       tx_ref: txRef,
       return_url: `${appUrl}/checkout/return?tx_ref=${txRef}`,
-      callback_url: `${appUrl}/api/payments/webhook`,
+      callback_url: `${appUrl}/api/webhooks/chapa`,
       customization: {
         title: course.title,
         description: `Nalik Academy - ${course.title}`,

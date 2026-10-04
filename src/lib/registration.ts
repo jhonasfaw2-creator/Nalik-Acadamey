@@ -10,10 +10,8 @@ export interface DerivedPayment {
 }
 
 /**
- * Payment fields are no longer persisted — there is no payment provider and no
- * Payment table. The paid state lives entirely on Application.status. This
- * derives the payment-shaped view that the lookup API, the admin list, and the
- * shared enrollment components still consume, so no frontend contract changes.
+ * Provides a course-price fallback for registrations without a successful
+ * transaction, preserving the shared registration-view contract.
  */
 export function derivePayment(input: {
   registrationStatus: string;

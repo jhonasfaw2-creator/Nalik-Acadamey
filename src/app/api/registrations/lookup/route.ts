@@ -25,9 +25,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const application = await prisma.application.findUnique({
+    const registration = await prisma.registration.findUnique({
       where: { referenceId: id },
       select: {
+        id: true,
         referenceId: true,
         fullName: true,
         status: true,
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    if (!application) {
+    if (!registration) {
       return NextResponse.json(
         { found: false, error: "We couldn't find a registration with that ID. Double-check it, or contact us if you think this is a mistake." },
         { status: 404 }
@@ -54,15 +55,20 @@ export async function GET(request: NextRequest) {
     }
 
     const payment = derivePayment({
-      registrationStatus: application.status,
-      paidAt: application.paidAt,
-      course: application.course,
+      registrationStatus: registration.status,
+      paidAt: registration.paidAt,
+      course: registration.course,
+    });
+    const successfulTransaction = await prisma.transaction.findFirst({
+      where: { registrationId: registration.id, status: "SUCCESS" },
+      orderBy: { paidAt: "desc" },
+      select: { amount: true, currency: true, paidAt: true },
     });
 
     let courseMaterials: { id: string; title: string; fileUrl: string; fileType: string }[] = [];
-    if (application.course?.id) {
+    if (registration.course?.id) {
       courseMaterials = await prisma.courseMaterial.findMany({
-        where: { courseId: application.course.id },
+        where: { courseId: registration.course.id },
         select: { id: true, title: true, fileUrl: true, fileType: true },
         orderBy: { sortOrder: "asc" },
       });
@@ -71,27 +77,27 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       found: true,
       registration: {
-        referenceId: application.referenceId,
-        fullName: application.fullName,
-        course: application.course?.title || null,
-        courseId: application.course?.id || null,
-        schedule: application.schedule
+        referenceId: registration.referenceId,
+        fullName: registration.fullName,
+        course: registration.course?.title || null,
+        courseId: registration.course?.id || null,
+        schedule: registration.schedule
           ? {
-              days: application.schedule.days,
-              session: application.schedule.session,
-              group: application.schedule.group,
-              startTime: application.schedule.startTime,
-              endTime: application.schedule.endTime,
-              startDate: application.schedule.startDate
-                ? application.schedule.startDate.toISOString()
+              days: registration.schedule.days,
+              session: registration.schedule.session,
+              group: registration.schedule.group,
+              startTime: registration.schedule.startTime,
+              endTime: registration.schedule.endTime,
+              startDate: registration.schedule.startDate
+                ? registration.schedule.startDate.toISOString()
                 : null,
             }
           : null,
-        amount: payment.amount,
-        currency: payment.currency,
-        paymentStatus: payment.status,
-        registrationStatus: application.status,
-        paidAt: payment.paidAt,
+        amount: successfulTransaction?.amount ?? payment.amount,
+        currency: successfulTransaction?.currency ?? payment.currency,
+        paymentStatus: successfulTransaction ? "SUCCESS" : payment.status,
+        registrationStatus: registration.status,
+        paidAt: successfulTransaction?.paidAt?.toISOString() ?? payment.paidAt,
         courseMaterials,
       },
     });

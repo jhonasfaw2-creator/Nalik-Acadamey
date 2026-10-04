@@ -1,80 +1,93 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { derivePayment } from "@/lib/registration";
+import type { Prisma } from "@prisma/client";
 
-// GET /api/admin/registrations — list all registrations
+export const dynamic = "force-dynamic";
+
+// GET /api/admin/registrations — list registrations with their latest payment attempt.
 export async function GET(request: NextRequest) {
   try {
-    const search = request.nextUrl.searchParams.get("search") || "";
-    const status = request.nextUrl.searchParams.get("status") || "";
-    const courseId = request.nextUrl.searchParams.get("courseId") || "";
+    const search = request.nextUrl.searchParams.get("search")?.trim() ?? "";
+    const status = request.nextUrl.searchParams.get("status") ?? "";
+    const courseId = request.nextUrl.searchParams.get("courseId") ?? "";
+    const skip = Math.max(0, Number.parseInt(request.nextUrl.searchParams.get("skip") || "0", 10) || 0);
+    const take = Math.min(100, Math.max(1, Number.parseInt(request.nextUrl.searchParams.get("take") || "100", 10) || 100));
 
-    const where: Record<string, unknown> = {};
-
-    if (status) where.status = status;
-    if (courseId) where.courseId = courseId;
-
+    const baseWhere: Prisma.RegistrationWhereInput = {};
+    if (courseId) baseWhere.courseId = courseId;
     if (search) {
-      where.OR = [
-        { fullName: { contains: search } },
-        { email: { contains: search } },
+      baseWhere.OR = [
+        { fullName: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
         { phone: { contains: search } },
-        { referenceId: { contains: search } },
+        { referenceId: { contains: search, mode: "insensitive" } },
+        { transactions: { some: { txRef: { contains: search, mode: "insensitive" } } } },
       ];
     }
+    const where: Prisma.RegistrationWhereInput = {
+      ...baseWhere,
+      ...(status ? { status } : {}),
+    };
 
-    // The status tallies must reflect every status (so each filter chip shows
-    // the true count), so they are computed from the search/course filters
-    // only — never the selected status itself.
-    const countsWhere: Record<string, unknown> = { ...where };
-    delete countsWhere.status;
-
-    const skip = Math.max(0, parseInt(request.nextUrl.searchParams.get("skip") || "0", 10) || 0);
-    const take = Math.min(100, Math.max(1, parseInt(request.nextUrl.searchParams.get("take") || "100", 10) || 100));
-
-    const [applications, counts] = await Promise.all([
-      prisma.application.findMany({
+    const [registrations, counts, totalCount] = await Promise.all([
+      prisma.registration.findMany({
         where,
         include: {
-          course: { select: { id: true, title: true, price: true, discountPrice: true } },
+          course: { select: { id: true, title: true } },
           schedule: {
             select: { id: true, group: true, session: true, days: true, startTime: true, endTime: true },
+          },
+          transactions: {
+            orderBy: { createdAt: "desc" },
+            select: {
+              amount: true,
+              currency: true,
+              txRef: true,
+              status: true,
+              paidAt: true,
+              createdAt: true,
+            },
           },
         },
         orderBy: { createdAt: "desc" },
         skip,
         take,
       }),
-      prisma.application.groupBy({ by: ["status"], _count: true, where: countsWhere }),
+      prisma.registration.groupBy({
+        by: ["status"],
+        _count: true,
+        where: baseWhere,
+      }),
+      prisma.registration.count({ where }),
     ]);
 
     const statusCounts: Record<string, number> = {};
-    for (const c of counts) statusCounts[c.status] = c._count;
+    for (const count of counts) statusCounts[count.status] = count._count;
 
-    // There is no payment table: the paid/unpaid flag is derived entirely from
-    // the registration status, which an admin sets by hand.
-    const toIso = (value: Date | null | undefined): string | null =>
-      value ? value.toISOString() : null;
-
-    const withPayment = applications.map(({ course, paidAt, ...application }) => {
-      const derived = derivePayment({
-        registrationStatus: application.status,
-        paidAt,
-        course,
-      });
-
+    const applications = registrations.map(({ transactions, ...registration }) => {
+      const successfulTransaction = transactions.find((transaction) => transaction.status === "SUCCESS") ?? null;
+      const latestTransaction = successfulTransaction ?? transactions[0] ?? null;
+      const paid = registration.status === "PAID" || registration.status === "CONFIRMED";
       return {
-        ...application,
-        payment: {
-          amount: derived.amount,
-          currency: derived.currency,
-          status: derived.status,
-          paidAt: toIso(paidAt),
-        },
+        ...registration,
+        txRef: latestTransaction?.txRef ?? null,
+        payment: successfulTransaction
+          ? {
+              amount: successfulTransaction.amount,
+              currency: successfulTransaction.currency,
+              status: "SUCCESS",
+              paidAt: successfulTransaction.paidAt?.toISOString() ?? null,
+            }
+          : {
+              amount: null,
+              currency: "ETB",
+              status: paid ? "SUCCESS" : latestTransaction?.status ?? "PENDING",
+              paidAt: registration.paidAt?.toISOString() ?? null,
+            },
       };
     });
 
-    return NextResponse.json({ applications: withPayment, statusCounts });
+    return NextResponse.json({ applications, statusCounts, totalCount });
   } catch (error) {
     console.error("Admin registrations fetch error:", error);
     return NextResponse.json({ error: "Failed to load registrations" }, { status: 500 });

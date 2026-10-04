@@ -9,10 +9,8 @@ export const revalidate = 0;
 
 // POST /api/registrations — create a registration.
 //
-// There is no payment provider and no payment step: the registration is created
-// as PENDING and an admin moves it to PAID/CONFIRMED once payment is settled
-// out of band. The amount reported back is read from the course in the
-// database; the browser never sends a price.
+// Registration-only compatibility endpoint. The checkout form uses
+// /api/payments/initialize so online signups always receive a transaction.
 export async function POST(request: NextRequest) {
   try {
     const body = await readJson(request);
@@ -41,7 +39,7 @@ export async function POST(request: NextRequest) {
     const normalizedEmail = email.toLowerCase();
 
     // Check duplicate
-    const existing = await prisma.application.findUnique({
+    const existing = await prisma.registration.findUnique({
       where: { email_courseId: { email: normalizedEmail, courseId } },
     });
 
@@ -85,12 +83,12 @@ export async function POST(request: NextRequest) {
 
     // Generate unique reference ID (shared with admin manual enrollment).
     const referenceId = await generateUniqueReferenceId(async (id) =>
-      Boolean(await prisma.application.findUnique({ where: { referenceId: id }, select: { id: true } }))
+      Boolean(await prisma.registration.findUnique({ where: { referenceId: id }, select: { id: true } }))
     );
 
-    let application: { id: string; referenceId: string };
+    let registration: { id: string; referenceId: string };
     try {
-      application = await prisma.application.create({
+      registration = await prisma.registration.create({
         data: {
           referenceId,
           fullName,
@@ -108,7 +106,7 @@ export async function POST(request: NextRequest) {
       // Two concurrent submissions can both pass the findUnique check above;
       // the (email, courseId) unique index is the authoritative guard.
       if (isUniqueConstraintError(error)) {
-        const duplicate = await prisma.application.findUnique({
+        const duplicate = await prisma.registration.findUnique({
           where: { email_courseId: { email: normalizedEmail, courseId } },
         });
         return NextResponse.json(
@@ -125,7 +123,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        referenceId: application.referenceId,
+        referenceId: registration.referenceId,
         amount: paymentAmount,
         currency: "ETB",
       },

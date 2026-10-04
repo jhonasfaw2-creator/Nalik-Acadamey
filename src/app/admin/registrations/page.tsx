@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Search, Filter, ChevronDown, UserPlus, Loader2, Copy, Check } from "lucide-react";
 
 interface Registration {
@@ -14,10 +14,11 @@ interface Registration {
   motivation: string;
   status: string;
   createdAt: string;
+  txRef: string | null;
   course: { id: string; title: string } | null;
   schedule: { id: string; group: string; session: string; days: string; startTime: string; endTime: string } | null;
   payment: {
-    amount: number;
+    amount: number | null;
     currency: string;
     status: string;
     paidAt: string | null;
@@ -30,12 +31,6 @@ const STATUS_OPTIONS = [
   { value: "PAID", label: "Paid" },
   { value: "CONFIRMED", label: "Confirmed" },
 ];
-
-const STATUS_COLORS: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-700",
-  PAID: "bg-blue-100 text-blue-700",
-  CONFIRMED: "bg-green-100 text-green-700",
-};
 
 const PAYMENT_COLORS: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-700",
@@ -63,11 +58,13 @@ interface ScheduleOption {
 export default function AdminRegistrations() {
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+  const [totalCount, setTotalCount] = useState(0);
+  const [skip, setSkip] = useState(0);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [loading, setLoading] = useState(true);
+  const hasLoaded = useRef(false);
   const [error, setError] = useState("");
-  const [updating, setUpdating] = useState<string | null>(null);
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [schedules, setSchedules] = useState<ScheduleOption[]>([]);
   const [reassigning, setReassigning] = useState<string | null>(null);
@@ -82,14 +79,13 @@ export default function AdminRegistrations() {
     age: "",
     courseId: "",
     scheduleId: "",
-    paymentStatus: "PENDING" as "PAID" | "PENDING",
   });
   const [addSaving, setAddSaving] = useState(false);
   const [addError, setAddError] = useState("");
   const [created, setCreated] = useState<{ referenceId: string; fullName: string; status: string } | null>(null);
   const [copiedRef, setCopiedRef] = useState(false);
 
-  // Courses + schedules for the reassignment controls (loaded once).
+  // Courses and schedules for the manual enrollment and reassignment controls.
   useEffect(() => {
     fetch("/api/admin/courses")
       .then((r) => (r.ok ? r.json() : []))
@@ -116,23 +112,35 @@ export default function AdminRegistrations() {
   }, []);
 
   const load = useCallback(() => {
-    setLoading(true);
+    setLoading(!hasLoaded.current);
     setError("");
     const params = new URLSearchParams();
     if (search) params.set("search", search);
     if (statusFilter) params.set("status", statusFilter);
+    params.set("skip", String(skip));
+    params.set("take", "100");
 
     fetch(`/api/admin/registrations?${params}`)
       .then((r) => { if (!r.ok) throw new Error("Failed to load registrations"); return r.json(); })
       .then((d) => {
         setRegistrations(d.applications || []);
         setStatusCounts(d.statusCounts || {});
+        setTotalCount(d.totalCount || 0);
+        hasLoaded.current = true;
         setLoading(false);
       })
-      .catch((err) => { setError(err.message); setLoading(false); });
-  }, [search, statusFilter]);
+      .catch((err) => { setError(err.message); hasLoaded.current = true; setLoading(false); });
+  }, [search, statusFilter, skip]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const interval = window.setInterval(load, 5_000);
+    return () => window.clearInterval(interval);
+  }, [load]);
+
+  useEffect(() => {
+    setSkip(0);
+  }, [search, statusFilter]);
 
   // Debounced search
   const [searchInput, setSearchInput] = useState("");
@@ -142,17 +150,6 @@ export default function AdminRegistrations() {
   }, [searchInput]);
 
   const formatBirr = (n: number) => n.toLocaleString("en-ET") + " Birr";
-
-  const updateStatus = async (id: string, status: string) => {
-    setUpdating(id);
-    await fetch(`/api/admin/registrations/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    load();
-    setUpdating(null);
-  };
 
   const reassign = async (id: string, courseId: string, scheduleId: string) => {
     setReassigning(id);
@@ -197,13 +194,12 @@ export default function AdminRegistrations() {
           age: Number(form.age),
           courseId: form.courseId,
           scheduleId: form.scheduleId,
-          paymentStatus: form.paymentStatus,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         setCreated(data.application);
-        setForm({ fullName: "", email: "", phone: "", age: "", courseId: "", scheduleId: "", paymentStatus: "PENDING" });
+        setForm({ fullName: "", email: "", phone: "", age: "", courseId: "", scheduleId: "" });
         load();
       } else {
         setAddError(data.error || "Failed to add student.");
@@ -304,14 +300,15 @@ export default function AdminRegistrations() {
           <table className="w-full text-left text-sm">
             <thead className="border-b border-gray-200 bg-gray-50">
               <tr>
-                <th className="px-4 py-3 font-medium text-gray-500">Student</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Student name</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Email</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Phone</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Course</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Schedule</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Payment</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Status</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Date</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Amount paid</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Transaction reference</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Registration date</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Payment status</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Action</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Move</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -319,55 +316,25 @@ export default function AdminRegistrations() {
                 <tr key={reg.id} className="hover:bg-gray-50/50">
                   <td className="px-4 py-3">
                     <p className="font-medium text-navy">{reg.fullName}</p>
-                    <p className="text-xs text-gray-400">{reg.email}</p>
-                    <p className="text-xs text-gray-400">{reg.referenceId}</p>
                   </td>
-                  <td className="px-4 py-3">
-                    <p className="text-sm text-navy">{reg.course?.title || "No course"}</p>
+                  <td className="px-4 py-3 text-sm text-gray-600">{reg.email}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{reg.phone}</td>
+                  <td className="px-4 py-3 text-sm text-navy">{reg.course?.title || "No course"}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-navy">
+                    {reg.payment?.status === "SUCCESS" && reg.payment.amount != null
+                      ? `${formatBirr(reg.payment.amount)} (${reg.payment.currency})`
+                      : "—"}
                   </td>
-                  <td className="px-4 py-3">
-                    {reg.schedule ? (
-                      <div>
-                        <p className="text-sm text-navy">SCHEDULE {reg.schedule.group}: {reg.schedule.session}</p>
-                        <p className="text-xs text-gray-400">{reg.schedule.days} · {reg.schedule.startTime}–{reg.schedule.endTime}</p>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-gray-400">No schedule</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {reg.payment ? (
-                      <div>
-                        <p className="text-sm font-medium text-navy">{formatBirr(reg.payment.amount)}</p>
-                        <div className="mt-1 flex items-center gap-1.5">
-                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${PAYMENT_COLORS[reg.payment.status] || ""}`}>
-                            {reg.payment.status === "SUCCESS" ? "PAID" : reg.payment.status}
-                          </span>
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-gray-400">No payment</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[reg.status] || ""}`}>
-                      {reg.status}
-                    </span>
-                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-gray-600">{reg.txRef || "—"}</td>
                   <td className="px-4 py-3 text-xs text-gray-500">
-                    {new Date(reg.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                    {new Date(reg.createdAt).toLocaleString("en-GB", {
+                      day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+                    })}
                   </td>
                   <td className="px-4 py-3">
-                    <select
-                      value={reg.status}
-                      onChange={(e) => updateStatus(reg.id, e.target.value)}
-                      disabled={updating === reg.id}
-                      className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-navy focus:border-gold focus:outline-none disabled:opacity-50"
-                    >
-                      {STATUS_OPTIONS.filter((s) => s.value).map((s) => (
-                        <option key={s.value} value={s.value}>{s.label}</option>
-                      ))}
-                    </select>
+                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${PAYMENT_COLORS[reg.payment?.status ?? "PENDING"] || "bg-gray-100 text-gray-600"}`}>
+                      {reg.payment?.status === "SUCCESS" ? "PAID" : reg.payment?.status ?? "PENDING"}
+                    </span>
                   </td>
                   <td className="px-4 py-3">
                     <button
@@ -384,7 +351,7 @@ export default function AdminRegistrations() {
                 if (!reg) return null;
                 return (
                   <tr className="bg-gold/5">
-                    <td colSpan={8} className="px-4 py-4">
+                    <td colSpan={9} className="px-4 py-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                         <div className="flex-1">
                           <label className="mb-1 block text-xs font-medium text-gray-500">
@@ -444,6 +411,31 @@ export default function AdminRegistrations() {
           {registrations.length === 0 && (
             <div className="py-12 text-center text-sm text-gray-400">No registrations found.</div>
           )}
+          {totalCount > 100 && (
+            <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3">
+              <p className="text-xs text-gray-500">
+                Showing {skip + 1}–{Math.min(skip + registrations.length, totalCount)} of {totalCount}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSkip((value) => Math.max(0, value - 100))}
+                  disabled={skip === 0}
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-navy disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSkip((value) => value + 100)}
+                  disabled={skip + registrations.length >= totalCount}
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-navy disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -459,7 +451,7 @@ export default function AdminRegistrations() {
                 </div>
                 <h2 className="text-lg font-bold text-navy">Student added</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  {created.fullName} is enrolled{created.status === "PAID" ? " and marked as paid" : " and awaiting payment"}.
+                  {created.fullName} was added with payment status pending.
                 </p>
                 <div className="mx-auto mt-5 max-w-xs rounded-lg bg-warm-white px-4 py-3 text-left">
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Registration ID</p>
@@ -573,30 +565,9 @@ export default function AdminRegistrations() {
                       <p className="mt-1 text-xs text-red-500">This session is full — pick another one.</p>
                     )}
                   </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-700">Payment</label>
-                    <div className="flex gap-2">
-                      {(["PENDING", "PAID"] as const).map((opt) => (
-                        <button
-                          key={opt}
-                          type="button"
-                          onClick={() => setForm({ ...form, paymentStatus: opt })}
-                          className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-                            form.paymentStatus === opt
-                              ? "bg-gold text-navy"
-                              : "border border-gray-200 text-gray-600 hover:border-gold/50"
-                          }`}
-                        >
-                          {opt === "PAID" ? "Already paid (cash/transfer)" : "Pending payment"}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="mt-1 text-xs text-gray-400">
-                      {form.paymentStatus === "PAID"
-                        ? "Creates the registration as PAID and occupies a seat immediately."
-                        : "The student can pay online later using their registration ID."}
-                    </p>
-                  </div>
+                  <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                    Payment status is updated automatically after Chapa verifies payment.
+                  </p>
                   <div className="flex justify-end gap-3 pt-2">
                     <button type="button" onClick={closeAddModal} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">
                       Cancel

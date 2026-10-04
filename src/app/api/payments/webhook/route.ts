@@ -121,10 +121,24 @@ async function applyPaymentResult(
 
   // Update registration status
   if (status === "SUCCESS") {
-    await tx.registration.update({
+    const registration = await tx.registration.findUnique({
       where: { id: registrationId },
-      data: { status: "PAID", paidAt },
+      select: { status: true, scheduleId: true },
     });
+    if (!registration) throw new Error("Registration not found");
+
+    const paidTransition = registration.status === "PENDING"
+      ? await tx.registration.updateMany({
+          where: { id: registrationId, status: "PENDING" },
+          data: { status: "PAID", paidAt },
+        })
+      : { count: 0 };
+    if (paidTransition.count > 0 && registration.scheduleId) {
+      await tx.schedule.update({
+        where: { id: registration.scheduleId },
+        data: { enrolled: { increment: 1 } },
+      });
+    }
   } else if (status === "FAILED" || status === "CANCELLED") {
     // Keep registration as PENDING, allow retry
   }
@@ -180,7 +194,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true, ignored: webhookType ?? "unknown" });
     }
 
-    const txRef = toText(event.tx_ref);
+    const txRef = toText(event.tx_ref) ?? toText(event.merchant_reference);
     if (!txRef) {
       console.error("[chapa-webhook] Payment event had no tx_ref", { eventName });
       return NextResponse.json({ error: "Missing tx_ref." }, { status: 400 });

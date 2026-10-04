@@ -6,14 +6,9 @@ import { generateUniqueReferenceId } from "@/lib/reference";
 
 // ── Manual student enrollment (admin) ───────────────────────────────
 // POST /api/admin/registrations/manual — add a student who registered outside
-// the website (phone / in person). Reuses the SAME Application model as online
+// the website (phone / in person). Reuses the same Registration model as online
 // registrations so the student appears in the existing tables and their
 // reference ID works with the public /registration lookup.
-//
-// paymentStatus:
-//   "PAID"      → create the registration as already paid (cash/bank transfer).
-//                 Occupies a seat immediately.
-//   "PENDING"   → create as pending; the student settles it out of band.
 
 const manualSchema = z.object({
   fullName: z.string().trim().min(2, "Full name must be at least 2 characters").max(120),
@@ -22,7 +17,6 @@ const manualSchema = z.object({
   age: z.coerce.number().int("Age must be a whole number").min(10, "Age must be 10–99").max(99, "Age must be 10–99"),
   courseId: z.string().min(1, "Course is required"),
   scheduleId: z.string().min(1, "Schedule session is required"),
-  paymentStatus: z.enum(["PAID", "PENDING"]).default("PENDING"),
 });
 
 export async function POST(request: NextRequest) {
@@ -38,7 +32,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const { fullName, email, phone, age, courseId, scheduleId, paymentStatus } = parsed.data;
+    const { fullName, email, phone, age, courseId, scheduleId } = parsed.data;
     const normalizedEmail = email.toLowerCase();
 
     // Course must exist and be active.
@@ -50,7 +44,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "This course is not active" }, { status: 400 });
     }
 
-    // Session must exist, be active, and (for paid enrollment) hold a free seat.
+    // Session must exist, be active, and hold a free seat.
     // An admin-marked Full session (availabilityOverride=false) is blocked too —
     // the admin said it is full, so it is full.
     const schedule = await prisma.schedule.findUnique({ where: { id: scheduleId } });
@@ -68,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Duplicate guard consistent with online registration.
-    const existing = await prisma.application.findUnique({
+    const existing = await prisma.registration.findUnique({
       where: { email_courseId: { email: normalizedEmail, courseId } },
     });
     if (existing) {
@@ -79,34 +73,20 @@ export async function POST(request: NextRequest) {
     }
 
     const referenceId = await generateUniqueReferenceId(async (id) =>
-      Boolean(await prisma.application.findUnique({ where: { referenceId: id }, select: { id: true } }))
+      Boolean(await prisma.registration.findUnique({ where: { referenceId: id }, select: { id: true } }))
     );
-    const now = new Date();
 
-    // Registration + seat increment written atomically. A PAID manual
-    // enrollment moves the registration to PAID and takes the seat in the same
-    // transaction, so the counts can never drift apart.
-    const created = await prisma.$transaction(async (tx) => {
-      const application = await tx.application.create({
-        data: {
-          referenceId,
-          fullName,
-          email: normalizedEmail,
-          phone,
-          age,
-          courseId,
-          scheduleId,
-          status: paymentStatus === "PAID" ? "PAID" : "PENDING",
-          paidAt: paymentStatus === "PAID" ? now : null,
-        },
-      });
-      if (paymentStatus === "PAID") {
-        await tx.schedule.update({
-          where: { id: scheduleId },
-          data: { enrolled: { increment: 1 } },
-        });
-      }
-      return application;
+    const created = await prisma.registration.create({
+      data: {
+        referenceId,
+        fullName,
+        email: normalizedEmail,
+        phone,
+        age,
+        courseId,
+        scheduleId,
+        status: "PENDING",
+      },
     });
 
     return NextResponse.json(

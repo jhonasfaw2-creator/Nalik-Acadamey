@@ -217,14 +217,11 @@ export default function AdminSettings() {
         <div className="rounded-xl border border-gray-200 bg-white p-6">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Enrollment Settings</h2>
           <p className="text-sm text-gray-600">
-            Student registrations are created as <strong>Pending</strong>. There is no online
-            payment provider: settle cash or bank-transfer registrations here by moving a
-            registration to <strong>Paid</strong>, which marks it enrolled and takes a seat.
+            Student registrations remain pending until Chapa payment verification confirms a successful transaction.
           </p>
           <ul className="mt-3 space-y-1 text-xs text-gray-500">
-            <li>• <strong>Pending</strong>: registered, not yet settled, no seat held</li>
-            <li>• <strong>Paid</strong>: settled out of band, enrolled, seat held</li>
-            <li>• <strong>Confirmed</strong>: paid and reviewed by an admin</li>
+            <li>• <strong>Pending</strong>: registered, payment not confirmed</li>
+            <li>• <strong>Paid</strong>: transaction verified by Chapa, enrolled</li>
           </ul>
         </div>
       </div>

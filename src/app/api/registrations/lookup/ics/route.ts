@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const application = await prisma.application.findUnique({
+    const registration = await prisma.registration.findUnique({
       where: { referenceId: id },
       select: {
         referenceId: true,
@@ -31,24 +31,24 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    if (!application || !application.schedule) {
+    if (!registration || !registration.schedule) {
       return NextResponse.json({ error: "No schedule found for this registration ID" }, { status: 404 });
     }
 
     const ics = buildScheduleIcs({
-      referenceId: application.referenceId,
-      courseTitle: application.course?.title || "Class",
-      days: application.schedule.days.split(",").map((d) => d.trim()).filter(Boolean),
-      startTime: application.schedule.startTime,
-      endTime: application.schedule.endTime,
-      startDate: application.schedule.startDate ? application.schedule.startDate.toISOString() : null,
+      referenceId: registration.referenceId,
+      courseTitle: registration.course?.title || "Class",
+      days: registration.schedule.days.split(",").map((day) => day.trim()).filter(Boolean),
+      startTime: registration.schedule.startTime,
+      endTime: registration.schedule.endTime,
+      startDate: registration.schedule.startDate ? registration.schedule.startDate.toISOString() : null,
     });
 
     return new NextResponse(ics, {
       status: 200,
       headers: {
         "Content-Type": "text/calendar; charset=utf-8",
-        "Content-Disposition": `attachment; filename="nalik-schedule-${application.referenceId}.ics"`,
+        "Content-Disposition": `attachment; filename="nalik-schedule-${registration.referenceId}.ics"`,
         "Cache-Control": "no-store",
       },
     });
