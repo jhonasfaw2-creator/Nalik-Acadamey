@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Loader2, Calendar, AlertCircle, CheckCircle2 } from "lucide-react";
+import { X, Loader2, Calendar, AlertCircle, ArrowRight } from "lucide-react";
 
 interface CourseOption {
   id: string;
@@ -77,12 +77,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
-  // Set once the registration exists. Kept so a retry after a failed request
-  // reuses it instead of creating a second registration (which the
-  // (email, courseId) unique index would reject).
-  const [registeredRef, setRegisteredRef] = useState("");
-  // The reference ID handed back once the registration is stored.
-  const [confirmedRef, setConfirmedRef] = useState<string | null>(null);
 
   // ── Load courses + schedules ──────────────────────────────
   useEffect(() => {
@@ -188,10 +182,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     { label: "Review", done: false },
   ];
 
-  // A different course or schedule means a different registration, so any
-  // reference already issued no longer applies.
   useEffect(() => {
-    setRegisteredRef("");
     setFormError("");
   }, [selectedCourseId, selectedSessionId]);
 
@@ -203,54 +194,56 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
       return;
     }
 
+    const requiredFields = [fullNameRef.current, emailRef.current, phoneRef.current, ageRef.current];
+    const invalidField = requiredFields.find((field) => !field?.checkValidity());
+    if (invalidField !== undefined) {
+      invalidField?.reportValidity();
+      setFormError("Complete your name, email, phone number, and age before continuing.");
+      return;
+    }
+
     setIsSubmitting(true);
     setFormError("");
 
     try {
-      let referenceId = registeredRef;
+      const response = await fetch("/api/payments/initialize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: fullNameRef.current?.value.trim() ?? "",
+          email: emailRef.current?.value.trim() ?? "",
+          phone: phoneRef.current?.value.trim() ?? "",
+          age: Number(ageRef.current?.value),
+          courseId: selectedCourseId,
+          scheduleId: selectedSessionId,
+        }),
+      });
+      const data: { checkout_url?: unknown; error?: string } = await response.json().catch(() => ({}));
 
-      if (!referenceId) {
-        const res = await fetch("/api/registrations", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fullName: fullNameRef.current?.value.trim() ?? "",
-            email: emailRef.current?.value.trim() ?? "",
-            phone: phoneRef.current?.value.trim() ?? "",
-            age: Number(ageRef.current?.value),
-            courseId: selectedCourseId,
-            scheduleId: selectedSessionId,
-          }),
-        });
-        const data = await res.json().catch(() => null);
-
-        // 409 means this email already registered for this course. The server
-        // returns the existing reference, so show it rather than dead-ending.
-        if (res.status === 409 && data?.referenceId) {
-          referenceId = data.referenceId;
-        } else if (!res.ok) {
-          setFormError(data?.error || "We couldn't complete your registration. Please try again.");
-          setIsSubmitting(false);
-          return;
-        } else {
-          referenceId = data?.referenceId;
-        }
-
-        if (!referenceId) {
-          setFormError("We couldn't get your registration ID. Please try again.");
-          setIsSubmitting(false);
-          return;
-        }
-        setRegisteredRef(referenceId);
+      if (!response.ok) {
+        setFormError(data.error || "We couldn't start your payment. Please try again.");
+        setIsSubmitting(false);
+        return;
       }
 
-      setConfirmedRef(referenceId);
-      setIsSubmitting(false);
+      if (typeof data.checkout_url !== "string") {
+        setFormError("We couldn't start your payment. Please try again.");
+        setIsSubmitting(false);
+        return;
+      }
+      const checkoutUrl = new URL(data.checkout_url);
+      if (checkoutUrl.protocol !== "https:") {
+        setFormError("We couldn't start your payment. Please try again.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      window.location.href = checkoutUrl.toString();
     } catch {
       setFormError("Something went wrong. Please try again.");
       setIsSubmitting(false);
     }
-  }, [isSubmitting, registeredRef, selectedCourseId, selectedSessionId]);
+  }, [isSubmitting, selectedCourseId, selectedSessionId]);
 
   return (
     <dialog ref={dialogRef} className="backdrop:bg-black/60 rounded-[28px] p-0 max-w-5xl w-[calc(100%-1.5rem)] max-h-[92vh]">
@@ -429,21 +422,21 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                   <div className="mt-4 space-y-4">
                     <div>
                       <label htmlFor="reg-name" className="mb-1.5 block text-sm font-medium text-gray-700">Full name <span className="text-gold">*</span></label>
-                      <input ref={fullNameRef} id="reg-name" type="text" placeholder="e.g. Daniel Kebede" autoComplete="name" className={fieldClass} />
+                      <input ref={fullNameRef} id="reg-name" type="text" placeholder="e.g. Daniel Kebede" autoComplete="name" required className={fieldClass} />
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <label htmlFor="reg-email" className="mb-1.5 block text-sm font-medium text-gray-700">Email <span className="text-gold">*</span></label>
-                        <input ref={emailRef} id="reg-email" type="email" placeholder="you@example.com" autoComplete="email" className={fieldClass} />
+                        <input ref={emailRef} id="reg-email" type="email" placeholder="you@example.com" autoComplete="email" required className={fieldClass} />
                       </div>
                       <div>
                         <label htmlFor="reg-phone" className="mb-1.5 block text-sm font-medium text-gray-700">Phone <span className="text-gold">*</span></label>
-                        <input ref={phoneRef} id="reg-phone" type="tel" placeholder="+251 9XX XXX XXX" autoComplete="tel" className={fieldClass} />
+                        <input ref={phoneRef} id="reg-phone" type="tel" placeholder="+251 9XX XXX XXX" autoComplete="tel" required className={fieldClass} />
                       </div>
                     </div>
                     <div>
                       <label htmlFor="reg-age" className="mb-1.5 block text-sm font-medium text-gray-700">Age <span className="text-gold">*</span></label>
-                      <input ref={ageRef} id="reg-age" type="number" min={10} max={99} placeholder="22" className={fieldClass} />
+                      <input ref={ageRef} id="reg-age" type="number" min={10} max={99} placeholder="22" required className={fieldClass} />
                     </div>
                   </div>
                 </section>
@@ -479,7 +472,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                         <span className="text-2xl font-bold text-gold">{price ? formatBirr(price) : "—"}</span>
                       </div>
                       <p className="mt-2 text-[11px] text-white/65">
-                        Pay after registering — we&apos;ll contact you with the payment details.
+                        Continue to Chapa&apos;s secure checkout to complete your payment.
                       </p>
                     </div>
 
@@ -494,10 +487,11 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                       type="button"
                       onClick={handleSubmit}
                       disabled={isSubmitting}
+                      aria-busy={isSubmitting}
                       className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gold px-5 py-3.5 text-base font-bold tracking-wide text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
-                      {isSubmitting ? "Submitting…" : "Complete registration"}
+                      {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
+                      {isSubmitting ? "Redirecting to Chapa…" : "Continue to secure payment"}
                     </button>
                   </div>
                 </div>
@@ -506,60 +500,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         </div>
       </div>
 
-      {/* Confirmation shown once the registration is stored. */}
-      {confirmedRef && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/60 p-4 backdrop-blur-sm">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="registration-confirmed-title"
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
-          >
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-50">
-              <CheckCircle2 size={26} className="text-green-600" />
-            </div>
-            <h3 id="registration-confirmed-title" className="mt-4 text-center text-xl font-bold text-navy">
-              Registration received
-            </h3>
-
-            <div className="mt-4 rounded-xl border border-dashed border-gold bg-[#fffaf1] px-4 py-3 text-center">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">
-                Your registration ID
-              </p>
-              <p className="mt-1 select-all font-mono text-xl font-bold tracking-wide text-navy">
-                {confirmedRef}
-              </p>
-            </div>
-
-            <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
-              <p className="text-[13px] font-semibold text-green-900">Keep this ID safe</p>
-              <p className="mt-1 text-[13px] leading-relaxed text-green-800">
-                Use it to check your registration status at any time. We&apos;ll contact you
-                with the payment details once your registration is confirmed.
-              </p>
-            </div>
-
-            <div className="mt-5 flex flex-col gap-2.5 sm:flex-row-reverse">
-              <button
-                type="button"
-                onClick={() => {
-                  setConfirmedRef(null);
-                  dialogRef.current?.close();
-                }}
-                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gold px-5 py-3.5 text-base font-bold text-navy transition-all duration-200 hover:bg-gold-hover"
-              >
-                Done
-              </button>
-              <a
-                href={`/registration?id=${confirmedRef}`}
-                className="flex-1 rounded-xl border border-navy/15 px-5 py-3.5 text-center text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
-              >
-                View status
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
     </dialog>
   );
 }
