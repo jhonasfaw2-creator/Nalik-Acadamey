@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Search, Filter, ChevronDown, UserPlus, Loader2, Copy, Check } from "lucide-react";
+import { Search, Filter, ChevronDown, UserPlus, Loader2, Copy, Check, RefreshCw } from "lucide-react";
 
 interface Registration {
   id: string;
@@ -77,6 +77,8 @@ export default function AdminRegistrations() {
   const [reassignError, setReassignError] = useState("");
   const [verifying, setVerifying] = useState<string | null>(null);
   const [verifyError, setVerifyError] = useState("");
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileNote, setReconcileNote] = useState("");
 
   // ── Add Student (manual enrollment) state ──
   const [addOpen, setAddOpen] = useState(false);
@@ -200,6 +202,41 @@ export default function AdminRegistrations() {
     }
   };
 
+  // Ask Chapa about every unsettled payment at once. When a customer completes
+  // payment on Chapa's own receipt page without ever being redirected back, and
+  // the webhook is not being delivered, nothing else will ever surface that
+  // student here. This pass asks Chapa directly for all of them.
+  const reconcileAll = async () => {
+    if (reconciling) return;
+    setReconciling(true);
+    setReconcileNote("");
+    setVerifyError("");
+    try {
+      const res = await fetch("/api/admin/registrations/reconcile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setVerifyError(data.error || "Could not reconcile payments with Chapa.");
+      } else {
+        const settled = Number(data.summary?.settled ?? 0) + Number(data.summary?.already_settled ?? 0);
+        const attention = Array.isArray(data.needsAttention) ? data.needsAttention.length : 0;
+        const examined = Number(data.examined ?? 0);
+        setReconcileNote(
+          `Checked ${examined} payment${examined === 1 ? "" : "s"} with Chapa — ${settled} settled` +
+            (attention ? `, ${attention} need${attention === 1 ? "s" : ""} a look.` : ".")
+        );
+        load();
+      }
+    } catch {
+      setVerifyError("Connection error while reconciling payments.");
+    } finally {
+      setReconciling(false);
+    }
+  };
+
   // ── Manual enrollment submit ──
   const selectedSchedule = schedules.find((s) => s.id === form.scheduleId);
   const scheduleDisabled = (s: ScheduleOption) => !s.active || s.isFull;
@@ -262,13 +299,31 @@ export default function AdminRegistrations() {
           <h1 className="text-2xl font-bold text-navy">Registrations</h1>
           <p className="mt-1 text-sm text-gray-500">View, search, filter, and manage all student registrations.</p>
         </div>
-        <button
-          onClick={() => { setAddOpen(true); setCreated(null); setAddError(""); }}
-          className="inline-flex items-center gap-2 rounded-lg bg-gold px-4 py-2.5 text-sm font-semibold text-navy transition-colors hover:bg-gold-hover"
-        >
-          <UserPlus size={15} /> Add Student
-        </button>
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+          <button
+            onClick={reconcileAll}
+            disabled={reconciling}
+            title="Ask Chapa about every unsettled payment and settle the ones that actually completed"
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-navy/15 bg-white px-4 py-2.5 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {reconciling ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+            {reconciling ? "Checking Chapa…" : "Reconcile Payments"}
+          </button>
+          <button
+            onClick={() => { setAddOpen(true); setCreated(null); setAddError(""); }}
+            className="inline-flex items-center gap-2 rounded-lg bg-gold px-4 py-2.5 text-sm font-semibold text-navy transition-colors hover:bg-gold-hover"
+          >
+            <UserPlus size={15} /> Add Student
+          </button>
+        </div>
       </div>
+
+      {reconcileNote && (
+        <div className="mt-4 flex items-center justify-between rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">
+          <span>{reconcileNote}</span>
+          <button onClick={() => setReconcileNote("")} className="rounded-md bg-green-100 px-3 py-1 text-xs font-medium text-green-800 hover:bg-green-200">Dismiss</button>
+        </div>
+      )}
 
       {/* Filters */}
       {error && (

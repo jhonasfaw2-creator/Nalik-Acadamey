@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyPayment } from "@/lib/payments/chapa";
+import { resolveChapaReference } from "@/lib/payments/resolve";
 import { applyPaymentResult } from "@/lib/payments/apply";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ export async function GET() {
       status: true,
       amount: true,
       currency: true,
+      merchantReference: true,
       chapaReference: true,
       application: {
         select: {
@@ -48,14 +50,32 @@ export async function GET() {
       status: "SUCCESS",
       referenceId: payment.application.referenceId,
       merchantReference,
+      chapaReference: payment.chapaReference,
     });
   }
 
-  // Verify with Chapa server-to-server.
-  const verifyRef = payment.chapaReference || merchantReference;
+  // Verify with Chapa server-to-server. The Chapa reference is resolved (and
+  // recovered from the transaction list when missing) because /verify resolves
+  // Chapa references only — the merchant reference in the cookie is an
+  // identifier for *our* database, not for Chapa's.
+  const resolution = await resolveChapaReference({
+    id: payment.id,
+    merchantReference: payment.merchantReference,
+    chapaReference: payment.chapaReference,
+  });
+
+  if (!resolution.reference) {
+    return NextResponse.json({
+      status: "PENDING",
+      reason: resolution.providerUnavailable ? "verify_unavailable" : "awaiting_reference",
+      referenceId: payment.application.referenceId,
+      merchantReference,
+    });
+  }
+
   let verification;
   try {
-    verification = await verifyPayment(verifyRef);
+    verification = await verifyPayment(resolution.reference);
   } catch {
     // Transient — keep polling.
     return NextResponse.json({ status: "PENDING", reason: "verify_unavailable" });
@@ -79,6 +99,8 @@ export async function GET() {
     status: applied.paymentStatus,
     referenceId: payment.application.referenceId,
     merchantReference,
+    chapaReference:
+      verification.chapaReference ?? payment.chapaReference ?? resolution.reference,
     mismatch: applied.mismatch ?? undefined,
   });
 

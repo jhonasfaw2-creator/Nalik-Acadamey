@@ -90,19 +90,41 @@ export async function POST(request: NextRequest) {
 
     let application: { id: string; referenceId: string };
     try {
-      application = await prisma.application.create({
-        data: {
-          referenceId,
-          fullName,
-          email: normalizedEmail,
-          phone,
-          age,
-          courseId,
-          scheduleId,
-          previousExperience: previousExperience || "",
-          motivation: motivation || "",
-          status: "PENDING_PAYMENT",
-        },
+      // Application and its Payment row are created together. The Payment row is
+      // what every later step keys off — the admin list, the receipt, the
+      // webhook, the return page — so it must exist from the moment the
+      // registration does, not only once somebody clicks "pay". Creating it
+      // lazily in the checkout route left registrations with no payment record
+      // at all, which the admin list could only paper over with a guess.
+      application = await prisma.$transaction(async (tx) => {
+        const created = await tx.application.create({
+          data: {
+            referenceId,
+            fullName,
+            email: normalizedEmail,
+            phone,
+            age,
+            courseId,
+            scheduleId,
+            previousExperience: previousExperience || "",
+            motivation: motivation || "",
+            status: "PENDING_PAYMENT",
+          },
+        });
+        // A zero-priced course has nothing to charge, so it gets no Payment row;
+        // an admin confirms those by hand.
+        if (paymentAmount > 0) {
+          await tx.payment.create({
+            data: {
+              applicationId: created.id,
+              amount: paymentAmount,
+              currency: "ETB",
+              merchantReference: referenceId,
+              status: "PENDING",
+            },
+          });
+        }
+        return created;
       });
     } catch (error) {
       // Two concurrent submissions can both pass the findUnique check above;

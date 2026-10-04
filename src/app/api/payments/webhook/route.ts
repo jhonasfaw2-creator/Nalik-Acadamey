@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyPayment } from "@/lib/payments/chapa";
+import { resolveChapaReference } from "@/lib/payments/resolve";
 import { applyPaymentResult } from "@/lib/payments/apply";
 
 export const dynamic = "force-dynamic";
@@ -17,16 +18,22 @@ export const dynamic = "force-dynamic";
 //      authoritative settlement signal.
 //
 // Signature: Chapa signs the raw request body with HMAC-SHA256 using the
-// webhook secret configured in Settings → Webhooks. The digest is sent in
-// the x-chapa-signature header.
+// webhook secret configured in Settings → Webhooks. The digest arrives in the
+// x-chapa-signature header (chapa-signature carries a different digest and is
+// only a last-resort fallback).
 //
-// If CHAPA_WEBHOOK_SECRET is not set (or the Chapa dashboard has no secret
-// configured), we skip signature verification and rely on Chapa's verify API
-// to confirm the payment before settling. Unsigned events are logged clearly
-// so the misconfiguration is visible.
+// This handler FAILS CLOSED. Any request that does not carry a digest we can
+// positively match is rejected, including one whose signature is malformed —
+// otherwise anyone could bypass verification by sending a deliberately
+// misshapen header.
+//
+// If CHAPA_WEBHOOK_SECRET is not set the route cannot verify anything at all,
+// and it says so loudly rather than quietly trusting the internet.
 
 /** Chapa sends a lowercase hex HMAC-SHA256 digest. */
 const SIGNATURE_PATTERN = /^[a-f0-9]{64}$/i;
+
+type SignatureCheck = "valid" | "absent" | "malformed" | "invalid" | "no-secret";
 
 function hmac(secret: string, body: string): string {
   return crypto.createHmac("sha256", secret).update(body).digest("hex");
@@ -42,28 +49,33 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 /**
- * Checks the x-chapa-signature header against the raw body.
+ * Checks the incoming signature header against the raw body.
  * Returns:
- *   "valid"    — signature present and correct
- *   "invalid"  — signature present but wrong
- *   "absent"   — no signature header at all
- *   "no-secret"— CHAPA_WEBHOOK_SECRET not configured on our side
+ *   "valid"      — signature present and correct
+ *   "invalid"    — signature present, well-formed, and wrong
+ *   "malformed"  — signature present but not a 64-char hex digest
+ *   "absent"     — no signature header at all
+ *   "no-secret"  — CHAPA_WEBHOOK_SECRET not configured on our side
  */
 function checkSignature(
   rawBody: string,
   request: NextRequest
-): "valid" | "invalid" | "absent" | "no-secret" {
+): SignatureCheck {
   const secret = process.env.CHAPA_WEBHOOK_SECRET?.trim().replace(/^["']+|["']+$/g, "");
   if (!secret) return "no-secret";
 
+  // `||` so an empty primary header still falls through to the alias.
   const received =
-    request.headers.get("x-chapa-signature") ??
+    request.headers.get("x-chapa-signature") ||
     request.headers.get("chapa-signature");
 
-  if (!received || !SIGNATURE_PATTERN.test(received)) return "absent";
+  if (!received) return "absent";
+  // A present-but-malformed digest is a rejected request, never an anonymous one.
+  if (!SIGNATURE_PATTERN.test(received.trim())) return "malformed";
 
+  const candidate = received.trim();
   const expected = hmac(secret, rawBody);
-  return timingSafeEqual(received, expected) ? "valid" : "invalid";
+  return timingSafeEqual(candidate, expected) ? "valid" : "invalid";
 }
 
 function toText(value: unknown): string | null {
@@ -97,27 +109,20 @@ export async function POST(request: NextRequest) {
       bodyPreview: rawBody.slice(0, 120),
     });
 
-    if (sigResult === "invalid") {
-      // Signature was present but didn't match. Reject — this is either a
-      // misconfigured secret or a forged request.
-      console.warn("[chapa-webhook] Rejected event with invalid signature.", {
-        hint: "Ensure the Chapa dashboard webhook secret matches CHAPA_WEBHOOK_SECRET in Vercel.",
-      });
+    // Fail closed. An unverifiable request is refused whatever the reason: the
+    // signature is wrong, missing, misshapen, or we have no secret to check it
+    // against. Settlement below is only ever reached by a verified delivery.
+    if (sigResult !== "valid") {
+      const hint =
+        sigResult === "no-secret"
+          ? "CHAPA_WEBHOOK_SECRET is not set on this server — set it to the same value as the Chapa dashboard webhook secret."
+          : sigResult === "absent"
+            ? "Chapa sent no signature header — enable signature authentication on the dashboard webhook."
+            : sigResult === "malformed"
+              ? "Signature header is not a 64-character hex digest."
+              : "Ensure the Chapa dashboard webhook secret matches CHAPA_WEBHOOK_SECRET on this server.";
+      console.warn("[chapa-webhook] Rejected unauthenticated event.", { sigResult, hint });
       return NextResponse.json({ error: "Invalid signature." }, { status: 401 });
-    }
-
-    if (sigResult === "no-secret") {
-      // CHAPA_WEBHOOK_SECRET is not set in Vercel env. Log clearly and
-      // continue — we will still verify server-to-server with Chapa before
-      // settling, so this is safe but should be fixed.
-      console.warn("[chapa-webhook] CHAPA_WEBHOOK_SECRET not configured — proceeding without signature verification.");
-    }
-
-    if (sigResult === "absent") {
-      // Secret is configured on our side but Chapa sent no signature. This
-      // means the Chapa dashboard webhook has no secret set. Log and continue
-      // — server-to-server verification still confirms the payment.
-      console.warn("[chapa-webhook] No signature header from Chapa — dashboard webhook secret may not be set.");
     }
 
     // Parse the body.
@@ -148,7 +153,7 @@ export async function POST(request: NextRequest) {
 
     const payment = await prisma.payment.findUnique({
       where: { merchantReference },
-      select: { id: true, status: true, amount: true, currency: true, chapaReference: true },
+      select: { id: true, status: true, amount: true, currency: true, merchantReference: true, chapaReference: true },
     });
 
     if (!payment) {
@@ -159,10 +164,43 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true, ignored: "unknown_reference" });
     }
 
-    // Re-verify server-to-server with Chapa regardless of signature state.
+    // Re-verify server-to-server with Chapa regardless of what the event claims.
     // The webhook is a signal; the verify API is the proof.
     const eventChapaReference = toText(event.chapa_reference);
-    const verifyReference = payment.chapaReference || eventChapaReference || merchantReference;
+
+    // Persist the event's Chapa reference BEFORE verifying. This is the only
+    // other place Chapa's reference ever appears, and if verification fails or
+    // the applier throws we still want it stored — losing it is what made older
+    // payments permanently unsettleable.
+    if (eventChapaReference && !payment.chapaReference) {
+      try {
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { chapaReference: eventChapaReference },
+        });
+        payment.chapaReference = eventChapaReference;
+      } catch (error) {
+        console.error("[chapa-webhook] Could not store chapa_reference from event", {
+          merchantReference,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    const resolution = await resolveChapaReference({
+      id: payment.id,
+      merchantReference: payment.merchantReference,
+      chapaReference: payment.chapaReference,
+    });
+    const verifyReference = resolution.reference ?? eventChapaReference;
+
+    if (!verifyReference) {
+      console.warn("[chapa-webhook] No Chapa reference available to verify", {
+        merchantReference,
+        eventName,
+      });
+      return NextResponse.json({ received: false, retry: true }, { status: 503 });
+    }
 
     let authoritative;
     try {

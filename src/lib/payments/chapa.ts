@@ -9,6 +9,19 @@
 // (GET /v2/payments/<reference>/verify). Redirects, callbacks and webhooks are
 // signals, never proof: only a verified response may settle a payment.
 //
+// Two v2 facts drive the whole design:
+//
+//  1. The hosted-init response contains ONLY `checkout_url`, `created_at` and
+//     `expires_at`. It does NOT echo `chapa_reference` or `merchant_reference`,
+//     even when we sent a merchant_reference.
+//  2. `/v2/payments/{reference}/verify` resolves *Chapa* references only — a
+//     merchant_reference there is a guaranteed 404.
+//
+// So the Chapa reference has to be recovered from the checkout_url path
+// (`.../payment/<CHAPA_REF>`) at initialization time and persisted. Everything
+// downstream — verify, the return page, the admin reconcile button — depends on
+// that one value. Losing it makes a paid payment permanently unsettleable.
+//
 // The secret key never leaves the server. The browser only ever receives the
 // checkout URL, so a hosted checkout needs no public key at all.
 
@@ -158,9 +171,10 @@ export interface InitiatePaymentInput {
 export interface InitiatePaymentResult {
   checkout_url: string;
   /**
-   * Chapa's own payment reference. The v2 hosted-init response does not always
-   * include it — it is normally obtained from verification or a webhook — so
-   * this may be null.
+   * Chapa's own payment reference. v2 never returns it in the init body, so it
+   * is parsed out of the `checkout_url` path (`.../payment/<CHAPA_REF>`).
+   * Without it the payment can never be verified or settled, so this is the
+   * single most important value in the whole flow.
    */
   chapa_reference: string | null;
   merchant_reference: string | null;
@@ -311,16 +325,56 @@ function readNumber(source: Record<string, unknown>, key: string): number | null
 // ── Client ────────────────────────────────────────────────────────────────
 
 /**
+ * Recovers Chapa's payment reference from a hosted checkout URL.
+ *
+ * Chapa v2 hands back `https://checkout.chapa.global/payment/<CHAPA_REF>` (the
+ * docs have also shown the `checkout.chapa.co` host) and nothing else. The last
+ * path segment *is* the reference that `/verify` and `/v2/payments` index on,
+ * so it is parsed out here instead of being discarded.
+ *
+ * Returns null for anything that does not look like a checkout URL, so a future
+ * change in Chapa's URL shape degrades to "no reference" rather than storing
+ * garbage in the database.
+ */
+export function extractChapaReference(checkoutUrl: string): string | null {
+  const trimmed = checkoutUrl?.trim();
+  if (!trimmed) return null;
+
+  // Drop query string and fragment, then any trailing slashes.
+  const withoutQuery = trimmed.split(/[?#]/, 1)[0].replace(/\/+$/, "");
+  const segments = withoutQuery.split("/").filter(Boolean);
+  const last = segments[segments.length - 1];
+  if (!last) return null;
+
+  // Path literals that are never the reference.
+  if (/^(payment|payments?|checkout)$/i.test(last)) return null;
+
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(last).trim();
+  } catch {
+    decoded = last.trim();
+  }
+  if (!decoded || decoded.length > 128) return null;
+  // Chapa references are opaque identifiers — letters, digits and separators.
+  if (!/^[A-Za-z0-9_-]+$/.test(decoded)) return null;
+
+  return decoded;
+}
+
+/**
  * Creates a hosted checkout session.
  *
  * POST /v2/payments/hosted → the browser is redirected to `checkout_url`.
  * Amount is always supplied by the caller from the database, never from the
  * browser.
  *
- * `return_url` overrides the Redirect URL from the Chapa dashboard for this
- * transaction; Chapa appends tx_ref and chapa_reference so the return page
- * can identify the payment. `callback_url` is the server-to-server webhook
- * target for this transaction.
+ * NOTE ON REDIRECTS: v2 does not document `return_url` / `callback_url` for the
+ * hosted endpoint. They are still sent (harmless if ignored, useful if Chapa
+ * honours them), but the integration must never *depend* on them: the
+ * post-checkout redirect is a dashboard-level Redirect URL, and settlement is
+ * carried by the webhook plus server-side verification. That is why every
+ * entry point here can settle a payment with nothing but the reference ID.
  *
  * The payment is settled from server-side verification (the return page polls
  * /api/payments/verify) and from signed webhooks — the redirect itself is
@@ -358,10 +412,68 @@ export async function initiatePayment(
 
   return {
     checkout_url: checkoutUrl,
-    chapa_reference: readString(data, "chapa_reference"),
+    // Prefer an explicit field if Chapa ever starts returning one, then fall
+    // back to the reference embedded in the checkout URL.
+    chapa_reference:
+      readString(data, "chapa_reference") ?? extractChapaReference(checkoutUrl),
     merchant_reference:
       readString(data, "merchant_reference") ?? input.merchantReference,
   };
+}
+
+/** One row of `GET /v2/payments`. */
+export interface ChapaTransactionSummary {
+  chapa_reference: string | null;
+  merchant_reference: string | null;
+  status: string | null;
+  amount: number | null;
+  currency: string | null;
+  payment_method: string | null;
+  service_fee: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/**
+ * Looks transactions up through the list endpoint — the only documented way to
+ * find a transaction when its Chapa reference was never stored (the shape every
+ * payment created before the reference was captured from `checkout_url` has).
+ *
+ * This is the repair path: it turns an unsettleable PENDING row back into one
+ * that `/verify` can resolve.
+ */
+export async function findTransactions(
+  reference: string,
+  options: { status?: string; perPage?: number } = {}
+): Promise<ChapaTransactionSummary[]> {
+  const query = new URLSearchParams({ reference: reference.trim() });
+  if (options.status) query.set("status", options.status);
+  query.set("per_page", String(options.perPage ?? 20));
+
+  const data = await chapaFetch<{
+    items?: unknown;
+    data?: { items?: unknown };
+  }>(`/payments?${query.toString()}`, { method: "GET" });
+
+  const items = Array.isArray(data?.items)
+    ? data.items
+    : Array.isArray(data?.data?.items)
+      ? data.data.items
+      : [];
+
+  return items
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    .map((item) => ({
+      chapa_reference: readString(item, "chapa_reference"),
+      merchant_reference: readString(item, "merchant_reference"),
+      status: readString(item, "status"),
+      amount: readNumber(item, "amount"),
+      currency: readString(item, "currency"),
+      payment_method: readString(item, "payment_method"),
+      service_fee: readNumber(item, "service_fee"),
+      created_at: readString(item, "created_at"),
+      updated_at: readString(item, "updated_at"),
+    }));
 }
 
 /**

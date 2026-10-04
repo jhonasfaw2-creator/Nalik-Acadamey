@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyPayment, ChapaApiError, ChapaConfigError } from "@/lib/payments/chapa";
+import { resolveChapaReference } from "@/lib/payments/resolve";
 import { applyPaymentResult } from "@/lib/payments/apply";
 
 export const dynamic = "force-dynamic";
@@ -9,10 +10,13 @@ export const dynamic = "force-dynamic";
 // against Chapa on demand.
 //
 // Settlement normally happens through the browser return page or a webhook,
-// both of which can be missed (student closed the tab, redirect landed on the
-// wrong path, webhook not yet delivered). This endpoint lets an admin ask
+// both of which can be missed (student closed the tab, the hosted checkout did
+// not redirect back, the webhook was rejected). This endpoint lets an admin ask
 // Chapa directly, so a payment that really succeeded can be settled without
 // manually marking the student PAID.
+//
+// A missing Chapa reference is recovered from the transaction list first, so
+// payments created before that reference was captured can still be settled.
 //
 // It is authenticated by the admin middleware (same as every other /api/admin
 // route) and uses the exact same idempotent applier as the public verify route
@@ -63,15 +67,23 @@ export async function POST(
       });
     }
 
-    const reference = payment.chapaReference || payment.merchantReference;
-    if (!reference) {
-      return NextResponse.json(
-        { error: "This registration has no payment reference to verify with Chapa." },
-        { status: 400 }
-      );
+    // /verify resolves Chapa references only, so recover the reference from the
+    // transaction list when it was never stored rather than handing Chapa our
+    // merchant reference and getting a guaranteed 404 back.
+    const resolution = await resolveChapaReference({
+      id: payment.id,
+      merchantReference: payment.merchantReference,
+      chapaReference: payment.chapaReference,
+    });
+
+    if (!resolution.reference) {
+      const message = resolution.providerUnavailable
+        ? "Chapa could not be reached. Try again in a moment."
+        : "Chapa has no transaction for this registration yet. If the student just paid, ask them to retry shortly.";
+      return NextResponse.json({ error: message }, { status: resolution.providerUnavailable ? 502 : 404 });
     }
 
-    const verification = await verifyPayment(reference);
+    const verification = await verifyPayment(resolution.reference);
 
     const applied = await applyPaymentResult(payment.id, {
       status: verification.status,

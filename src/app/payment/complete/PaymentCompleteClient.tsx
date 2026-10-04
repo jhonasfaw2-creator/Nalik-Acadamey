@@ -41,7 +41,6 @@ const MAX_ATTEMPTS = 6;
  */
 const WATCH_INTERVAL_MS = 10_000;
 const WATCH_TIMEOUT_MS = 5 * 60_000;
-
 /** Fields the receipt needs that RegistrationSummary does not carry. */
 interface ReceiptRefs {
   merchantReference: string | null;
@@ -149,11 +148,11 @@ export default function PaymentCompleteClient() {
   );
 
   useEffect(() => {
-    if (!effectiveReferenceId && !merchantReference && !chapaReference) {
-      setPhase("invalid");
-      return;
-    }
-
+    // No identifier in the URL and none in sessionStorage is NOT a dead end:
+    // initialization also set the httpOnly na_pending_ref cookie, which only
+    // the server can read. Fall through to /api/payments/status and let it
+    // decide — only an explicit "no cookie" answer means the link is
+    // genuinely incomplete.
     const verifyQuery = new URLSearchParams();
     if (effectiveReferenceId) verifyQuery.set("referenceId", effectiveReferenceId);
     if (merchantReference) verifyQuery.set("merchantReference", merchantReference);
@@ -244,6 +243,17 @@ export default function PaymentCompleteClient() {
         if (status === "FAILED" || status === "CANCELLED" || status === "INCOMPLETE") {
           finish("failed", { ...reg, ...statusReg });
           return;
+        }
+
+        // The cookie-based status endpoint answers UNKNOWN when it has nothing
+        // to identify. That means the return link really is incomplete — stop
+        // and say so rather than polling forever.
+        if (!hasParams && status === "UNKNOWN") {
+          const reason = typeof data?.reason === "string" ? data.reason : "";
+          if (reason === "no_cookie" || reason === "not_found") {
+            finish("invalid");
+            return;
+          }
         }
 
         scheduleNext();
@@ -462,6 +472,28 @@ export default function PaymentCompleteClient() {
                 className="mt-5 inline-block rounded-lg bg-gold px-6 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover"
               >
                 Look up my registration
+              </a>
+            </div>
+          )}
+
+          {/* Chapa's hosted checkout does not always redirect the customer back
+              to us — it can leave them on its own receipt page with no way to
+              return. This is the one link that always works, whatever happened
+              upstream. */}
+          {phase !== "success" && (
+            <div className="mt-8 rounded-xl border border-gray-200 bg-white px-4 py-4 text-center">
+              <p className="text-sm font-medium text-navy">
+                Finished on Chapa but not redirected back?
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                Enter your registration ID and we&apos;ll ask Chapa directly whether the payment
+                went through.
+              </p>
+              <a
+                href="/registration"
+                className="mt-3 inline-block rounded-lg border border-navy/15 bg-white px-5 py-2.5 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
+              >
+                Check my payment status
               </a>
             </div>
           )}
