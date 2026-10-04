@@ -128,20 +128,40 @@ export async function POST(request: NextRequest) {
     }
 
     // Build Chapa initialization payload
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "https://nalik-acadamey.vercel.app";
+    const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+    if (!configuredAppUrl) {
+      throw new ChapaConfigError("NEXT_PUBLIC_APP_URL is not configured.");
+    }
+    let appUrl: URL;
+    try {
+      appUrl = new URL(configuredAppUrl);
+    } catch {
+      throw new ChapaConfigError("NEXT_PUBLIC_APP_URL must be an absolute URL.");
+    }
+    if (appUrl.protocol !== "https:") {
+      throw new ChapaConfigError("NEXT_PUBLIC_APP_URL must use HTTPS.");
+    }
+    appUrl.pathname = appUrl.pathname.replace(/\/+$/, "");
+    appUrl.search = "";
+    appUrl.hash = "";
     const [firstName, ...lastNameParts] = fullName.trim().split(/\s+/);
     const lastName = lastNameParts.join(" ") || "Student";
+    const returnUrl = new URL(`${appUrl.pathname}/checkout/return`, appUrl);
+    returnUrl.searchParams.set("tx_ref", txRef);
+    const callbackUrl = new URL(`${appUrl.pathname}/api/webhooks/chapa`, appUrl);
 
     const chapaResult = await initiatePayment({
       amount: paymentAmount,
       currency: "ETB",
-      email: normalizedEmail,
-      first_name: firstName,
-      last_name: lastName,
-      phone_number: phone.trim(),
-      tx_ref: txRef,
-      return_url: `${appUrl}/checkout/return?tx_ref=${txRef}`,
-      callback_url: `${appUrl}/api/webhooks/chapa`,
+      merchant_reference: txRef,
+      customer: {
+        first_name: firstName,
+        last_name: lastName,
+        email: normalizedEmail,
+        phone_number: phone.trim(),
+      },
+      return_url: returnUrl.toString(),
+      callback_url: callbackUrl.toString(),
       customization: {
         title: course.title,
         description: `Nalik Academy - ${course.title}`,

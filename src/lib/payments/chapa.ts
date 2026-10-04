@@ -101,11 +101,13 @@ async function chapaFetch<T>(
 export interface InitiatePaymentInput {
   amount: number;
   currency?: typeof DEFAULT_CURRENCY;
-  email: string;
-  first_name: string;
-  last_name: string;
-  phone_number: string;
-  tx_ref: string;
+  merchant_reference: string;
+  customer: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone_number: string;
+  };
   return_url: string;
   callback_url: string;
   customization?: {
@@ -127,19 +129,19 @@ export async function initiatePayment(
   if (!Number.isFinite(input.amount) || input.amount <= 0) {
     throw new ChapaConfigError("Chapa amount must be a positive number.");
   }
-  if (!input.tx_ref?.trim()) {
-    throw new ChapaConfigError("Chapa tx_ref is required.");
+  if (!input.merchant_reference?.trim()) {
+    throw new ChapaConfigError("Chapa merchant_reference is required.");
   }
-  if (!input.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) {
+  if (!input.customer.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.customer.email)) {
     throw new ChapaConfigError("Valid email is required.");
   }
-  if (!input.first_name?.trim()) {
+  if (!input.customer.first_name?.trim()) {
     throw new ChapaConfigError("First name is required.");
   }
-  if (!input.last_name?.trim()) {
+  if (!input.customer.last_name?.trim()) {
     throw new ChapaConfigError("Last name is required.");
   }
-  if (!input.phone_number?.trim()) {
+  if (!input.customer.phone_number?.trim()) {
     throw new ChapaConfigError("Phone number is required.");
   }
   if (!input.return_url?.trim()) {
@@ -152,11 +154,8 @@ export async function initiatePayment(
   const body = {
     amount: input.amount,
     currency: input.currency ?? DEFAULT_CURRENCY,
-    email: input.email,
-    first_name: input.first_name,
-    last_name: input.last_name,
-    phone_number: input.phone_number,
-    tx_ref: input.tx_ref,
+    merchant_reference: input.merchant_reference,
+    customer: input.customer,
     return_url: input.return_url,
     callback_url: input.callback_url,
     ...(input.customization ? { customization: input.customization } : {}),
@@ -184,7 +183,7 @@ export interface VerifyPaymentResult {
   status: string;
   amount: number | null;
   currency: string | null;
-  tx_ref: string | null;
+  merchant_reference: string | null;
   chapa_reference: string | null;
   payment_method: string | null;
   service_fee: number | null;
@@ -193,13 +192,13 @@ export interface VerifyPaymentResult {
   raw: unknown;
 }
 
-export async function verifyPayment(tx_ref: string): Promise<VerifyPaymentResult> {
-  if (!tx_ref?.trim()) {
-    throw new ChapaConfigError("A tx_ref is required to verify.");
+export async function verifyPayment(merchantReference: string): Promise<VerifyPaymentResult> {
+  if (!merchantReference?.trim()) {
+    throw new ChapaConfigError("A merchant_reference is required to verify.");
   }
 
   const data = await chapaFetch<Record<string, unknown>>(
-    `/payments/${encodeURIComponent(tx_ref.trim())}/verify`,
+    `/payments/${encodeURIComponent(merchantReference.trim())}/verify`,
     { method: "GET" }
   );
 
@@ -207,11 +206,11 @@ export async function verifyPayment(tx_ref: string): Promise<VerifyPaymentResult
     status: typeof data.status === "string" ? data.status : "PENDING",
     amount: typeof data.amount === "number" ? data.amount : typeof data.amount === "string" ? Number(data.amount) : null,
     currency: typeof data.currency === "string" ? data.currency : null,
-    tx_ref:
-      typeof data.tx_ref === "string"
-        ? data.tx_ref
-        : typeof data.merchant_reference === "string"
-          ? data.merchant_reference
+    merchant_reference:
+      typeof data.merchant_reference === "string"
+        ? data.merchant_reference
+        : typeof data.tx_ref === "string"
+          ? data.tx_ref
           : null,
     chapa_reference: typeof data.chapa_reference === "string" ? data.chapa_reference : null,
     payment_method: typeof data.payment_method === "string" ? data.payment_method : null,

@@ -47,9 +47,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Payment transaction not found." }, { status: 404 });
     }
 
-    const verified = await verifyPayment(txRef);
-    if (verified.tx_ref !== txRef) {
-      console.error("[payments/verify] Chapa reference mismatch", { txRef, verifiedTxRef: verified.tx_ref });
+    const verified = await verifyPayment(transaction.txRef);
+    if (verified.merchant_reference !== txRef) {
+      console.error("[payments/verify] Chapa reference mismatch", {
+        txRef,
+        verifiedMerchantReference: verified.merchant_reference,
+      });
       return NextResponse.json({ error: "Payment reference could not be confirmed." }, { status: 409 });
     }
 
