@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         orderBy: { createdAt: "desc" },
       });
 
-      if (pendingTx) {
+      if (pendingTx && pendingTx.amount === paymentAmount && pendingTx.currency === "ETB") {
         txRef = pendingTx.txRef;
       } else {
         txRef = `${existing.referenceId}-retry-${crypto.randomBytes(8).toString("hex")}`;

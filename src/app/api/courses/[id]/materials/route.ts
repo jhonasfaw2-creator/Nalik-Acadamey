@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkAndIncrement } from "@/lib/rateLimit";
+import { verifyDownloadToken } from "@/lib/downloadToken";
 
 export const dynamic = "force-dynamic";
 
@@ -19,20 +20,17 @@ export async function GET(
 
   try {
     const searchParams = request.nextUrl.searchParams;
-    const registrationId = searchParams.get("registrationId")?.trim().toUpperCase();
+    const token = searchParams.get("token")?.trim() ?? "";
+    const registrationId = token ? verifyDownloadToken(token) : null;
 
     if (!registrationId) {
       return NextResponse.json(
-        { error: "Registration ID is required to access course materials." },
-        { status: 400 }
+        { error: "A valid download entitlement is required." },
+        { status: 403 }
       );
     }
 
-    if (!/^NA-\d{4}-[A-Z2-9]{6}$/.test(registrationId)) {
-      return NextResponse.json({ error: "Invalid registration ID" }, { status: 404 });
-    }
-
-    const application = await prisma.application.findUnique({
+    const registration = await prisma.registration.findUnique({
       where: { referenceId: registrationId },
       select: {
         courseId: true,
@@ -40,11 +38,11 @@ export async function GET(
       },
     });
 
-    if (!application) {
+    if (!registration) {
       return NextResponse.json({ error: "Registration not found" }, { status: 404 });
     }
 
-    if (application.courseId !== courseId) {
+    if (registration.courseId !== courseId) {
       return NextResponse.json(
         { error: "This registration is not for the requested course." },
         { status: 403 }
@@ -52,7 +50,7 @@ export async function GET(
     }
 
     const isConfirmed =
-      application.status === "PAID" || application.status === "CONFIRMED";
+      registration.status === "PAID" || registration.status === "CONFIRMED";
 
     if (!isConfirmed) {
       return NextResponse.json(

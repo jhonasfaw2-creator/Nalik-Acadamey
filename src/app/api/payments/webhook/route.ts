@@ -60,32 +60,43 @@ async function applyPaymentResult(
   verification: VerificationResult,
   registrationId: string
 ): Promise<{ paymentStatus: string; changed: boolean }> {
-  const status = typeof verification.status === "string" ? verification.status.toUpperCase() : "PENDING";
+  const verifiedStatus = typeof verification.status === "string" ? verification.status.toUpperCase() : "PENDING";
+  const status = verifiedStatus === "PAID" ? "SUCCESS" : verifiedStatus;
   const amount = verification.amount;
   const currency = verification.currency;
   const chapaReference = verification.chapa_reference;
   const paymentMethod = verification.payment_method;
   const serviceFee = verification.service_fee;
-  const paidAt = verification.created_at ? new Date(verification.created_at) : new Date();
+  const verifiedPaidAt = verification.updated_at || verification.created_at
+    ? new Date(verification.updated_at ?? verification.created_at!)
+    : null;
+  const paidAt = verifiedPaidAt && !Number.isNaN(verifiedPaidAt.getTime())
+    ? verifiedPaidAt
+    : new Date();
 
   // Check amount matches what we expect
   const existingTx = await tx.transaction.findUnique({
     where: { id: transactionId },
-    select: { amount: true, currency: true, status: true },
+    select: { amount: true, currency: true, status: true, txRef: true },
   });
 
   if (!existingTx) {
     throw new Error("Transaction not found");
   }
+  if (verification.tx_ref !== existingTx.txRef) {
+    throw new Error(`Verified payment reference mismatch for transaction ${transactionId}`);
+  }
 
   if (status === "SUCCESS") {
-    if (amount != null && Math.round(amount) !== existingTx.amount) {
-      console.error("[webhook] Amount mismatch", { expected: existingTx.amount, received: amount });
-      // Still update status but log mismatch
+    if (amount == null || amount !== existingTx.amount) {
+      throw new Error(`Verified payment amount mismatch for transaction ${transactionId}`);
     }
-    if (currency && currency.toUpperCase() !== existingTx.currency.toUpperCase()) {
-      console.error("[webhook] Currency mismatch", { expected: existingTx.currency, received: currency });
+    if (!currency || currency.toUpperCase() !== existingTx.currency.toUpperCase()) {
+      throw new Error(`Verified payment currency mismatch for transaction ${transactionId}`);
     }
+  }
+  if (existingTx.status === "SUCCESS" && status !== "SUCCESS") {
+    return { paymentStatus: "SUCCESS", changed: false };
   }
 
   const updateData: {
@@ -98,7 +109,7 @@ async function applyPaymentResult(
 
   if (chapaReference) updateData.chapaReference = chapaReference;
   if (paymentMethod) updateData.paymentMethod = paymentMethod;
-  if (serviceFee != null) updateData.serviceFee = serviceFee;
+  if (serviceFee != null && Number.isFinite(serviceFee)) updateData.serviceFee = Math.round(serviceFee);
   if (status === "SUCCESS" || status === "FAILED" || status === "CANCELLED") {
     updateData.paidAt = paidAt;
   }

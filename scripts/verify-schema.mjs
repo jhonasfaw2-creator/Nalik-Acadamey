@@ -30,6 +30,12 @@ async function verifySchema() {
     "Transaction.chapaReference",
     "Transaction.status",
     "Transaction.createdAt",
+    "CourseMaterial.id",
+    "CourseMaterial.courseId",
+    "CourseMaterial.title",
+    "CourseMaterial.fileUrl",
+    "CourseMaterial.fileType",
+    "CourseMaterial.sortOrder",
   ];
 
   const missingColumns = requiredColumns.filter((column) => !availableColumns.has(column));

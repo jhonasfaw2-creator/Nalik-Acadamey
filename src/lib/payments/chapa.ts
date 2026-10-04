@@ -210,7 +210,12 @@ export async function verifyPayment(tx_ref: string): Promise<VerifyPaymentResult
     status: typeof data.status === "string" ? data.status : "PENDING",
     amount: typeof data.amount === "number" ? data.amount : typeof data.amount === "string" ? Number(data.amount) : null,
     currency: typeof data.currency === "string" ? data.currency : null,
-    tx_ref: typeof data.tx_ref === "string" ? data.tx_ref : null,
+    tx_ref:
+      typeof data.tx_ref === "string"
+        ? data.tx_ref
+        : typeof data.merchant_reference === "string"
+          ? data.merchant_reference
+          : null,
     chapa_reference: typeof data.chapa_reference === "string" ? data.chapa_reference : null,
     payment_method: typeof data.payment_method === "string" ? data.payment_method : null,
     service_fee: typeof data.service_fee === "number" ? data.service_fee : typeof data.service_fee === "string" ? Number(data.service_fee) : null,

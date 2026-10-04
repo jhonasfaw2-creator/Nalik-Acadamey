@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkAndIncrement } from "@/lib/rateLimit";
 import { buildReceiptPdf } from "@/lib/receipt";
+import { verifyDownloadToken } from "@/lib/downloadToken";
 
 export const dynamic = "force-dynamic";
 
 // GET /api/registrations/receipt?id=NA-2026-XXXXXX — downloadable PDF receipt.
 //
-// Same security model as the public lookup route: the unguessable reference ID
-// is the capability, rate-limited per IP, and the payload contains only
-// enrollment/receipt data (no email, phone, age, or internal identifiers).
+// Downloads accept either a signed entitlement token or the legacy registration
+// reference. The request is rate-limited and the PDF is generated server-side.
 // The PDF is generated from the database server-side so the browser cannot
 // influence the contents.
 //
@@ -22,15 +22,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  const id = (request.nextUrl.searchParams.get("id") || "").trim().toUpperCase();
-  if (!/^NA-\d{4}-[A-Z2-9]{6}$/.test(id)) {
-    return NextResponse.json({ error: "Invalid registration ID" }, { status: 404 });
+  const token = request.nextUrl.searchParams.get("token")?.trim() ?? "";
+  const id = token
+    ? verifyDownloadToken(token)
+    : (request.nextUrl.searchParams.get("id") || "").trim().toUpperCase();
+  if (!id || !/^NA-\d{4}-[A-Z2-9]{6}$/.test(id)) {
+    return NextResponse.json({ error: "Invalid registration ID or download token" }, { status: 404 });
   }
 
   try {
-    const application = await prisma.application.findUnique({
+    const registration = await prisma.registration.findUnique({
       where: { referenceId: id },
       select: {
+        id: true,
         referenceId: true,
         fullName: true,
         status: true,
@@ -49,12 +53,12 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    if (!application) {
+    if (!registration) {
       return NextResponse.json({ error: "Registration not found" }, { status: 404 });
     }
 
     const paid =
-      application.status === "PAID" || application.status === "CONFIRMED";
+      registration.status === "PAID" || registration.status === "CONFIRMED";
 
     if (!paid) {
       return NextResponse.json(
@@ -63,32 +67,39 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const course = application.course;
-    const amount = course ? course.discountPrice ?? course.price : null;
+    const [course, successfulTransaction] = await Promise.all([
+      registration.course,
+      prisma.transaction.findFirst({
+        where: { registrationId: registration.id, status: "SUCCESS" },
+        orderBy: { paidAt: "desc" },
+        select: { amount: true, currency: true, txRef: true, chapaReference: true },
+      }),
+    ]);
+    const amount = successfulTransaction?.amount ?? (course ? course.discountPrice ?? course.price : null);
 
     const pdf = await buildReceiptPdf({
-      referenceId: application.referenceId,
-      fullName: application.fullName,
+      referenceId: registration.referenceId,
+      fullName: registration.fullName,
       courseTitle: course?.title ?? null,
-      scheduleDays: application.schedule?.days ?? null,
-      scheduleGroup: application.schedule?.group ?? null,
-      scheduleSession: application.schedule?.session ?? null,
-      startTime: application.schedule?.startTime ?? null,
-      endTime: application.schedule?.endTime ?? null,
-      startDate: application.schedule?.startDate
-        ? application.schedule.startDate.toISOString()
+      scheduleDays: registration.schedule?.days ?? null,
+      scheduleGroup: registration.schedule?.group ?? null,
+      scheduleSession: registration.schedule?.session ?? null,
+      startTime: registration.schedule?.startTime ?? null,
+      endTime: registration.schedule?.endTime ?? null,
+      startDate: registration.schedule?.startDate
+        ? registration.schedule.startDate.toISOString()
         : null,
       amount,
-      currency: "ETB",
+      currency: successfulTransaction?.currency ?? "ETB",
       paymentStatus: "SUCCESS",
-      paidAt: application.paidAt?.toISOString() ?? null,
+      paidAt: registration.paidAt?.toISOString() ?? null,
     });
 
     return new NextResponse(Buffer.from(pdf), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="nalik-receipt-${application.referenceId}.pdf"`,
+        "Content-Disposition": `attachment; filename="nalik-receipt-${registration.referenceId}.pdf"`,
         "Cache-Control": "no-store",
       },
     });

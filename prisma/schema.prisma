@@ -39,6 +39,7 @@ model Course {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   registrations   Registration[]
+  materials       CourseMaterial[]
 
   @@index([active])
 }
@@ -62,6 +63,21 @@ model Schedule {
 
   @@unique([group, session])
   @@index([active])
+}
+
+// ── Course materials (downloadable learning resources) ─────
+model CourseMaterial {
+  id        String   @id @default(cuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title     String
+  fileUrl   String
+  fileType  String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseId, sortOrder])
 }
 
 // ── Registrations (student applications) ──────────────
