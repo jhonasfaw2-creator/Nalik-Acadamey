@@ -37,9 +37,6 @@ function getSecretKey(): string {
   if (!key) {
     throw new ChapaConfigError("CHAPA_SECRET_KEY is not configured. Add it to the server environment.");
   }
-  if (!/^CHAPA_(TEST|LIVE)_/.test(key)) {
-    throw new ChapaConfigError("CHAPA_SECRET_KEY has an unrecognised format. Expected CHAPA_TEST_... or CHAPA_LIVE_...");
-  }
   return key;
 }
 

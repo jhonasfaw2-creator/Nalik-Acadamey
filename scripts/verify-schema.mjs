@@ -9,7 +9,7 @@ async function verifySchema() {
     SELECT table_name, column_name
     FROM information_schema.columns
     WHERE table_schema = current_schema()
-      AND table_name IN ('Registration', 'Transaction')
+      AND table_name IN ('Registration', 'Transaction', 'CourseMaterial')
   `;
 
   const availableColumns = new Set(
