@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Search, Filter, ChevronDown, UserPlus, Loader2, Copy, Check, RefreshCw } from "lucide-react";
+import { Search, Filter, ChevronDown, UserPlus, Loader2, Copy, Check } from "lucide-react";
 
 interface Registration {
   id: string;
@@ -75,10 +75,6 @@ export default function AdminRegistrations() {
   const [schedules, setSchedules] = useState<ScheduleOption[]>([]);
   const [reassigning, setReassigning] = useState<string | null>(null);
   const [reassignError, setReassignError] = useState("");
-  const [verifying, setVerifying] = useState<string | null>(null);
-  const [verifyError, setVerifyError] = useState("");
-  const [reconciling, setReconciling] = useState(false);
-  const [reconcileNote, setReconcileNote] = useState("");
 
   // ── Add Student (manual enrollment) state ──
   const [addOpen, setAddOpen] = useState(false);
@@ -181,62 +177,6 @@ export default function AdminRegistrations() {
     }
   };
 
-  // Ask Chapa directly whether a pending payment actually went through, and
-  // settle it if so. This rescues payments the browser redirect or webhook
-  // never reported.
-  const verifyPayment = async (id: string) => {
-    setVerifying(id);
-    setVerifyError("");
-    try {
-      const res = await fetch(`/api/admin/registrations/${id}/verify`, { method: "POST" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setVerifyError(data.error || "Could not verify this payment with Chapa.");
-      } else {
-        load();
-      }
-    } catch {
-      setVerifyError("Connection error while verifying the payment.");
-    } finally {
-      setVerifying(null);
-    }
-  };
-
-  // Ask Chapa about every unsettled payment at once. When a customer completes
-  // payment on Chapa's own receipt page without ever being redirected back, and
-  // the webhook is not being delivered, nothing else will ever surface that
-  // student here. This pass asks Chapa directly for all of them.
-  const reconcileAll = async () => {
-    if (reconciling) return;
-    setReconciling(true);
-    setReconcileNote("");
-    setVerifyError("");
-    try {
-      const res = await fetch("/api/admin/registrations/reconcile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setVerifyError(data.error || "Could not reconcile payments with Chapa.");
-      } else {
-        const settled = Number(data.summary?.settled ?? 0) + Number(data.summary?.already_settled ?? 0);
-        const attention = Array.isArray(data.needsAttention) ? data.needsAttention.length : 0;
-        const examined = Number(data.examined ?? 0);
-        setReconcileNote(
-          `Checked ${examined} payment${examined === 1 ? "" : "s"} with Chapa — ${settled} settled` +
-            (attention ? `, ${attention} need${attention === 1 ? "s" : ""} a look.` : ".")
-        );
-        load();
-      }
-    } catch {
-      setVerifyError("Connection error while reconciling payments.");
-    } finally {
-      setReconciling(false);
-    }
-  };
-
   // ── Manual enrollment submit ──
   const selectedSchedule = schedules.find((s) => s.id === form.scheduleId);
   const scheduleDisabled = (s: ScheduleOption) => !s.active || s.isFull;
@@ -301,15 +241,6 @@ export default function AdminRegistrations() {
         </div>
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
           <button
-            onClick={reconcileAll}
-            disabled={reconciling}
-            title="Ask Chapa about every unsettled payment and settle the ones that actually completed"
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-navy/15 bg-white px-4 py-2.5 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {reconciling ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-            {reconciling ? "Checking Chapa…" : "Reconcile Payments"}
-          </button>
-          <button
             onClick={() => { setAddOpen(true); setCreated(null); setAddError(""); }}
             className="inline-flex items-center gap-2 rounded-lg bg-gold px-4 py-2.5 text-sm font-semibold text-navy transition-colors hover:bg-gold-hover"
           >
@@ -318,25 +249,11 @@ export default function AdminRegistrations() {
         </div>
       </div>
 
-      {reconcileNote && (
-        <div className="mt-4 flex items-center justify-between rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">
-          <span>{reconcileNote}</span>
-          <button onClick={() => setReconcileNote("")} className="rounded-md bg-green-100 px-3 py-1 text-xs font-medium text-green-800 hover:bg-green-200">Dismiss</button>
-        </div>
-      )}
-
       {/* Filters */}
       {error && (
         <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 flex items-center justify-between">
           <span>{error}</span>
           <button onClick={load} className="rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200">Retry</button>
-        </div>
-      )}
-
-      {verifyError && (
-        <div className="mt-4 flex items-center justify-between rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-700">
-          <span>{verifyError}</span>
-          <button onClick={() => setVerifyError("")} className="rounded-md bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-200">Dismiss</button>
         </div>
       )}
 
@@ -436,19 +353,8 @@ export default function AdminRegistrations() {
                         )}
                         <div className="mt-1 flex items-center gap-1.5">
                           <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${PAYMENT_COLORS[reg.payment.status] || ""}`}>
-                            {reg.payment.status}
+                            {reg.payment.status === "SUCCESS" ? "PAID" : reg.payment.status}
                           </span>
-                          {reg.payment.status === "PENDING" && (reg.payment.txRef || reg.payment.chapaReference) && (
-                            <button
-                              type="button"
-                              onClick={() => verifyPayment(reg.id)}
-                              disabled={verifying === reg.id}
-                              title="Ask Chapa whether this payment succeeded"
-                              className="rounded-md border border-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-navy transition-colors hover:bg-gray-50 disabled:opacity-50"
-                            >
-                              {verifying === reg.id ? "Checking…" : "Verify"}
-                            </button>
-                          )}
                         </div>
                       </div>
                     ) : (

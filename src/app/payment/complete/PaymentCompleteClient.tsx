@@ -1,50 +1,39 @@
 "use client";
 
-// ── Payment confirmation (/payment/complete) ──────────────────────────
-// Chapa redirects the student back here after hosted checkout. The redirect is
-// only a signal, so this page asks the server — which verifies with Chapa — and
-// shows a receipt once the payment is confirmed.
-//
-// Polling is a convenience, not the source of truth: the webhook confirms the
-// payment independently. That is why running out of attempts ends in "still
-// being processed" rather than "failed", and why that state promises the
-// status will update on its own.
-
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   CheckCircle2,
   XCircle,
-  Clock3,
   Loader2,
   AlertCircle,
   Download,
   LayoutDashboard,
+  BookOpen,
+  FileText,
 } from "lucide-react";
 import RegistrationDetails from "@/components/RegistrationDetails";
 import CheckoutButton from "@/components/checkout-button";
 import {
   formatDate,
-  formatTime,
   type RegistrationSummary,
 } from "@/lib/registration";
 
-type Phase = "invalid" | "checking" | "success" | "failed" | "pending";
+type Phase = "verifying" | "success" | "failed" | "invalid";
 
 const POLL_INTERVAL_MS = 2_000;
-const MAX_ATTEMPTS = 6;
+const MAX_ATTEMPTS = 8;
 
-/**
- * After the burst, the page keeps checking slowly in the background so the
- * "it will update automatically" promise is real: a payment the webhook
- * confirms a minute later flips this page to the receipt on its own.
- */
-const WATCH_INTERVAL_MS = 10_000;
-const WATCH_TIMEOUT_MS = 5 * 60_000;
-/** Fields the receipt needs that RegistrationSummary does not carry. */
 interface ReceiptRefs {
   merchantReference: string | null;
   chapaReference: string | null;
+}
+
+interface CourseMaterial {
+  id: string;
+  title: string;
+  fileUrl: string;
+  fileType: string;
 }
 
 function formatBirr(amount: number | null, currency: string | null): string {
@@ -53,7 +42,6 @@ function formatBirr(amount: number | null, currency: string | null): string {
   return `${amount.toLocaleString("en-ET")} ${code}`;
 }
 
-/** "2 Oct 2026, 5:04 PM" for the paid-at stamp. */
 function formatStamp(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -66,14 +54,8 @@ function formatStamp(iso: string | null): string {
 
 export default function PaymentCompleteClient() {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
-  // Chapa v2 redirects the customer to the Redirect URL configured in the
-  // dashboard (here /payment/return, which renders this page) and appends the
-  // transaction parameters to it. The reference may arrive as our merchant
-  // reference (merchant_reference / tx_ref / trxref) or Chapa's own reference
-  // (chapa_reference / reference / ref_id). Accept any of them — the value is
-  // only used to IDENTIFY the payment; the status always comes from
-  // server-side verification, never from these parameters.
   const firstParam = (...names: string[]): string => {
     for (const name of names) {
       const value = searchParams.get(name)?.trim();
@@ -86,27 +68,21 @@ export default function PaymentCompleteClient() {
   const merchantReference = firstParam("tx_ref", "trxref", "trx_ref", "merchant_reference");
   const chapaReference = firstParam("chapa_reference", "reference", "ref_id");
 
-  // When the Chapa dashboard return URL is a plain URL with no query params
-  // (e.g. https://nalik-acadamey.vercel.app/payment/complete), none of the
-  // above will be set. Read the reference we stored in sessionStorage just
-  // before navigating to Chapa's checkout page.
   const storedRef = (() => {
     try { return sessionStorage.getItem("chapa_pending_ref") ?? ""; }
     catch { return ""; }
   })();
 
   const effectiveReferenceId = referenceId || (storedRef && !merchantReference && !chapaReference ? storedRef : "");
-  /** Identifier to display and retry with before verification returns one. */
   const displayReference = effectiveReferenceId || merchantReference.toUpperCase() || storedRef;
 
-  const [phase, setPhase] = useState<Phase>("checking");
+  const [phase, setPhase] = useState<Phase>("verifying");
   const [registration, setRegistration] = useState<RegistrationSummary | null>(null);
   const [refs, setRefs] = useState<ReceiptRefs>({ merchantReference: null, chapaReference: null });
   const [detailError, setDetailError] = useState("");
   const [attempt, setAttempt] = useState(0);
-  const [retryKey, setRetryKey] = useState(0);
+  const [courseMaterials, setCourseMaterials] = useState<CourseMaterial[]>([]);
 
-  /** Loads the full summary so the receipt card has name, days and start date. */
   const loadReceipt = useCallback(
     async (id: string, extra: ReceiptRefs) => {
       setRefs({
@@ -140,6 +116,10 @@ export default function PaymentCompleteClient() {
           registrationStatus: reg.registrationStatus,
           paidAt: reg.paidAt,
         });
+
+        if (reg.courseMaterials && reg.courseMaterials.length > 0) {
+          setCourseMaterials(reg.courseMaterials);
+        }
       } catch {
         setDetailError("Payment confirmed, but we couldn't load your registration details.");
       }
@@ -147,12 +127,41 @@ export default function PaymentCompleteClient() {
     []
   );
 
+  const loadCourseMaterials = useCallback(
+    async (courseId: string) => {
+      try {
+        const res = await fetch(`/api/courses/${courseId}/materials`, { cache: "no-store" });
+        const data = await res.json().catch(() => null);
+        if (data?.materials) {
+          setCourseMaterials(data.materials);
+        }
+      } catch {
+        console.error("Failed to load course materials");
+      }
+    },
+    []
+  );
+
+  const verifyPayment = useCallback(async () => {
+    const verifyQuery = new URLSearchParams();
+    if (effectiveReferenceId) verifyQuery.set("referenceId", effectiveReferenceId);
+    if (merchantReference) verifyQuery.set("merchantReference", merchantReference);
+    if (chapaReference) verifyQuery.set("chapaReference", chapaReference);
+
+    if (!verifyQuery.toString()) {
+      return null;
+    }
+
+    try {
+      const res = await fetch(`/api/payments/verify?${verifyQuery.toString()}`, { cache: "no-store" });
+      const data = await res.json().catch(() => null);
+      return data;
+    } catch {
+      return null;
+    }
+  }, [effectiveReferenceId, merchantReference, chapaReference]);
+
   useEffect(() => {
-    // No identifier in the URL and none in sessionStorage is NOT a dead end:
-    // initialization also set the httpOnly na_pending_ref cookie, which only
-    // the server can read. Fall through to /api/payments/status and let it
-    // decide — only an explicit "no cookie" answer means the link is
-    // genuinely incomplete.
     const verifyQuery = new URLSearchParams();
     if (effectiveReferenceId) verifyQuery.set("referenceId", effectiveReferenceId);
     if (merchantReference) verifyQuery.set("merchantReference", merchantReference);
@@ -161,21 +170,15 @@ export default function PaymentCompleteClient() {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let tries = 0;
-    let watching = false;
-    const watchStartedAt = { value: 0 };
 
-    setPhase("checking");
+    setPhase("verifying");
     setAttempt(1);
 
     const finish = (next: Phase, fromVerify?: Record<string, unknown>) => {
       if (cancelled) return;
-      watching = false;
       setPhase(next);
       if (next === "success" || next === "failed") {
-        // Clear the stored reference — this checkout is complete.
         try { sessionStorage.removeItem("chapa_pending_ref"); } catch { /* ignore */ }
-        // Verification returns the canonical registration ID; the redirect
-        // parameter may have been a merchant or Chapa reference instead.
         const resolvedId =
           typeof fromVerify?.referenceId === "string" && fromVerify.referenceId
             ? fromVerify.referenceId
@@ -188,40 +191,27 @@ export default function PaymentCompleteClient() {
           chapaReference:
             typeof fromVerify?.chapaReference === "string" ? fromVerify.chapaReference : null,
         });
+        if (fromVerify?.courseId && !courseMaterials.length) {
+          void loadCourseMaterials(fromVerify.courseId as string);
+        }
       }
     };
 
-    /** Burst of 5 quick checks, then a slow background watch. */
     const scheduleNext = () => {
       if (cancelled) return;
-
-      if (!watching) {
-        tries += 1;
-        if (tries >= MAX_ATTEMPTS) {
-          watching = true;
-          watchStartedAt.value = Date.now();
-          setPhase("pending");
-          timer = setTimeout(poll, WATCH_INTERVAL_MS);
-          return;
-        }
-        setAttempt(tries + 1);
-        timer = setTimeout(poll, POLL_INTERVAL_MS);
+      tries += 1;
+      if (tries >= MAX_ATTEMPTS) {
+        setPhase("failed");
         return;
       }
-
-      // Watching: keep going until the grace period expires, then stop quietly
-      // and leave the page on "being processed" rather than flipping to failed.
-      if (Date.now() - watchStartedAt.value >= WATCH_TIMEOUT_MS) return;
-      timer = setTimeout(poll, WATCH_INTERVAL_MS);
+      setAttempt(tries + 1);
+      timer = setTimeout(poll, POLL_INTERVAL_MS);
     };
 
     const poll = async () => {
       if (cancelled) return;
 
       try {
-        // If we have an identifier, use the full verify endpoint.
-        // If we have nothing (Chapa redirect carried no params and sessionStorage
-        // was unavailable), fall back to the cookie-based status endpoint.
         const hasParams = verifyQuery.toString().length > 0;
         const url = hasParams
           ? `/api/payments/verify?${verifyQuery.toString()}`
@@ -232,12 +222,11 @@ export default function PaymentCompleteClient() {
         if (cancelled) return;
 
         const reg = (data?.registration ?? {}) as Record<string, unknown>;
-        // /api/payments/status returns referenceId at the top level, not nested.
         const statusReg = !hasParams ? data as Record<string, unknown> : reg;
         const status = typeof data?.status === "string" ? data.status.toUpperCase() : "";
 
         if (status === "SUCCESS") {
-          finish("success", { ...reg, ...statusReg });
+          finish("success", { ...reg, ...statusReg, courseId: data.courseId });
           return;
         }
         if (status === "FAILED" || status === "CANCELLED" || status === "INCOMPLETE") {
@@ -245,9 +234,6 @@ export default function PaymentCompleteClient() {
           return;
         }
 
-        // The cookie-based status endpoint answers UNKNOWN when it has nothing
-        // to identify. That means the return link really is incomplete — stop
-        // and say so rather than polling forever.
         if (!hasParams && status === "UNKNOWN") {
           const reason = typeof data?.reason === "string" ? data.reason : "";
           if (reason === "no_cookie" || reason === "not_found") {
@@ -262,26 +248,48 @@ export default function PaymentCompleteClient() {
       }
     };
 
-    void poll();
+    const runInitialVerification = async () => {
+      const data = await verifyPayment();
+      if (cancelled) return;
+
+      if (data) {
+        const status = typeof data.status === "string" ? data.status.toUpperCase() : "";
+        const reg = (data.registration ?? {}) as Record<string, unknown>;
+        const statusReg = data as Record<string, unknown>;
+
+        if (status === "SUCCESS") {
+          finish("success", { ...reg, ...statusReg, courseId: data.courseId });
+          return;
+        }
+        if (status === "FAILED" || status === "CANCELLED" || status === "INCOMPLETE") {
+          finish("failed", { ...reg, ...statusReg });
+          return;
+        }
+      }
+
+      scheduleNext();
+    };
+
+    void runInitialVerification();
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [effectiveReferenceId, merchantReference, chapaReference, retryKey, loadReceipt]);
+  }, [
+    effectiveReferenceId,
+    merchantReference,
+    chapaReference,
+    loadReceipt,
+    loadCourseMaterials,
+    courseMaterials.length,
+    verifyPayment,
+    displayReference,
+  ]);
 
-  const retry = () => {
-    setRegistration(null);
-    setDetailError("");
-    setAttempt(0);
-    setRetryKey((k) => k + 1);
-  };
-
-  // The receipt is generated server-side from the registration ID, so the
-  // download is a plain link the browser can save directly as a PDF file.
   const downloadId = registration?.referenceId || displayReference;
 
-  const rows: { label: string; value: string; mono?: boolean }[] = [
+  const receiptRows: { label: string; value: string; mono?: boolean }[] = [
     { label: "Amount paid", value: formatBirr(registration?.amount ?? null, registration?.currency ?? null) },
     { label: "Transaction reference", value: refs.chapaReference || "—", mono: true },
     { label: "Merchant reference", value: refs.merchantReference || displayReference, mono: true },
@@ -299,19 +307,17 @@ export default function PaymentCompleteClient() {
             </a>
           </div>
 
-          {phase === "checking" && (
+          {phase === "verifying" && (
             <div className="mt-10 text-center">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gold/10">
                 <Loader2 size={30} className="animate-spin text-gold" />
               </div>
-              <h1 className="mt-5 text-2xl font-bold text-navy">Confirming your payment</h1>
+              <h1 className="mt-5 text-2xl font-bold text-navy">Verifying your payment</h1>
               <p className="mt-2 text-sm leading-relaxed text-gray-600">
-                Hold on while we confirm the transaction with Chapa. This usually takes a few
-                seconds.
+                Confirming the transaction with Chapa. This usually takes a few seconds.
               </p>
               <p className="mt-4 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-500">
-                You can close this tab — we also confirm payments by webhook, so your seat is held
-                either way.
+                You can close this tab — we also confirm payments by webhook, so your seat is held either way.
               </p>
               <p className="mt-3 font-mono text-[11px] text-gray-400">
                 {effectiveReferenceId || displayReference} · check {attempt} of {MAX_ATTEMPTS}
@@ -325,15 +331,14 @@ export default function PaymentCompleteClient() {
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-50">
                   <CheckCircle2 size={34} className="text-green-500" />
                 </div>
-                <h1 className="mt-5 text-2xl font-bold text-navy">Payment Successful</h1>
+                <h1 className="mt-5 text-2xl font-bold text-navy">Payment Confirmed</h1>
                 <p className="mt-2 text-sm leading-relaxed text-gray-600">
                   Your seat is confirmed. Welcome to Nalik Academy!
                 </p>
               </div>
 
-              {/* Receipt */}
               <div className="mt-6 divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 bg-white">
-                {rows.map((row) => (
+                {receiptRows.map((row) => (
                   <div key={row.label} className="flex items-start justify-between gap-4 px-5 py-3.5">
                     <span className="shrink-0 text-sm text-gray-500">{row.label}</span>
                     <span
@@ -359,13 +364,12 @@ export default function PaymentCompleteClient() {
               )}
 
               <div className="mt-5 grid grid-cols-1 gap-2.5 print:hidden sm:grid-cols-2">
-                {/* Downloads a real PDF receipt generated server-side. */}
                 <a
                   href={`/api/registrations/receipt?id=${encodeURIComponent(downloadId)}`}
                   download={`nalik-receipt-${downloadId}.pdf`}
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-gold px-4 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover"
                 >
-                  <Download size={15} /> Download Receipt
+                  <FileText size={15} /> Download Payment Slip
                 </a>
                 <a
                   href={`/registration?id=${encodeURIComponent(displayReference)}`}
@@ -374,6 +378,35 @@ export default function PaymentCompleteClient() {
                   <LayoutDashboard size={15} /> Go to Dashboard
                 </a>
               </div>
+
+              {courseMaterials.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-sm font-semibold text-navy mb-3 flex items-center gap-2">
+                    <BookOpen size={16} /> Course Materials
+                  </h3>
+                  <div className="space-y-2">
+                    {courseMaterials.map((material) => (
+                      <a
+                        key={material.id}
+                        href={material.fileUrl}
+                        download
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-navy/15 bg-white px-4 py-3 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
+                      >
+                        <Download size={15} />
+                        {material.title} ({material.fileType})
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {registration?.course && courseMaterials.length === 0 && (
+                <div className="mt-6">
+                  <p className="text-sm text-gray-500 text-center">
+                    Course materials will appear here once uploaded by your instructor.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -398,62 +431,6 @@ export default function PaymentCompleteClient() {
               <div className="mx-auto mt-5 max-w-sm">
                 <CheckoutButton referenceId={displayReference} label="Retry Payment" />
               </div>
-
-              <button
-                type="button"
-                onClick={retry}
-                className="mt-5 text-sm font-medium text-gray-500 underline underline-offset-2 transition-colors hover:text-gold"
-              >
-                Check again
-              </button>
-            </div>
-          )}
-
-          {phase === "pending" && (
-            <div className="mt-10 text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-50">
-                <Clock3 size={32} className="text-amber-500" />
-              </div>
-              <h1 className="mt-5 text-2xl font-bold text-navy">Payment Being Processed</h1>
-              <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-gray-600">
-                Chapa is still confirming this payment. Your registration is saved and your seat is
-                held — this page will update automatically once the payment is confirmed, so there
-                is nothing you need to do.
-              </p>
-
-              <div className="mx-auto mt-5 max-w-sm rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
-                <span className="inline-flex items-center gap-1.5 text-xs text-amber-700">
-                  <Loader2 size={12} className="animate-spin" />
-                  Still checking in the background — no action needed.
-                </span>
-              </div>
-
-              <div className="mx-auto mt-4 max-w-sm rounded-xl border border-gray-200 bg-white px-4 py-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                  Registration ID
-                </p>
-                <p className="mt-0.5 font-mono text-sm font-bold text-gold">{displayReference}</p>
-              </div>
-
-              <div className="mx-auto mt-5 max-w-sm print:hidden">
-                <CheckoutButton referenceId={displayReference} label="Pay again" />
-              </div>
-
-              <div className="mt-5 flex flex-col items-center gap-2 print:hidden">
-                <button
-                  type="button"
-                  onClick={retry}
-                  className="inline-flex items-center gap-2 rounded-lg border border-navy/15 bg-white px-6 py-3 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
-                >
-                  <Loader2 size={15} /> Check again
-                </button>
-                <a
-                  href={`/registration?id=${encodeURIComponent(displayReference)}`}
-                  className="text-sm text-gray-500 underline underline-offset-2 transition-colors hover:text-gold"
-                >
-                  View your registration
-                </a>
-              </div>
             </div>
           )}
 
@@ -472,28 +449,6 @@ export default function PaymentCompleteClient() {
                 className="mt-5 inline-block rounded-lg bg-gold px-6 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover"
               >
                 Look up my registration
-              </a>
-            </div>
-          )}
-
-          {/* Chapa's hosted checkout does not always redirect the customer back
-              to us — it can leave them on its own receipt page with no way to
-              return. This is the one link that always works, whatever happened
-              upstream. */}
-          {phase !== "success" && (
-            <div className="mt-8 rounded-xl border border-gray-200 bg-white px-4 py-4 text-center">
-              <p className="text-sm font-medium text-navy">
-                Finished on Chapa but not redirected back?
-              </p>
-              <p className="mt-1 text-xs leading-relaxed text-gray-500">
-                Enter your registration ID and we&apos;ll ask Chapa directly whether the payment
-                went through.
-              </p>
-              <a
-                href="/registration"
-                className="mt-3 inline-block rounded-lg border border-navy/15 bg-white px-5 py-2.5 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
-              >
-                Check my payment status
               </a>
             </div>
           )}

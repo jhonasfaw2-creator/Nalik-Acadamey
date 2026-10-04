@@ -5,16 +5,6 @@ import { derivePayment } from "@/lib/registration";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/registrations/lookup?id=NA-2026-XXXXXX — public registration lookup.
-//
-// Security model:
-//   - The reference ID itself is the capability: it is long, random, and
-//     unguessable (32-char alphabet, 6 chars ≈ 1B combinations), so knowing it
-//     is treated as proof of ownership — same trust model as a package
-//     tracking number.
-//   - Strict per-IP rate limiting (20/min) blunts brute-force guessing.
-//   - The response exposes ONLY schedule/enrollment data. No email, no phone,
-//     no age, and no internal identifiers — a leaked ID reveals nothing further.
 export async function GET(request: NextRequest) {
   const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
@@ -30,8 +20,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Registration ID is required" }, { status: 400 });
   }
 
-  // Cheap shape guard: our IDs are NA-YYYY-XXXXXX. Anything else can be
-  // rejected without touching the database.
   if (!/^NA-\d{4}-[A-Z2-9]{6}$/.test(id)) {
     return NextResponse.json({ found: false, error: "That registration ID doesn't look right. Check it and try again (format: NA-YYYY-XXXXXX)." }, { status: 404 });
   }
@@ -44,10 +32,18 @@ export async function GET(request: NextRequest) {
         fullName: true,
         status: true,
         paidAt: true,
-        course: { select: { title: true, price: true, discountPrice: true } },
+        course: {
+          select: {
+            id: true,
+            title: true,
+            price: true,
+            discountPrice: true,
+          },
+        },
         schedule: {
           select: { group: true, session: true, days: true, startTime: true, endTime: true, startDate: true },
         },
+        payment: { select: { status: true } },
       },
     });
 
@@ -64,12 +60,22 @@ export async function GET(request: NextRequest) {
       course: application.course,
     });
 
+    let courseMaterials: { id: string; title: string; fileUrl: string; fileType: string }[] = [];
+    if (application.course?.id) {
+      courseMaterials = await prisma.courseMaterial.findMany({
+        where: { courseId: application.course.id },
+        select: { id: true, title: true, fileUrl: true, fileType: true },
+        orderBy: { sortOrder: "asc" },
+      });
+    }
+
     return NextResponse.json({
       found: true,
       registration: {
         referenceId: application.referenceId,
         fullName: application.fullName,
         course: application.course?.title || null,
+        courseId: application.course?.id || null,
         schedule: application.schedule
           ? {
               days: application.schedule.days,
@@ -87,6 +93,7 @@ export async function GET(request: NextRequest) {
         paymentStatus: payment.status,
         registrationStatus: application.status,
         paidAt: payment.paidAt,
+        courseMaterials,
       },
     });
   } catch (error) {

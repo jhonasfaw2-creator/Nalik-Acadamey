@@ -10,19 +10,6 @@ import { applyPaymentResult } from "@/lib/payments/apply";
 
 export const dynamic = "force-dynamic";
 
-// GET/POST /api/payments/verify — authoritative server-side verification.
-//
-// Identifies the payment by registration reference ID or merchant reference,
-// asks Chapa what actually happened, and settles the registration only when
-// Chapa confirms success and the amount and currency match what we stored.
-//
-// The browser is a signal, never proof: a redirect back from checkout or a
-// client-side callback cannot mark anything paid on its own.
-//
-// Transient provider problems (network failure, 5xx, or a 404 while Chapa is
-// still propagating the transaction) answer 200 with status PENDING so a
-// polling client keeps polling instead of treating them as a hard failure.
-
 /** Generous enough for a polling return page, tight enough to protect Chapa. */
 const RATE_LIMIT = 60;
 const RATE_WINDOW_MS = 60_000;
@@ -39,7 +26,7 @@ interface VerificationTarget {
   paymentMethod: string | null;
   chapaReference: string | null;
   paidAt: Date | null;
-  course: { title: string } | null;
+  course: { id: string; title: string } | null;
   schedule: {
     group: string;
     session: string;
@@ -49,16 +36,12 @@ interface VerificationTarget {
   } | null;
 }
 
-/**
- * Response body for a settled or in-flight payment. Deliberately excludes
- * student PII (name, email, phone): this endpoint is public and the
- * reference ID is the only capability presented.
- */
 function buildSummary(target: VerificationTarget) {
   return {
     referenceId: target.referenceId,
     registrationStatus: target.applicationStatus,
     course: target.course?.title || null,
+    courseId: target.course?.id || null,
     schedule: target.schedule
       ? `SCHEDULE ${target.schedule.group}: ${target.schedule.session} (${target.schedule.days}, ${target.schedule.startTime}–${target.schedule.endTime})`
       : null,
@@ -70,17 +53,6 @@ function buildSummary(target: VerificationTarget) {
     chapaReference: target.chapaReference,
     paidAt: target.paidAt ? target.paidAt.toISOString() : null,
   };
-}
-
-/** 200 + PENDING keeps a polling client alive through a transient problem. */
-function pendingResponse(
-  target: VerificationTarget,
-  extra: { warning?: string; code?: string } = {}
-) {
-  return NextResponse.json(
-    { status: "PENDING", registration: buildSummary(target), ...extra },
-    { status: 200 }
-  );
 }
 
 async function handle(request: NextRequest) {
@@ -100,8 +72,6 @@ async function handle(request: NextRequest) {
     };
 
     referenceId = pick("referenceId").toUpperCase();
-    // Chapa's return redirect carries our merchant reference as tx_ref/trxref;
-    // accept those aliases so a plain redirect can be verified as well.
     merchantReference =
       pick("merchantReference") || pick("tx_ref") || pick("trxref") || pick("trx_ref");
     chapaReference =
@@ -118,7 +88,7 @@ async function handle(request: NextRequest) {
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     if (!checkAndIncrement(`verify:${ip}`, RATE_LIMIT, RATE_WINDOW_MS)) {
       return NextResponse.json(
-        { status: "PENDING", error: "Too many verification attempts. Try again shortly." },
+        { error: "Too many verification attempts. Try again shortly." },
         { status: 429 }
       );
     }
@@ -143,7 +113,7 @@ async function handle(request: NextRequest) {
             id: true,
             referenceId: true,
             status: true,
-            course: { select: { title: true } },
+            course: { select: { id: true, title: true } },
             schedule: {
               select: { group: true, session: true, days: true, startTime: true, endTime: true },
             },
@@ -180,11 +150,10 @@ async function handle(request: NextRequest) {
       });
     }
 
-    // /v2/payments/{reference}/verify resolves Chapa *transaction* references
-    // only, so a merchant_reference there always 404s and a hosted-session id is
-    // rejected outright. verifyWithRecovery resolves the reference (recovering
-    // and persisting it from the transaction list when needed) and re-resolves
-    // once if the stored value turns out not to be verifiable.
+    // Verify with Chapa. /v2/payments/{reference}/verify resolves Chapa *transaction*
+    // references only. verifyWithRecovery resolves the reference (recovering and
+    // persisting it from the transaction list when needed) and re-resolves once
+    // if the stored value turns out not to be verifiable.
     let verification: Awaited<ReturnType<typeof verifyPayment>>;
     let usedReference: string;
     let recoveredReference = false;
@@ -202,14 +171,15 @@ async function handle(request: NextRequest) {
       recoveredReference = outcome.recovered;
     } catch (error) {
       if (error instanceof UnresolvableReferenceError) {
-        return pendingResponse(target, {
-          ...(error.providerUnavailable
-            ? {
-                warning: "Verification is temporarily unavailable. Retrying.",
-                code: "CHAPA_VERIFY_RETRYING",
-              }
-            : { code: "AWAITING_REFERENCE" }),
-        });
+        // No Chapa transaction exists for this reference — payment never completed.
+        return NextResponse.json({
+          status: "FAILED",
+          code: error.providerUnavailable ? "CHAPA_UNAVAILABLE" : "NO_TRANSACTION",
+          error: error.providerUnavailable
+            ? "Chapa could not be reached. Please try again shortly."
+            : "No payment transaction found for this registration.",
+          registration: buildSummary(target),
+        }, { status: error.providerUnavailable ? 502 : 404 });
       }
 
       if (error instanceof ChapaConfigError) {
@@ -224,12 +194,9 @@ async function handle(request: NextRequest) {
       }
 
       if (error instanceof ChapaApiError) {
-        // Chapa documents that a freshly created payment can briefly be
-        // unknown, and that transient faults should be retried — both stay
-        // PENDING rather than failing the poll.
+        // Transient Chapa errors (network, 5xx) — return 502 so client knows to retry.
         const transient =
           error.httpStatus === undefined ||
-          error.httpStatus === 404 ||
           error.httpStatus >= 500;
 
         console.error("[verify] Chapa verification call failed:", {
@@ -241,15 +208,18 @@ async function handle(request: NextRequest) {
         });
 
         if (transient) {
-          return pendingResponse(target, {
-            warning: "Verification is temporarily unavailable. Retrying.",
-            code: "CHAPA_VERIFY_RETRYING",
-          });
+          return NextResponse.json(
+            { error: "Chapa verification temporarily unavailable. Please retry." },
+            { status: 502 }
+          );
         }
-        return NextResponse.json(
-          { error: "Payment verification is currently unavailable." },
-          { status: 502 }
-        );
+        // 404 = Chapa has no such transaction = payment not completed.
+        return NextResponse.json({
+          status: "FAILED",
+          code: "NO_TRANSACTION",
+          error: "No payment transaction found for this registration.",
+          registration: buildSummary(target),
+        }, { status: 404 });
       }
       throw error;
     }
@@ -261,8 +231,7 @@ async function handle(request: NextRequest) {
       });
     }
 
-    // The verified transaction must belong to this registration. A mismatch
-    // means the reference was reused or tampered with — never settle on it.
+    // The verified transaction must belong to this registration.
     if (
       verification.merchantReference &&
       verification.merchantReference !== payment.merchantReference
@@ -294,8 +263,6 @@ async function handle(request: NextRequest) {
     }
 
     if (applied.mismatch) {
-      // Chapa says success but the figures disagree with what we stored. Do
-      // NOT grant access; surface it for manual reconciliation.
       console.error("[verify] Rejected SUCCESS on amount/currency mismatch", {
         referenceId: target.referenceId,
         mismatch: applied.mismatch,
@@ -351,7 +318,7 @@ async function handle(request: NextRequest) {
       message: error instanceof Error ? error.message : String(error),
     });
     return NextResponse.json(
-      { status: "ERROR", error: "Failed to verify payment." },
+      { error: "Failed to verify payment." },
       { status: 500 }
     );
   }

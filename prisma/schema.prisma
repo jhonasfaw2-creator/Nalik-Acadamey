@@ -42,6 +42,7 @@ model Course {
 
   @@index([active])
   applications Application[]
+  materials    CourseMaterial[]
 }
 
 // ── Schedules (shared schedule groups + sessions) ─────
@@ -127,6 +128,21 @@ model Payment {
 
   @@index([status])
   @@index([chapaReference])
+}
+
+// ── Course Materials (downloadable content gated by payment) ───
+model CourseMaterial {
+  id        String   @id @default(cuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title     String
+  fileUrl   String
+  fileType  String   // e.g. "pdf", "video", "zip"
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseId])
 }
 
 // ── Settings (key-value store) ────────────────────────

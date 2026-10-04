@@ -1,10 +1,5 @@
 "use client";
 
-// ── Public registration lookup (/registration) ──────────────────────
-// A student enters their reference ID and sees their live enrollment +
-// schedule. Data comes from the public lookup API, so admin changes (course,
-// schedule, status) are reflected automatically on every check.
-
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -14,7 +9,6 @@ import {
   AlertCircle,
   Loader2,
   Download,
-  RefreshCw,
 } from "lucide-react";
 import RegistrationDetails from "@/components/RegistrationDetails";
 import CheckoutButton from "@/components/checkout-button";
@@ -28,8 +22,6 @@ export default function RegistrationLookupClient() {
   const [state, setState] = useState<LookupState>("idle");
   const [error, setError] = useState("");
   const [registration, setRegistration] = useState<RegistrationSummary | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [checkNote, setCheckNote] = useState("");
 
   const lookup = useCallback(async (rawId: string, silent = false): Promise<boolean> => {
     const trimmed = rawId.trim().toUpperCase();
@@ -79,7 +71,6 @@ export default function RegistrationLookupClient() {
     }
   }, []);
 
-  // Deep link: /registration?id=NA-2026-XXXXXX looks up immediately.
   useEffect(() => {
     const prefill = searchParams.get("id");
     if (prefill) {
@@ -93,49 +84,12 @@ export default function RegistrationLookupClient() {
     lookup(id);
   };
 
-  /**
-   * Asks the server to confirm the payment with Chapa, then re-reads the
-   * registration.
-   *
-   * This is the escape hatch for the most common dead end: the customer pays on
-   * Chapa's own receipt page and never gets redirected back, so nothing in the
-   * browser ever notices the money arrived. Chapa is the only authority on that,
-   * so this asks Chapa directly instead of guessing from the local record.
-   */
-  const checkPayment = async () => {
-    if (!registration || checking) return;
-    setChecking(true);
-    setCheckNote("");
-    try {
-      const res = await fetch(
-        `/api/payments/verify?referenceId=${encodeURIComponent(registration.referenceId)}`,
-        { cache: "no-store" }
-      );
-      const data = await res.json().catch(() => null);
-      const status = typeof data?.status === "string" ? data.status.toUpperCase() : "";
-
-      if (status === "SUCCESS") {
-        setCheckNote("Payment confirmed. Your seat is booked.");
-      } else if (status === "FAILED" || status === "CANCELLED" || status === "INCOMPLETE") {
-        setCheckNote(`Chapa reports this payment as ${status.toLowerCase()}. You can start a new payment below.`);
-      } else {
-        setCheckNote("Chapa has not confirmed this payment yet. It can take a minute — try again shortly.");
-      }
-    } catch {
-      setCheckNote("We couldn't reach the payment service. Please try again.");
-    } finally {
-      setChecking(false);
-      await lookup(registration.referenceId, true);
-    }
-  };
-
   const unpaid = registration != null && registration.paymentStatus !== "SUCCESS";
 
   return (
     <div className="flex min-h-screen flex-col bg-warm-white">
       <main className="flex flex-1 items-start justify-center px-4 py-12 sm:py-16">
         <div className="w-full max-w-md">
-          {/* Header */}
           <div className="text-center">
             <a href="/" className="inline-flex items-center gap-2.5">
               <img src="/assets/logo.jpeg" alt="Nalik Academy" className="h-9 w-9 rounded-lg object-cover" />
@@ -147,7 +101,6 @@ export default function RegistrationLookupClient() {
             </p>
           </div>
 
-          {/* Form */}
           <form onSubmit={onSubmit} className="mt-8">
             <label htmlFor="reg-id" className="mb-1.5 block text-sm font-medium text-gray-700">
               Registration ID
@@ -174,7 +127,6 @@ export default function RegistrationLookupClient() {
             </div>
           </form>
 
-          {/* Error */}
           {state === "error" && (
             <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-red-100 bg-red-50 px-4 py-3.5" role="alert">
               <AlertCircle size={17} className="mt-0.5 shrink-0 text-red-500" />
@@ -187,7 +139,6 @@ export default function RegistrationLookupClient() {
             </div>
           )}
 
-          {/* Result */}
           {state === "found" && registration && (
             <div className="mt-8">
               <RegistrationDetails registration={registration} highlightReference />
@@ -195,36 +146,12 @@ export default function RegistrationLookupClient() {
               {unpaid && (
                 <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 px-4 py-4">
                   <p className="text-sm text-amber-700">
-                    We haven&apos;t confirmed this payment yet. Already paid on Chapa? Ask us to
-                    check — otherwise you can start or restart the payment below.
+                    We haven&apos;t confirmed this payment yet. You can start or restart the payment below.
                   </p>
-
-                  <button
-                    type="button"
-                    onClick={checkPayment}
-                    disabled={checking}
-                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-4 py-2.5 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-60 sm:w-auto"
-                  >
-                    {checking ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-                    {checking ? "Checking with Chapa…" : "I have paid — check my payment"}
-                  </button>
-
-                  {checkNote && (
-                    <p className="mt-2.5 text-xs text-amber-700" role="status">
-                      {checkNote}
-                    </p>
-                  )}
-
                   <div className="mt-3 border-t border-amber-200 pt-3">
                     <CheckoutButton referenceId={registration.referenceId} />
                   </div>
                 </div>
-              )}
-
-              {checkNote && !unpaid && (
-                <p className="mt-4 rounded-xl border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
-                  {checkNote}
-                </p>
               )}
 
               <div className="mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">

@@ -173,84 +173,92 @@ export async function POST(request: NextRequest) {
       process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
       "https://nalik-acadamey.vercel.app";
 
-    // return_url  — where Chapa redirects the browser after checkout. We pass
+// return_url  — where Chapa redirects the browser after checkout. We pass
     //               referenceId so PaymentCompleteClient can verify immediately
     //               on landing without parsing tx_ref or chapa_reference.
     // callback_url — per-transaction server-to-server webhook target. Chapa's
     //               hosted checkout requires it (with return_url) to complete
     //               the flow without a CSRF token mismatch.
-  // Chapa validates both URLs and rejects the WHOLE initialization with
-  // 400 INVALID_FORMAT ("Callback URL must start with https:// and be a valid
-  // URL") if either one is not https. A plain-http origin — localhost, a LAN IP,
-  // an http tunnel — would therefore make the checkout impossible to start, not
-  // merely un-redirected. Send them only when they are actually usable.
-  //
-  // They are also not needed for settlement: the Chapa reference is already
-  // stored, and the webhook plus server-side verification settle the payment.
-  const useProviderUrls = origin.startsWith("https://");
-  if (!useProviderUrls) {
-    console.warn("[chapa-init] Non-https origin, omitting return_url/callback_url", {
-      referenceId: application.referenceId,
-    });
-  }
+    //
+    // Chapa validates both URLs and rejects the WHOLE initialization with
+    // 400 INVALID_FORMAT ("Callback URL must start with https:// and be a valid
+    // URL") if either one is not https.
+    //
+    // Strategy:
+    // - Production (HTTPS origin): always send return_url + callback_url
+    // - Local development: require NGROK_URL or similar HTTPS tunnel env var
+    // - Dashboard Redirect URL must ALSO be configured in Chapa dashboard as fallback
+    //   because Chapa v2 may ignore per-transaction return_url/callback_url
+    const isProduction = origin.startsWith("https://");
+    const tunnelUrl = process.env.NGROK_URL?.replace(/\/$/, ""); // e.g. https://abc123.ngrok.io
+    const effectiveOrigin = tunnelUrl || origin;
 
-  // Chapa treats a merchant_reference as SINGLE USE. Creating a second checkout
-  // session under a reference it has already seen fails with
-  // 409 INVALID_STATE ("Merchant reference has been used before"), so a customer
-  // who abandons checkout could never retry — every later attempt died at init.
-  //
-  // Each attempt therefore gets its own suffixed reference (-2, -3, …) and the
-  // one that Chapa accepted is what we store. That keeps the webhook, the public
-  // verify route, the status cookie and the admin list all keyed on the same
-  // value. A late webhook from a superseded attempt simply matches no Payment
-  // and is ignored, which is logged and greppable.
-  const MAX_INIT_ATTEMPTS = 5;
-  let merchantReference = baseMerchantReference;
-  let hosted: Awaited<ReturnType<typeof initiatePayment>> | null = null;
-  let reusedReference = false;
+    const useProviderUrls = isProduction || Boolean(tunnelUrl);
+    if (!useProviderUrls) {
+      console.warn("[chapa-init] Non-HTTPS origin and no tunnel URL — Chapa will use dashboard Redirect URL only", {
+        referenceId: application.referenceId,
+        origin,
+        hint: "Set NGROK_URL for local dev, or configure Chapa dashboard Redirect URL to https://nalik-acadamey.vercel.app/payment/complete",
+      });
+    }
 
-  for (let attempt = 1; attempt <= MAX_INIT_ATTEMPTS; attempt++) {
-    const candidate =
-      attempt === 1 ? baseMerchantReference : `${baseMerchantReference}-${attempt}`;
-    try {
-      hosted = await initiatePayment({
-        amount: payment.amount,
-        merchantReference: candidate,
-        customer: {
-          first_name: firstName,
-          last_name: lastName,
-          email,
-          phone_number: phone,
-        },
-        meta: {
-          reference_id: application.referenceId,
-          ...(application.schedule
+    // Chapa treats a merchant_reference as SINGLE USE. Creating a second checkout
+    // session under a reference it has already seen fails with
+    // 409 INVALID_STATE ("Merchant reference has been used before"), so a customer
+    // who abandons checkout could never retry — every later attempt died at init.
+    //
+    // Each attempt therefore gets its own suffixed reference (-2, -3, …) and the
+    // one that Chapa accepted is what we store. That keeps the webhook, the public
+    // verify route, the status cookie and the admin list all keyed on the same
+    // value. A late webhook from a superseded attempt simply matches no Payment
+    // and is ignored, which is logged and greppable.
+    const MAX_INIT_ATTEMPTS = 5;
+    let merchantReference = baseMerchantReference;
+    let hosted: Awaited<ReturnType<typeof initiatePayment>> | null = null;
+    let reusedReference = false;
+
+    for (let attempt = 1; attempt <= MAX_INIT_ATTEMPTS; attempt++) {
+      const candidate =
+        attempt === 1 ? baseMerchantReference : `${baseMerchantReference}-${attempt}`;
+      try {
+        hosted = await initiatePayment({
+          amount: payment.amount,
+          merchantReference: candidate,
+          customer: {
+            first_name: firstName,
+            last_name: lastName,
+            email,
+            phone_number: phone,
+          },
+          meta: {
+            reference_id: application.referenceId,
+            ...(application.schedule
+              ? {
+                  schedule: `${application.schedule.group}/${application.schedule.session}`,
+                }
+              : {}),
+          },
+          ...(useProviderUrls
             ? {
-                schedule: `${application.schedule.group}/${application.schedule.session}`,
+                return_url: `${effectiveOrigin}/payment/complete?referenceId=${encodeURIComponent(application.referenceId)}`,
+                callback_url: `${effectiveOrigin}/api/payments/webhook`,
               }
             : {}),
-        },
-        ...(useProviderUrls
-          ? {
-              return_url: `${origin}/payment/complete?referenceId=${encodeURIComponent(application.referenceId)}`,
-              callback_url: `${origin}/api/payments/webhook`,
-            }
-          : {}),
-      });
-      merchantReference = candidate;
-      reusedReference = attempt > 1;
-      break;
-    } catch (error) {
-      if (error instanceof ChapaApiError && error.httpStatus === 409) {
-        console.info("[chapa-init] Reference already used by Chapa, retrying", {
-          referenceId: application.referenceId,
-          attempt,
         });
-        continue;
+        merchantReference = candidate;
+        reusedReference = attempt > 1;
+        break;
+      } catch (error) {
+        if (error instanceof ChapaApiError && error.httpStatus === 409) {
+          console.info("[chapa-init] Reference already used by Chapa, retrying", {
+            referenceId: application.referenceId,
+            attempt,
+          });
+          continue;
+        }
+        throw error;
       }
-      throw error;
     }
-  }
 
   if (!hosted) {
     console.error("[chapa-init] Could not obtain a fresh merchant_reference", {

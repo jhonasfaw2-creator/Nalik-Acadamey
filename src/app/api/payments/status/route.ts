@@ -7,13 +7,6 @@ import { applyPaymentResult } from "@/lib/payments/apply";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/payments/status — called by /payment/complete to check payment
-// status using the na_pending_ref cookie set at init time.
-//
-// This is the fallback path when Chapa's redirect URL carries no query params.
-// It reads the merchant reference from the httpOnly cookie, verifies with
-// Chapa server-to-server, and settles the payment if confirmed.
-
 export async function GET() {
   const cookieStore = await cookies();
   const merchantReference = cookieStore.get("na_pending_ref")?.value?.trim();
@@ -54,10 +47,7 @@ export async function GET() {
     });
   }
 
-  // Verify with Chapa server-to-server. The Chapa reference is resolved (and
-  // recovered from the transaction list when missing or not verifiable) because
-  // /verify resolves Chapa transaction references only — the merchant reference
-  // in the cookie is an identifier for *our* database, not for Chapa's.
+  // Verify with Chapa server-to-server.
   let verification: Awaited<ReturnType<typeof verifyPayment>>;
   let usedReference: string;
   try {
@@ -74,14 +64,14 @@ export async function GET() {
   } catch (error) {
     if (error instanceof UnresolvableReferenceError) {
       return NextResponse.json({
-        status: "PENDING",
-        reason: error.providerUnavailable ? "verify_unavailable" : "awaiting_reference",
+        status: "FAILED",
+        reason: error.providerUnavailable ? "verify_unavailable" : "no_transaction",
         referenceId: payment.application.referenceId,
         merchantReference,
-      });
+      }, { status: error.providerUnavailable ? 502 : 404 });
     }
-    // Transient — keep polling.
-    return NextResponse.json({ status: "PENDING", reason: "verify_unavailable" });
+    // Transient — return 502 so client retries.
+    return NextResponse.json({ status: "FAILED", reason: "verify_unavailable" }, { status: 502 });
   }
 
   const applied = await applyPaymentResult(payment.id, {
