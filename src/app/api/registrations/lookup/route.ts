@@ -43,7 +43,6 @@ export async function GET(request: NextRequest) {
         schedule: {
           select: { group: true, session: true, days: true, startTime: true, endTime: true, startDate: true },
         },
-        payment: { select: { status: true } },
       },
     });
 

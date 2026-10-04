@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
           age,
           courseId,
           scheduleId,
-          status: paymentStatus === "PAID" ? "PAID" : "PENDING_PAYMENT",
+          status: paymentStatus === "PAID" ? "PAID" : "PENDING",
           paidAt: paymentStatus === "PAID" ? now : null,
         },
       });

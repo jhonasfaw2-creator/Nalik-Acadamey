@@ -87,7 +87,7 @@ export function formatDays(days: string | null | undefined): string {
 
 /**
  * Display state derived from BOTH statuses. The database only stores
- * PENDING_PAYMENT / PAID / CONFIRMED; "ENROLLED" is presentation — a PAID or
+ * PENDING / PAID / CONFIRMED; "ENROLLED" is presentation — a PAID or
  * CONFIRMED registration reads as enrolled to the student.
  */
 export function getEnrollmentState(summary: {
@@ -101,7 +101,7 @@ export function getEnrollmentState(summary: {
 } {
   const paid = summary.paymentStatus === "SUCCESS";
   const confirmed = summary.registrationStatus === "CONFIRMED";
-  const pendingPayment = summary.registrationStatus === "PENDING_PAYMENT" || !paid;
+  const pending = summary.registrationStatus === "PENDING" || !paid;
 
   if (paid && confirmed) {
     return { enrolled: true, enrollmentLabel: "ENROLLED", paymentLabel: "PAID", tone: "success" };
@@ -109,7 +109,7 @@ export function getEnrollmentState(summary: {
   if (paid) {
     return { enrolled: true, enrollmentLabel: "ENROLLED", paymentLabel: "PAID", tone: "success" };
   }
-  if (pendingPayment) {
+  if (pending) {
     return {
       enrolled: false,
       enrollmentLabel: "NOT ENROLLED",

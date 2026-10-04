@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Loader2, Calendar, CreditCard, AlertCircle, CheckCircle2 } from "lucide-react";
+import { X, Loader2, Calendar, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface CourseOption {
   id: string;
@@ -75,17 +75,14 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const phoneRef = useRef<HTMLInputElement>(null);
   const ageRef = useRef<HTMLInputElement>(null);
 
-  // Payment
-  const [isPaying, setIsPaying] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
-  // Set once the registration exists. Kept so a retry after a failed payment
-  // handoff re-attempts only the payment instead of creating a second
-  // registration (which the (email, courseId) unique index would reject).
+  // Set once the registration exists. Kept so a retry after a failed request
+  // reuses it instead of creating a second registration (which the
+  // (email, courseId) unique index would reject).
   const [registeredRef, setRegisteredRef] = useState("");
-  const [leavingForChapa, setLeavingForChapa] = useState<{
-    checkoutUrl: string;
-    referenceId: string;
-  } | null>(null);
+  // The reference ID handed back once the registration is stored.
+  const [confirmedRef, setConfirmedRef] = useState<string | null>(null);
 
   // ── Load courses + schedules ──────────────────────────────
   useEffect(() => {
@@ -198,15 +195,15 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     setFormError("");
   }, [selectedCourseId, selectedSessionId]);
 
-  const handlePay = useCallback(async () => {
-    if (isPaying) return;
+  const handleSubmit = useCallback(async () => {
+    if (isSubmitting) return;
 
     if (!selectedCourseId || !selectedSessionId) {
-      setFormError("Choose a course and a schedule before paying.");
+      setFormError("Choose a course and a schedule before continuing.");
       return;
     }
 
-    setIsPaying(true);
+    setIsSubmitting(true);
     setFormError("");
 
     try {
@@ -228,13 +225,12 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         const data = await res.json().catch(() => null);
 
         // 409 means this email already registered for this course. The server
-        // returns the existing reference, so let them finish paying rather than
-        // dead-ending on an error.
+        // returns the existing reference, so show it rather than dead-ending.
         if (res.status === 409 && data?.referenceId) {
           referenceId = data.referenceId;
         } else if (!res.ok) {
           setFormError(data?.error || "We couldn't complete your registration. Please try again.");
-          setIsPaying(false);
+          setIsSubmitting(false);
           return;
         } else {
           referenceId = data?.referenceId;
@@ -242,43 +238,19 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
 
         if (!referenceId) {
           setFormError("We couldn't get your registration ID. Please try again.");
-          setIsPaying(false);
+          setIsSubmitting(false);
           return;
         }
         setRegisteredRef(referenceId);
       }
 
-      // Hand the confirmed registration to Chapa. The server reads the amount
-      // and customer details from the database, never from the browser.
-      const payRes = await fetch("/api/payments/chapa/init", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ referenceId }),
-      });
-      const payData = await payRes.json().catch(() => null);
-
-      if (!payRes.ok || !payData?.checkout_url) {
-        setFormError(
-          payData?.alreadyPaid
-            ? "This registration is already paid — check your confirmation."
-            : payData?.error || "We couldn't start the payment. Please try again."
-        );
-        setIsPaying(false);
-        return;
-      }
-
-      // Chapa's hosted checkout does NOT bring the customer back to us — its
-      // receipt page has no return link at all (verified against the live test
-      // gateway). So before handing over the page we show the registration ID
-      // and how to come back; otherwise a paying customer is stranded on
-      // Chapa's receipt with no route to their confirmation or receipt.
-      setLeavingForChapa({ checkoutUrl: payData.checkout_url, referenceId });
-      setIsPaying(false);
+      setConfirmedRef(referenceId);
+      setIsSubmitting(false);
     } catch {
-      setFormError("Something went wrong connecting to the payment service. Please try again.");
-      setIsPaying(false);
+      setFormError("Something went wrong. Please try again.");
+      setIsSubmitting(false);
     }
-  }, [isPaying, registeredRef, selectedCourseId, selectedSessionId]);
+  }, [isSubmitting, registeredRef, selectedCourseId, selectedSessionId]);
 
   return (
     <dialog ref={dialogRef} className="backdrop:bg-black/60 rounded-[28px] p-0 max-w-5xl w-[calc(100%-1.5rem)] max-h-[92vh]">
@@ -507,7 +479,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                         <span className="text-2xl font-bold text-gold">{price ? formatBirr(price) : "—"}</span>
                       </div>
                       <p className="mt-2 text-[11px] text-white/65">
-                        You&apos;ll be redirected to Chapa&apos;s secure checkout to complete payment.
+                        Pay after registering — we&apos;ll contact you with the payment details.
                       </p>
                     </div>
 
@@ -520,16 +492,12 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
 
                     <button
                       type="button"
-                      onClick={handlePay}
-                      disabled={isPaying}
+                      onClick={handleSubmit}
+                      disabled={isSubmitting}
                       className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gold px-5 py-3.5 text-base font-bold tracking-wide text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {isPaying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
-                      {isPaying
-                        ? "Redirecting to Chapa…"
-                        : price
-                          ? `Pay ${formatBirr(price)} with Chapa`
-                          : "Pay with Chapa"}
+                      {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                      {isSubmitting ? "Submitting…" : "Complete registration"}
                     </button>
                   </div>
                 </div>
@@ -538,20 +506,20 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         </div>
       </div>
 
-      {/* Handover screen shown before we send the customer to Chapa. */}
-      {leavingForChapa && (
+      {/* Confirmation shown once the registration is stored. */}
+      {confirmedRef && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/60 p-4 backdrop-blur-sm">
           <div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="chapa-handover-title"
+            aria-labelledby="registration-confirmed-title"
             className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
           >
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-50">
               <CheckCircle2 size={26} className="text-green-600" />
             </div>
-            <h3 id="chapa-handover-title" className="mt-4 text-center text-xl font-bold text-navy">
-              Registration confirmed
+            <h3 id="registration-confirmed-title" className="mt-4 text-center text-xl font-bold text-navy">
+              Registration received
             </h3>
 
             <div className="mt-4 rounded-xl border border-dashed border-gold bg-[#fffaf1] px-4 py-3 text-center">
@@ -559,15 +527,15 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                 Your registration ID
               </p>
               <p className="mt-1 select-all font-mono text-xl font-bold tracking-wide text-navy">
-                {leavingForChapa.referenceId}
+                {confirmedRef}
               </p>
             </div>
 
             <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
-              <p className="text-[13px] font-semibold text-green-900">You&apos;re all set</p>
+              <p className="text-[13px] font-semibold text-green-900">Keep this ID safe</p>
               <p className="mt-1 text-[13px] leading-relaxed text-green-800">
-                After paying on Chapa you&apos;ll be redirected back here automatically to see your
-                confirmation and download your PDF receipt.
+                Use it to check your registration status at any time. We&apos;ll contact you
+                with the payment details once your registration is confirmed.
               </p>
             </div>
 
@@ -575,19 +543,19 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
               <button
                 type="button"
                 onClick={() => {
-                  window.location.href = leavingForChapa.checkoutUrl;
+                  setConfirmedRef(null);
+                  dialogRef.current?.close();
                 }}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gold px-5 py-3.5 text-base font-bold text-navy transition-all duration-200 hover:bg-gold-hover"
               >
-                <CreditCard size={18} /> Continue to Chapa
+                Done
               </button>
-              <button
-                type="button"
-                onClick={() => setLeavingForChapa(null)}
-                className="flex-1 rounded-xl border border-navy/15 px-5 py-3.5 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
+              <a
+                href={`/registration?id=${confirmedRef}`}
+                className="flex-1 rounded-xl border border-navy/15 px-5 py-3.5 text-center text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
               >
-                Not yet
-              </button>
+                View status
+              </a>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 // Purge all student registration data.
 //
-// Deletes every Application and Payment row and resets every Schedule seat
-// counter to zero. Courses, schedules, course materials, CMS content and
+// Deletes every Application row and resets every Schedule seat counter to
+// zero. Courses, schedules, course materials, CMS content and
 // settings are left untouched.
 //
 // This is destructive and irreversible. It runs as a DRY RUN unless you pass
@@ -50,22 +50,20 @@ let committed = false;
 /** Tables this script must never touch. */
 const PRESERVED = ["Course", "Schedule", "CourseMaterial", "Content", "Setting"];
 
+
 async function main() {
   console.log(EXECUTE ? "MODE: EXECUTE (destructive)" : "MODE: DRY RUN (nothing will change)");
   console.log(`Host: ${(process.env.DIRECT_URL ?? "").replace(/\/\/[^@]*@/, "//***@") || "(from DATABASE_URL)"}\n`);
 
   // ── Report ──────────────────────────────────────────────────────────────
   const applications = await prisma.application.count();
-  const payments = await prisma.payment.count();
-  const settled = await prisma.payment.findMany({
-    where: { status: "SUCCESS" },
-    select: { amount: true },
+  const settled = await prisma.application.count({
+    where: { status: { in: ["PAID", "CONFIRMED"] } },
   });
-  const settledTotal = settled.reduce((sum, row) => sum + row.amount, 0);
 
   console.log("WILL DELETE");
   console.log(`  Application : ${applications}`);
-  console.log(`  Payment     : ${payments}  (${settled.length} settled, ${settledTotal} ETB of payment records)`);
+  console.log(`    of which settled : ${settled}`);
 
   console.log("\nWILL PRESERVE");
   const preserved = {
@@ -88,7 +86,7 @@ async function main() {
     return;
   }
 
-  if (applications === 0 && payments === 0) {
+  if (applications === 0) {
     console.log("\nNothing to delete — already empty.");
     return;
   }
@@ -104,15 +102,14 @@ async function main() {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     backupPath = path.join(BACKUP_DIR, `registrations-${stamp}.json`);
 
-    const [applicationRows, paymentRows, scheduleRows] = await Promise.all([
+    const [applicationRows, scheduleRows] = await Promise.all([
       prisma.application.findMany(),
-      prisma.payment.findMany(),
       prisma.schedule.findMany({ select: { id: true, group: true, session: true, enrolled: true, availabilityOverride: true } }),
     ]);
     fs.writeFileSync(
       backupPath,
       JSON.stringify(
-        { takenAt: new Date().toISOString(), applications: applicationRows, payments: paymentRows, schedules: scheduleRows },
+        { takenAt: new Date().toISOString(), applications: applicationRows, schedules: scheduleRows },
         null,
         2
       )
@@ -121,21 +118,18 @@ async function main() {
   }
 
   // ── Delete ──────────────────────────────────────────────────────────────
-  // Payment is listed explicitly even though Application cascades to it, so the
-  // intent is readable and the count is verifiable. Schedule.enrolled is NOT a
-  // foreign key and must be reset by hand.
+  // Schedule.enrolled is NOT a foreign key and must be reset by hand.
   const result = await prisma.$transaction(async (tx) => {
-    const deletedPayments = await tx.payment.deleteMany({});
     const deletedApplications = await tx.application.deleteMany({});
     const resetSchedules = await tx.schedule.updateMany({ data: { enrolled: 0 } });
     const resetAvailability = RESET_AVAILABILITY
       ? await tx.schedule.updateMany({ data: { availabilityOverride: null } })
       : null;
-    return { deletedPayments, deletedApplications, resetSchedules, resetAvailability };
+    return { deletedApplications, resetSchedules, resetAvailability };
   });
 
   committed = true;
-  console.log(`\nDeleted ${result.deletedApplications.count} applications, ${result.deletedPayments.count} payments.`);
+  console.log(`\nDeleted ${result.deletedApplications.count} applications.`);
   console.log(`Reset ${result.resetSchedules.count} seat counters to 0.`);
   if (result.resetAvailability) {
     console.log(`Cleared availability overrides on ${result.resetAvailability.count} sessions.`);
@@ -145,7 +139,6 @@ async function main() {
   console.log("\nVERIFICATION");
   const after = {
     Application: await prisma.application.count(),
-    Payment: await prisma.payment.count(),
   };
   const seats = await prisma.schedule.findMany({
     select: { group: true, session: true, enrolled: true, maxSeats: true },
@@ -158,7 +151,6 @@ async function main() {
   }
 
   console.log(`  Application rows : ${after.Application} ${after.Application === 0 ? "OK" : "STILL HAS ROWS"}`);
-  console.log(`  Payment rows     : ${after.Payment} ${after.Payment === 0 ? "OK" : "STILL HAS ROWS"}`);
   console.log(`  Seat counters    : ${seats.every((s) => s.enrolled === 0) ? "all 0 OK" : "NOT ALL ZERO"}`);
   for (const seat of seats) {
     console.log(`    ${seat.group}/${seat.session.padEnd(18)} enrolled=${seat.enrolled}/${seat.maxSeats}`);

@@ -1,4 +1,4 @@
-// Nalik Academy - Prisma Schema
+// Nalik Academy - Prisma Schema (Chapa V2)
 // Database: PostgreSQL (Neon)
 
 generator client {
@@ -7,9 +7,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // ── Website Content (CMS key-value store, public read-only) ─
@@ -27,122 +26,92 @@ model Content {
 
 // ── Courses ───────────────────────────────────────────
 model Course {
-  id               String    @id @default(cuid())
-  title            String
-  description      String
-  price            Int       @default(0)       // price in Birr
-  discountPrice    Int?                         // discounted price in Birr
-  discountLabel    String?                      // e.g. "Opening Offer, 19% off"
-  discountStartAt  DateTime?                    // when the discounted price begins
-  discountEndAt    DateTime?                    // when the discounted price ends
-  active           Boolean   @default(true)     // shown in registration form
-  sortOrder        Int       @default(0)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id              String        @id @default(cuid())
+  title           String
+  description     String
+  price           Int           @default(0) // price in Birr
+  discountPrice   Int?
+  discountLabel   String?
+  discountStartAt DateTime?
+  discountEndAt   DateTime?
+  active          Boolean       @default(true)
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  registrations   Registration[]
 
   @@index([active])
-  applications Application[]
-  materials    CourseMaterial[]
 }
 
 // ── Schedules (shared schedule groups + sessions) ─────
-// Two fixed schedule groups (A and B) each with three sessions (Morning,
-// Afternoon, Evening). Sessions are shared across all courses: a student
-// books a seat in one session of one group for their chosen course.
 model Schedule {
-  id          String   @id @default(cuid())
-  group       String   // "A" or "B"
-  days        String   // "Monday, Wednesday, Friday" or "Tuesday, Thursday, Saturday"
-  session     String   // "Morning Session", "Afternoon Session", "Evening Session"
-  startTime   String   // e.g. "08:00"
-  endTime     String   // e.g. "10:00"
-  startDate   DateTime? // first day of class (shown on confirmation & lookup)
-  maxSeats    Int      @default(15)
-  // Admin availability marking: null = automatic (by seats), true = marked
-  // Available, false = marked Full. Students can only select sessions that
-  // are effectively available.
+  id                   String        @id @default(cuid())
+  group                String        // "A" or "B"
+  days                 String        // "Monday, Wednesday, Friday" or "Tuesday, Thursday, Saturday"
+  session              String        // "Morning Session", "Afternoon Session", "Evening Session"
+  startTime            String        // e.g. "08:00"
+  endTime              String        // e.g. "10:00"
+  startDate            DateTime?
+  maxSeats             Int           @default(15)
   availabilityOverride Boolean?
-  enrolled    Int      @default(0)
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  enrolled             Int           @default(0)
+  active               Boolean       @default(true)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  registrations        Registration[]
 
   @@unique([group, session])
   @@index([active])
-  applications Application[]
-}// ── Registrations (student applications) ──────────────
-// Registration lifecycle: PENDING_PAYMENT → PAID → CONFIRMED
-model Application {
-  id                 String   @id @default(cuid())
-  referenceId        String   @unique // e.g. NA-2026-0001
+}
+
+// ── Registrations (student applications) ──────────────
+// One registration per student per course. Linked to Chapa transactions.
+model Registration {
+  id                 String        @id @default(cuid())
+  referenceId        String        @unique // e.g. NA-2026-A1B2C3
   fullName           String
   email              String
   phone              String
   age                Int
-  courseId            String
-  course             Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  scheduleId          String?
-  schedule            Schedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
-  previousExperience  String   @default("")
-  motivation          String   @default("")
-  status              String   @default("PENDING_PAYMENT") // PENDING_PAYMENT, PAID, CONFIRMED
-  paidAt              DateTime? // set when an admin marks the registration as paid
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  courseId           String
+  course             Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  scheduleId         String?
+  schedule           Schedule?     @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  previousExperience String        @default("")
+  motivation         String        @default("")
+  status             String        @default("PENDING") // PENDING, PAID, CONFIRMED
+  paidAt             DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
-  payment Payment?
+  transactions       Transaction[]
 
   @@unique([email, courseId])
   @@index([status])
+  @@index([referenceId])
 }
 
-// ── Payments (Chapa v2 hosted checkout) ────────────────────
-// One row per registration. The row is created as PENDING alongside the
-// registration and is only ever moved to SUCCESS by a server-side
-// verification or webhook — never by a browser callback.
-//
-// amount is minted server-side from the course price, so the value we expect
-// is always available to re-check against what Chapa reports.
-//
-// Three columns keep their pre-v2 database names via @map. They were renamed
-// in this model, and renaming in Prisma without @map would make `prisma db
-// push` drop the column and add a new one — wiping the merchant reference,
-// method and fee of every payment already collected. Mapping keeps the data.
-model Payment {
-  id                String      @id @default(cuid())
-  applicationId     String      @unique
-  application       Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  amount            Int // amount in the payment currency, calculated server-side
-  currency          String      @default("ETB")
-  merchantReference String?     @unique @map("txRef") // our unique reference per attempt
-  chapaReference    String? // Chapa's own payment reference, from verify/webhook
-  status            String      @default("PENDING") // PENDING, SUCCESS, FAILED, CANCELLED, INCOMPLETE
-  paymentMethod     String?     @map("method") // telebirr, cbebirr, card, …
-  serviceFee        Int?        @map("charge") // fee charged by Chapa
-  // Retained from the pre-v2 model purely as an audit trail. No longer written.
-  rawWebhook        Json?
-  notes             String?
-  paidAt            DateTime? // set when the payment reaches SUCCESS
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+// ── Transactions (Chapa V2 payments) ──────────────────
+// One registration can have multiple payment attempts. Only one SUCCESS.
+model Transaction {
+  id                 String        @id @default(cuid())
+  registrationId     String
+  registration       Registration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  amount             Int           // amount in minor units (cents) — always from course price
+  currency           String        @default("ETB")
+  txRef              String        @unique // our merchant reference (tx_ref)
+  chapaReference     String?       @unique // Chapa's reference from webhook/verify
+  status             String        @default("PENDING") // PENDING, SUCCESS, FAILED, CANCELLED, INCOMPLETE
+  paymentMethod      String?       // telebirr, cbebirr, card, bank_transfer, etc.
+  serviceFee         Int?          // fee charged by Chapa
+  rawWebhook         Json?         // audit trail
+  paidAt             DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
   @@index([status])
   @@index([chapaReference])
-}
-
-// ── Course Materials (downloadable content gated by payment) ───
-model CourseMaterial {
-  id        String   @id @default(cuid())
-  courseId  String
-  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  title     String
-  fileUrl   String
-  fileType  String   // e.g. "pdf", "video", "zip"
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([courseId])
+  @@index([registrationId])
 }
 
 // ── Settings (key-value store) ────────────────────────

@@ -40,18 +40,6 @@ export async function GET(request: NextRequest) {
           schedule: {
             select: { id: true, group: true, session: true, days: true, startTime: true, endTime: true },
           },
-          payment: {
-            select: {
-              id: true,
-              amount: true,
-              currency: true,
-              status: true,
-              paymentMethod: true,
-              merchantReference: true,
-              chapaReference: true,
-              paidAt: true,
-            },
-          },
         },
         orderBy: { createdAt: "desc" },
         skip,
@@ -63,35 +51,25 @@ export async function GET(request: NextRequest) {
     const statusCounts: Record<string, number> = {};
     for (const c of counts) statusCounts[c.status] = c._count;
 
-    // Merge the real Chapa Payment row (when one exists) with the payment-shaped
-    // view derived from the registration status. The derived view stays
-    // authoritative for the paid/unpaid flag (an admin can mark a registration
-    // PAID without a Chapa transaction), while the Payment row supplies the
-    // reconciliation details — transaction reference, Chapa reference, method,
-    // and amount actually charged — that the admin list previously dropped.
+    // There is no payment table: the paid/unpaid flag is derived entirely from
+    // the registration status, which an admin sets by hand.
     const toIso = (value: Date | null | undefined): string | null =>
       value ? value.toISOString() : null;
 
-    const withPayment = applications.map(({ course, paidAt, payment, ...application }) => {
+    const withPayment = applications.map(({ course, paidAt, ...application }) => {
       const derived = derivePayment({
         registrationStatus: application.status,
         paidAt,
         course,
       });
-      const paid = derived.status === "SUCCESS" || payment?.status === "SUCCESS";
 
       return {
         ...application,
         payment: {
-          amount: payment?.amount ?? derived.amount,
-          currency: payment?.currency ?? derived.currency,
-          // A settled registration never reads as pending, even when the
-          // Payment row is missing or stale.
-          status: paid ? "SUCCESS" : payment?.status ?? derived.status,
-          method: payment?.paymentMethod ?? null,
-          txRef: payment?.merchantReference ?? null,
-          chapaReference: payment?.chapaReference ?? null,
-          paidAt: toIso(payment?.paidAt ?? paidAt),
+          amount: derived.amount,
+          currency: derived.currency,
+          status: derived.status,
+          paidAt: toIso(paidAt),
         },
       };
     });

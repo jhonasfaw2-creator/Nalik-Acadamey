@@ -116,7 +116,7 @@ const manual2 = await fetch(`${BASE}/api/admin/registrations/manual`, {
 const manual2Data = await manual2.json().catch(() => ({}));
 check("manual PENDING enrollment created", manual2.status === 201, JSON.stringify(manual2Data));
 const dbApp2 = await prisma.application.findUnique({ where: { referenceId: manual2Data?.application?.referenceId } });
-check("pending manual stays PENDING_PAYMENT / PENDING", dbApp2?.status === "PENDING_PAYMENT" && dbApp2?.paidAt == null);
+check("pending manual stays PENDING / PENDING", dbApp2?.status === "PENDING" && dbApp2?.paidAt == null);
 
 const dup = await fetch(`${BASE}/api/admin/registrations/manual`, {
   method: "POST",

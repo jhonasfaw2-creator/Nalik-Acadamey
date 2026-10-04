@@ -9,10 +9,10 @@ export const revalidate = 0;
 
 // POST /api/registrations — create a registration.
 //
-// The amount is ALWAYS calculated server-side from the course in the database
-// (discount price when active, otherwise list price). The browser never sends a
-// price. The registration is created as PENDING_PAYMENT; an admin moves it to
-// PAID/CONFIRMED when payment is settled.
+// There is no payment provider and no payment step: the registration is created
+// as PENDING and an admin moves it to PAID/CONFIRMED once payment is settled
+// out of band. The amount reported back is read from the course in the
+// database; the browser never sends a price.
 export async function POST(request: NextRequest) {
   try {
     const body = await readJson(request);
@@ -90,41 +90,19 @@ export async function POST(request: NextRequest) {
 
     let application: { id: string; referenceId: string };
     try {
-      // Application and its Payment row are created together. The Payment row is
-      // what every later step keys off — the admin list, the receipt, the
-      // webhook, the return page — so it must exist from the moment the
-      // registration does, not only once somebody clicks "pay". Creating it
-      // lazily in the checkout route left registrations with no payment record
-      // at all, which the admin list could only paper over with a guess.
-      application = await prisma.$transaction(async (tx) => {
-        const created = await tx.application.create({
-          data: {
-            referenceId,
-            fullName,
-            email: normalizedEmail,
-            phone,
-            age,
-            courseId,
-            scheduleId,
-            previousExperience: previousExperience || "",
-            motivation: motivation || "",
-            status: "PENDING_PAYMENT",
-          },
-        });
-        // A zero-priced course has nothing to charge, so it gets no Payment row;
-        // an admin confirms those by hand.
-        if (paymentAmount > 0) {
-          await tx.payment.create({
-            data: {
-              applicationId: created.id,
-              amount: paymentAmount,
-              currency: "ETB",
-              merchantReference: referenceId,
-              status: "PENDING",
-            },
-          });
-        }
-        return created;
+      application = await prisma.application.create({
+        data: {
+          referenceId,
+          fullName,
+          email: normalizedEmail,
+          phone,
+          age,
+          courseId,
+          scheduleId,
+          previousExperience: previousExperience || "",
+          motivation: motivation || "",
+          status: "PENDING",
+        },
       });
     } catch (error) {
       // Two concurrent submissions can both pass the findUnique check above;

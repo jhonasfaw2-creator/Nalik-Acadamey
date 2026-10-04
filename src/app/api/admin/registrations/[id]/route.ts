@@ -7,7 +7,7 @@ import type { Prisma } from "@prisma/client";
 // reassign course + schedule.
 //
 // Reassignment also moves the paid state: `paidAt` is cleared when a paid or
-// confirmed registration is sent back to PENDING_PAYMENT, and stamped when it
+// confirmed registration is sent back to PENDING, and stamped when it
 // is moved to PAID or CONFIRMED, so the paid timestamp stays truthful.
 //
 // Schedule reassignment keeps seat bookkeeping correct: when the schedule
@@ -32,7 +32,7 @@ export async function PUT(
       scheduleId?: unknown;
     };
 
-    if (status !== undefined && (typeof status !== "string" || !["PENDING_PAYMENT", "PAID", "CONFIRMED"].includes(status))) {
+    if (status !== undefined && (typeof status !== "string" || !["PENDING", "PAID", "CONFIRMED"].includes(status))) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
     if (courseId !== undefined && (typeof courseId !== "string" || !courseId)) {

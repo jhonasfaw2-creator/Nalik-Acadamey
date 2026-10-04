@@ -37,7 +37,6 @@ export async function GET(
       select: {
         courseId: true,
         status: true,
-        payment: { select: { status: true } },
       },
     });
 
@@ -52,12 +51,10 @@ export async function GET(
       );
     }
 
-    const isPaid =
-      application.status === "PAID" ||
-      application.status === "CONFIRMED" ||
-      application.payment?.status === "SUCCESS";
+    const isConfirmed =
+      application.status === "PAID" || application.status === "CONFIRMED";
 
-    if (!isPaid) {
+    if (!isConfirmed) {
       return NextResponse.json(
         { error: "Course materials are only available for paid registrations." },
         { status: 409 }

@@ -23,8 +23,6 @@ export interface ReceiptData {
   amount: number | null;
   currency: string | null;
   paymentStatus: string;
-  merchantReference: string | null;
-  chapaReference: string | null;
   paidAt: string | null;
 }
 
@@ -226,12 +224,6 @@ export async function buildReceiptPdf(data: ReceiptData): Promise<Uint8Array> {
     ...(data.startDate ? [{ label: "Start date", value: formatDate(data.startDate) }] : []),
     { label: "Amount paid", value: formatBirr(data.amount, data.currency) },
     { label: "Payment status", value: data.paymentStatus === "SUCCESS" ? "PAID" : data.paymentStatus },
-    ...(data.merchantReference
-      ? [{ label: "Merchant reference", value: data.merchantReference, mono: true }]
-      : []),
-    ...(data.chapaReference
-      ? [{ label: "Transaction reference", value: data.chapaReference, mono: true }]
-      : []),
     { label: "Confirmed on", value: formatStamp(data.paidAt) },
     { label: "Issued", value: formatStamp(new Date().toISOString()) },
   ];

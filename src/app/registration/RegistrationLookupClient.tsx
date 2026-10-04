@@ -11,7 +11,6 @@ import {
   Download,
 } from "lucide-react";
 import RegistrationDetails from "@/components/RegistrationDetails";
-import CheckoutButton from "@/components/checkout-button";
 import type { RegistrationSummary } from "@/lib/registration";
 
 type LookupState = "idle" | "loading" | "found" | "error";
@@ -133,7 +132,7 @@ export default function RegistrationLookupClient() {
               <div>
                 <p className="text-sm font-medium text-red-700">{error}</p>
                 <p className="mt-1 text-xs text-red-600/80">
-                  Your registration ID was shown after you registered and is in your payment confirmation (format: NA-YYYY-XXXXXX).
+                  Your registration ID was shown after you registered (format: NA-YYYY-XXXXXX).
                 </p>
               </div>
             </div>
@@ -146,11 +145,9 @@ export default function RegistrationLookupClient() {
               {unpaid && (
                 <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 px-4 py-4">
                   <p className="text-sm text-amber-700">
-                    We haven&apos;t confirmed this payment yet. You can start or restart the payment below.
+                    We haven&apos;t confirmed your registration yet. We&apos;ll contact you with the
+                    payment details once a place is secured.
                   </p>
-                  <div className="mt-3 border-t border-amber-200 pt-3">
-                    <CheckoutButton referenceId={registration.referenceId} />
-                  </div>
                 </div>
               )}
 

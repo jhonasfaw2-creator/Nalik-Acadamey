@@ -20,22 +20,19 @@ interface Registration {
     amount: number;
     currency: string;
     status: string;
-    method: string | null;
-    txRef: string | null;
-    chapaReference: string | null;
     paidAt: string | null;
   } | null;
 }
 
 const STATUS_OPTIONS = [
   { value: "", label: "All" },
-  { value: "PENDING_PAYMENT", label: "Pending Payment" },
+  { value: "PENDING", label: "Pending" },
   { value: "PAID", label: "Paid" },
   { value: "CONFIRMED", label: "Confirmed" },
 ];
 
 const STATUS_COLORS: Record<string, string> = {
-  PENDING_PAYMENT: "bg-yellow-100 text-yellow-700",
+  PENDING: "bg-yellow-100 text-yellow-700",
   PAID: "bg-blue-100 text-blue-700",
   CONFIRMED: "bg-green-100 text-green-700",
 };
@@ -342,15 +339,6 @@ export default function AdminRegistrations() {
                     {reg.payment ? (
                       <div>
                         <p className="text-sm font-medium text-navy">{formatBirr(reg.payment.amount)}</p>
-                        {reg.payment.txRef && (
-                          <p className="text-xs text-gray-400">tx_ref: {reg.payment.txRef}</p>
-                        )}
-                        {reg.payment.chapaReference && (
-                          <p className="text-xs text-gray-400">chapa: {reg.payment.chapaReference}</p>
-                        )}
-                        {reg.payment.method && (
-                          <p className="text-xs text-gray-400">{reg.payment.method}</p>
-                        )}
                         <div className="mt-1 flex items-center gap-1.5">
                           <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${PAYMENT_COLORS[reg.payment.status] || ""}`}>
                             {reg.payment.status === "SUCCESS" ? "PAID" : reg.payment.status}
@@ -471,7 +459,7 @@ export default function AdminRegistrations() {
                 </div>
                 <h2 className="text-lg font-bold text-navy">Student added</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  {created.fullName} is enrolled{created.status === "PAID" ? " and marked as paid" : " as pending payment"}.
+                  {created.fullName} is enrolled{created.status === "PAID" ? " and marked as paid" : " and awaiting payment"}.
                 </p>
                 <div className="mx-auto mt-5 max-w-xs rounded-lg bg-warm-white px-4 py-3 text-left">
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Registration ID</p>

@@ -46,16 +46,6 @@ export async function GET(request: NextRequest) {
             startDate: true,
           },
         },
-        payment: {
-          select: {
-            amount: true,
-            currency: true,
-            status: true,
-            merchantReference: true,
-            chapaReference: true,
-            paidAt: true,
-          },
-        },
       },
     });
 
@@ -64,9 +54,7 @@ export async function GET(request: NextRequest) {
     }
 
     const paid =
-      application.status === "PAID" ||
-      application.status === "CONFIRMED" ||
-      application.payment?.status === "SUCCESS";
+      application.status === "PAID" || application.status === "CONFIRMED";
 
     if (!paid) {
       return NextResponse.json(
@@ -76,9 +64,7 @@ export async function GET(request: NextRequest) {
     }
 
     const course = application.course;
-    const amount =
-      application.payment?.amount ??
-      (course ? course.discountPrice ?? course.price : null);
+    const amount = course ? course.discountPrice ?? course.price : null;
 
     const pdf = await buildReceiptPdf({
       referenceId: application.referenceId,
@@ -93,11 +79,9 @@ export async function GET(request: NextRequest) {
         ? application.schedule.startDate.toISOString()
         : null,
       amount,
-      currency: application.payment?.currency ?? "ETB",
+      currency: "ETB",
       paymentStatus: "SUCCESS",
-      merchantReference: application.payment?.merchantReference ?? null,
-      chapaReference: application.payment?.chapaReference ?? null,
-      paidAt: (application.payment?.paidAt ?? application.paidAt)?.toISOString() ?? null,
+      paidAt: application.paidAt?.toISOString() ?? null,
     });
 
     return new NextResponse(Buffer.from(pdf), {
