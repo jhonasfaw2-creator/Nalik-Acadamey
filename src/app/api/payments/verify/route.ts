@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkAndIncrement } from "@/lib/rateLimit";
 import { verifyPayment, ChapaApiError, ChapaConfigError } from "@/lib/payments/chapa";
-import { resolveChapaReference } from "@/lib/payments/resolve";
+import {
+  verifyWithRecovery,
+  UnresolvableReferenceError,
+} from "@/lib/payments/resolve";
 import { applyPaymentResult } from "@/lib/payments/apply";
 
 export const dynamic = "force-dynamic";
@@ -177,35 +180,38 @@ async function handle(request: NextRequest) {
       });
     }
 
-    // Prefer Chapa's own reference: /v2/payments/{reference}/verify resolves
-    // Chapa references only, so a merchant_reference there always 404s. When
-    // the stored reference is missing it is recovered from the transaction list
-    // and persisted, rather than falling back to the merchant reference.
-    const resolution = await resolveChapaReference({
-      id: payment.id,
-      merchantReference: payment.merchantReference,
-      chapaReference: payment.chapaReference,
-    });
-    const verifyReference = resolution.reference;
-
-    // Chapa could not be reached — this is a transient condition, not a verdict.
-    if (!verifyReference && resolution.providerUnavailable) {
-      return pendingResponse(target, {
-        warning: "Verification is temporarily unavailable. Retrying.",
-        code: "CHAPA_VERIFY_RETRYING",
-      });
-    }
-
-    // No Chapa reference exists for this registration: checkout was never
-    // initialized, or Chapa has no transaction under our reference at all.
-    if (!verifyReference) {
-      return pendingResponse(target, { code: "AWAITING_REFERENCE" });
-    }
-
-    let verification;
+    // /v2/payments/{reference}/verify resolves Chapa *transaction* references
+    // only, so a merchant_reference there always 404s and a hosted-session id is
+    // rejected outright. verifyWithRecovery resolves the reference (recovering
+    // and persisting it from the transaction list when needed) and re-resolves
+    // once if the stored value turns out not to be verifiable.
+    let verification: Awaited<ReturnType<typeof verifyPayment>>;
+    let usedReference: string;
+    let recoveredReference = false;
     try {
-      verification = await verifyPayment(verifyReference);
+      const outcome = await verifyWithRecovery(
+        {
+          id: payment.id,
+          merchantReference: payment.merchantReference,
+          chapaReference: payment.chapaReference,
+        },
+        verifyPayment
+      );
+      verification = outcome.verification;
+      usedReference = outcome.reference;
+      recoveredReference = outcome.recovered;
     } catch (error) {
+      if (error instanceof UnresolvableReferenceError) {
+        return pendingResponse(target, {
+          ...(error.providerUnavailable
+            ? {
+                warning: "Verification is temporarily unavailable. Retrying.",
+                code: "CHAPA_VERIFY_RETRYING",
+              }
+            : { code: "AWAITING_REFERENCE" }),
+        });
+      }
+
       if (error instanceof ChapaConfigError) {
         console.error("[verify] Chapa configuration error:", {
           referenceId: referenceId || undefined,
@@ -246,6 +252,13 @@ async function handle(request: NextRequest) {
         );
       }
       throw error;
+    }
+
+    if (recoveredReference) {
+      console.info("[verify] Recovered the Chapa reference from the transaction list", {
+        referenceId: target.referenceId,
+        usedReference,
+      });
     }
 
     // The verified transaction must belong to this registration. A mismatch

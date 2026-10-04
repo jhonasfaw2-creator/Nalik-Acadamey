@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { findTransactions, ChapaApiError } from "@/lib/payments/chapa";
-
 // ── Chapa reference resolution ────────────────────────────────────────────
 //
 // `/v2/payments/{reference}/verify` resolves *Chapa* references only. Handing it
@@ -107,4 +106,70 @@ export async function resolveChapaReference(
   }
 
   return { reference, recovered: true, providerUnavailable: false };
+}
+
+/**
+ * Verifies a payment, recovering once if the stored reference turns out not to
+ * be verifiable.
+ *
+ * The reference in `checkout_url` is a hosted-**session** id. Chapa accepts it
+ * on `/payments/hosted`, but `/verify` only resolves transaction references and
+ * rejects a session id with 400/404. Because a non-null `chapaReference`
+ * short-circuits resolution, that stored value would otherwise strand a paid
+ * payment forever.
+ *
+ * So: resolve, verify, and on a 400/404 discard the stored reference, look the
+ * real one up by merchant reference, persist it, and verify again. Any other
+ * error propagates untouched.
+ */
+export async function verifyWithRecovery<T>(
+  payment: ResolvablePayment,
+  verify: (reference: string) => Promise<T>
+): Promise<{ verification: T; reference: string; recovered: boolean }> {
+  const first = await resolveChapaReference(payment);
+  if (!first.reference) {
+    throw new UnresolvableReferenceError(first.providerUnavailable);
+  }
+
+  try {
+    return { verification: await verify(first.reference), reference: first.reference, recovered: first.recovered };
+  } catch (error) {
+    const referenceRejected =
+      error instanceof ChapaApiError &&
+      (error.httpStatus === 400 || error.httpStatus === 404);
+    // Only worth retrying if the stored reference is what failed.
+    if (!referenceRejected || first.reference !== payment.chapaReference?.trim()) {
+      throw error;
+    }
+
+    console.warn("[resolve-chapa-reference] Stored reference is not verifiable, recovering", {
+      stored: first.reference,
+    });
+
+    const recovered = await resolveChapaReference({
+      ...payment,
+      chapaReference: null,
+    });
+    if (!recovered.reference) throw error;
+
+    return {
+      verification: await verify(recovered.reference),
+      reference: recovered.reference,
+      recovered: true,
+    };
+  }
+}
+
+/** Thrown when no Chapa reference could be found or recovered for a payment. */
+export class UnresolvableReferenceError extends Error {
+  readonly providerUnavailable: boolean;
+  constructor(providerUnavailable: boolean) {
+    super(
+      providerUnavailable
+        ? "Chapa could not be reached while looking up this payment."
+        : "No Chapa transaction exists for this registration."
+    );
+    this.name = "UnresolvableReferenceError";
+    this.providerUnavailable = providerUnavailable;
+  }
 }

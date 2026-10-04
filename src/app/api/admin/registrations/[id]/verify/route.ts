@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyPayment, ChapaApiError, ChapaConfigError } from "@/lib/payments/chapa";
-import { resolveChapaReference } from "@/lib/payments/resolve";
+import { verifyWithRecovery, UnresolvableReferenceError } from "@/lib/payments/resolve";
 import { applyPaymentResult } from "@/lib/payments/apply";
 
 export const dynamic = "force-dynamic";
@@ -67,23 +67,43 @@ export async function POST(
       });
     }
 
-    // /verify resolves Chapa references only, so recover the reference from the
-    // transaction list when it was never stored rather than handing Chapa our
-    // merchant reference and getting a guaranteed 404 back.
-    const resolution = await resolveChapaReference({
-      id: payment.id,
-      merchantReference: payment.merchantReference,
-      chapaReference: payment.chapaReference,
-    });
-
-    if (!resolution.reference) {
-      const message = resolution.providerUnavailable
-        ? "Chapa could not be reached. Try again in a moment."
-        : "Chapa has no transaction for this registration yet. If the student just paid, ask them to retry shortly.";
-      return NextResponse.json({ error: message }, { status: resolution.providerUnavailable ? 502 : 404 });
+    // /verify resolves Chapa transaction references only, so recover the reference
+    // from the transaction list when it was never stored or is not verifiable,
+    // rather than handing Chapa our merchant reference and getting a guaranteed
+    // 404 back.
+    let verification: Awaited<ReturnType<typeof verifyPayment>>;
+    let usedReference: string;
+    try {
+      const outcome = await verifyWithRecovery(
+        {
+          id: payment.id,
+          merchantReference: payment.merchantReference,
+          chapaReference: payment.chapaReference,
+        },
+        verifyPayment
+      );
+      verification = outcome.verification;
+      usedReference = outcome.reference;
+    } catch (error) {
+      if (error instanceof UnresolvableReferenceError) {
+        return NextResponse.json(
+          {
+            error: error.providerUnavailable
+              ? "Chapa could not be reached. Try again in a moment."
+              : "Chapa has no transaction for this registration yet. If the student just paid, ask them to retry shortly.",
+          },
+          { status: error.providerUnavailable ? 502 : 404 }
+        );
+      }
+      throw error;
     }
 
-    const verification = await verifyPayment(resolution.reference);
+    if (usedReference !== payment.chapaReference) {
+      console.info("[admin-verify] Recovered the Chapa reference from the transaction list", {
+        referenceId: application.referenceId,
+        usedReference,
+      });
+    }
 
     const applied = await applyPaymentResult(payment.id, {
       status: verification.status,

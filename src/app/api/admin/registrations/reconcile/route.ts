@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyPayment, ChapaApiError, ChapaConfigError } from "@/lib/payments/chapa";
-import { resolveChapaReference } from "@/lib/payments/resolve";
+import { verifyWithRecovery, UnresolvableReferenceError } from "@/lib/payments/resolve";
 import { applyPaymentResult } from "@/lib/payments/apply";
 
 export const dynamic = "force-dynamic";
@@ -59,22 +59,25 @@ async function reconcileOne(paymentId: string): Promise<ReconcileResult> {
     return { referenceId, outcome: "already_settled" };
   }
 
-  const resolution = await resolveChapaReference({
-    id: payment.id,
-    merchantReference: payment.merchantReference,
-    chapaReference: payment.chapaReference,
-  });
-
-  if (!resolution.reference) {
-    return resolution.providerUnavailable
-      ? { referenceId, outcome: "unavailable", detail: "Chapa could not be reached" }
-      : { referenceId, outcome: "not_found", detail: "No Chapa transaction for this reference" };
-  }
-
-  let verification;
+  let verification: Awaited<ReturnType<typeof verifyPayment>>;
+  let usedReference: string;
   try {
-    verification = await verifyPayment(resolution.reference);
+    const outcome = await verifyWithRecovery(
+      {
+        id: payment.id,
+        merchantReference: payment.merchantReference,
+        chapaReference: payment.chapaReference,
+      },
+      verifyPayment
+    );
+    verification = outcome.verification;
+    usedReference = outcome.reference;
   } catch (error) {
+    if (error instanceof UnresolvableReferenceError) {
+      return error.providerUnavailable
+        ? { referenceId, outcome: "unavailable", detail: "Chapa could not be reached" }
+        : { referenceId, outcome: "not_found", detail: "No Chapa transaction for this reference" };
+    }
     if (error instanceof ChapaApiError) {
       if (error.httpStatus === 404) {
         return { referenceId, outcome: "not_found", detail: "Chapa has no such transaction" };
@@ -89,7 +92,7 @@ async function reconcileOne(paymentId: string): Promise<ReconcileResult> {
 
   const applied = await applyPaymentResult(payment.id, {
     status: verification.status,
-    chapaReference: verification.chapaReference ?? resolution.reference,
+    chapaReference: verification.chapaReference ?? usedReference,
     merchantReference: verification.merchantReference,
     amount: verification.amount,
     currency: verification.currency,

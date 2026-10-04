@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Loader2, Calendar, CreditCard, AlertCircle } from "lucide-react";
+import { X, Loader2, Calendar, CreditCard, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface CourseOption {
   id: string;
@@ -82,6 +82,10 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   // handoff re-attempts only the payment instead of creating a second
   // registration (which the (email, courseId) unique index would reject).
   const [registeredRef, setRegisteredRef] = useState("");
+  const [leavingForChapa, setLeavingForChapa] = useState<{
+    checkoutUrl: string;
+    referenceId: string;
+  } | null>(null);
 
   // ── Load courses + schedules ──────────────────────────────
   useEffect(() => {
@@ -263,8 +267,13 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         return;
       }
 
-      // Chapa's hosted checkout owns the page from here.
-      window.location.href = payData.checkout_url;
+      // Chapa's hosted checkout does NOT bring the customer back to us — its
+      // receipt page has no return link at all (verified against the live test
+      // gateway). So before handing over the page we show the registration ID
+      // and how to come back; otherwise a paying customer is stranded on
+      // Chapa's receipt with no route to their confirmation or receipt.
+      setLeavingForChapa({ checkoutUrl: payData.checkout_url, referenceId });
+      setIsPaying(false);
     } catch {
       setFormError("Something went wrong connecting to the payment service. Please try again.");
       setIsPaying(false);
@@ -528,6 +537,63 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
             </div>
         </div>
       </div>
+
+      {/* Handover screen shown before we send the customer to Chapa. */}
+      {leavingForChapa && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/60 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="chapa-handover-title"
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-50">
+              <CheckCircle2 size={26} className="text-green-600" />
+            </div>
+            <h3 id="chapa-handover-title" className="mt-4 text-center text-xl font-bold text-navy">
+              Registration confirmed
+            </h3>
+
+            <div className="mt-4 rounded-xl border border-dashed border-gold bg-[#fffaf1] px-4 py-3 text-center">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">
+                Your registration ID
+              </p>
+              <p className="mt-1 select-all font-mono text-xl font-bold tracking-wide text-navy">
+                {leavingForChapa.referenceId}
+              </p>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-[13px] font-semibold text-amber-900">Save this ID before you pay</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-amber-800">
+                After paying on Chapa you will stay on Chapa&apos;s own receipt page — it does not
+                send you back here. To get your confirmation and PDF receipt, go to{" "}
+                <span className="font-semibold">nalik-acadamey.vercel.app/registration</span> and
+                enter the ID above.
+              </p>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-2.5 sm:flex-row-reverse">
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = leavingForChapa.checkoutUrl;
+                }}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gold px-5 py-3.5 text-base font-bold text-navy transition-all duration-200 hover:bg-gold-hover"
+              >
+                <CreditCard size={18} /> Continue to Chapa
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeavingForChapa(null)}
+                className="flex-1 rounded-xl border border-navy/15 px-5 py-3.5 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
+              >
+                Not yet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </dialog>
   );
 }
