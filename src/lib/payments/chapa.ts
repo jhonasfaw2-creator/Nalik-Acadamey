@@ -146,9 +146,10 @@ export interface InitiatePaymentInput {
    */
   return_url?: string;
   /**
-   * Server-to-server webhook URL for this transaction. Chapa will POST the
-   * payment event to this URL in addition to (or instead of) the dashboard-
-   * configured webhook endpoint.
+   * Server-to-server webhook URL for this transaction. Chapa's hosted checkout
+   * requires it together with return_url — without both, checkout fails with a
+   * "CSRF token mismatch" because Chapa cannot establish a valid redirect /
+   * callback session.
    */
   callback_url?: string;
 }
@@ -335,17 +336,19 @@ export async function initiatePayment(
     throw new ChapaConfigError("Chapa merchant_reference is required.");
   }
 
+  const initBody = {
+    amount: input.amount,
+    currency: input.currency ?? DEFAULT_CURRENCY,
+    merchant_reference: input.merchantReference,
+    customer: input.customer,
+    ...(input.meta ? { meta: input.meta } : {}),
+    ...(input.return_url ? { return_url: input.return_url } : {}),
+    ...(input.callback_url ? { callback_url: input.callback_url } : {}),
+  };
+
   const data = await chapaFetch<Record<string, unknown>>("/payments/hosted", {
     method: "POST",
-    body: {
-      amount: input.amount,
-      currency: input.currency ?? DEFAULT_CURRENCY,
-      merchant_reference: input.merchantReference,
-      customer: input.customer,
-      ...(input.meta ? { meta: input.meta } : {}),
-      ...(input.return_url ? { return_url: input.return_url } : {}),
-      ...(input.callback_url ? { callback_url: input.callback_url } : {}),
-    },
+    body: initBody,
   });
 
   const checkoutUrl = readString(data, "checkout_url");

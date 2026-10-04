@@ -54,6 +54,15 @@ export default function CheckoutButton({
         return;
       }
 
+      // Persist the reference before navigating away. The Chapa dashboard
+      // return URL may not carry query params, so /payment/complete reads
+      // this as a fallback to identify which payment just completed.
+      try {
+        sessionStorage.setItem("chapa_pending_ref", referenceId.trim().toUpperCase());
+      } catch {
+        // sessionStorage unavailable (private browsing, etc.) — the URL
+        // params from Chapa or the webhook will still settle the payment.
+      }
       onRedirecting?.();
       window.location.href = data.checkout_url;
     } catch {

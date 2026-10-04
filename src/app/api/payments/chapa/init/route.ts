@@ -164,21 +164,21 @@ export async function POST(request: NextRequest) {
 
     const { firstName, lastName } = splitName(application.fullName);
 
-    // Derive the app origin from the request so the URLs work both on Vercel
-    // preview deployments and on the canonical production domain. The
-    // NEXT_PUBLIC_APP_URL env var is used as a fallback for edge cases where
-    // the Host header is unreliable (e.g. direct lambda invocations).
-    const host = request.headers.get("host") ?? "";
-    const proto = request.headers.get("x-forwarded-proto") ?? "https";
-    const origin = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "")
-      || `${proto}://${host}`;
+    // Prefer the configured canonical domain, falling back to the production
+    // alias. The Host header on Vercel can be a preview deployment URL (e.g.
+    // nalikacadamey-abc123.vercel.app) which Chapa would then post webhooks to
+    // that specific deployment rather than the live alias. Always use a stable
+    // domain so both browser redirects and server callbacks are consistent.
+    const origin =
+      process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+      "https://nalik-acadamey.vercel.app";
 
-    // return_url  — where Chapa redirects the browser after checkout.
-    //               We pass referenceId so PaymentCompleteClient can poll
-    //               /api/payments/verify immediately without guessing the ID.
-    // callback_url — server-to-server webhook for this transaction; Chapa will
-    //               POST the payment event here in addition to the dashboard
-    //               webhook endpoint.
+    // return_url  — where Chapa redirects the browser after checkout. We pass
+    //               referenceId so PaymentCompleteClient can verify immediately
+    //               on landing without parsing tx_ref or chapa_reference.
+    // callback_url — per-transaction server-to-server webhook target. Chapa's
+    //               hosted checkout requires it (with return_url) to complete
+    //               the flow without a CSRF token mismatch.
     const hosted = await initiatePayment({
       amount: payment.amount,
       merchantReference,
@@ -222,10 +222,20 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
+    // Set a short-lived cookie with the merchant reference so /payment/complete
+    // can identify the payment even when Chapa's redirect URL carries no params.
+    const initResponse = NextResponse.json({
       checkout_url: hosted.checkout_url,
       merchantReference,
     });
+    initResponse.cookies.set("na_pending_ref", merchantReference, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60, // 1 hour — enough for any checkout session
+    });
+    return initResponse;
   } catch (error) {
     if (error instanceof ChapaApiError) {
       console.error("[chapa-init] Chapa rejected hosted payment initialization:", {

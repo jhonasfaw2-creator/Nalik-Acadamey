@@ -75,6 +75,8 @@ export default function AdminRegistrations() {
   const [schedules, setSchedules] = useState<ScheduleOption[]>([]);
   const [reassigning, setReassigning] = useState<string | null>(null);
   const [reassignError, setReassignError] = useState("");
+  const [verifying, setVerifying] = useState<string | null>(null);
+  const [verifyError, setVerifyError] = useState("");
 
   // ── Add Student (manual enrollment) state ──
   const [addOpen, setAddOpen] = useState(false);
@@ -177,6 +179,27 @@ export default function AdminRegistrations() {
     }
   };
 
+  // Ask Chapa directly whether a pending payment actually went through, and
+  // settle it if so. This rescues payments the browser redirect or webhook
+  // never reported.
+  const verifyPayment = async (id: string) => {
+    setVerifying(id);
+    setVerifyError("");
+    try {
+      const res = await fetch(`/api/admin/registrations/${id}/verify`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setVerifyError(data.error || "Could not verify this payment with Chapa.");
+      } else {
+        load();
+      }
+    } catch {
+      setVerifyError("Connection error while verifying the payment.");
+    } finally {
+      setVerifying(null);
+    }
+  };
+
   // ── Manual enrollment submit ──
   const selectedSchedule = schedules.find((s) => s.id === form.scheduleId);
   const scheduleDisabled = (s: ScheduleOption) => !s.active || s.isFull;
@@ -252,6 +275,13 @@ export default function AdminRegistrations() {
         <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 flex items-center justify-between">
           <span>{error}</span>
           <button onClick={load} className="rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200">Retry</button>
+        </div>
+      )}
+
+      {verifyError && (
+        <div className="mt-4 flex items-center justify-between rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          <span>{verifyError}</span>
+          <button onClick={() => setVerifyError("")} className="rounded-md bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-200">Dismiss</button>
         </div>
       )}
 
@@ -343,9 +373,28 @@ export default function AdminRegistrations() {
                         {reg.payment.txRef && (
                           <p className="text-xs text-gray-400">tx_ref: {reg.payment.txRef}</p>
                         )}
-                        <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${PAYMENT_COLORS[reg.payment.status] || ""}`}>
-                          {reg.payment.status}
-                        </span>
+                        {reg.payment.chapaReference && (
+                          <p className="text-xs text-gray-400">chapa: {reg.payment.chapaReference}</p>
+                        )}
+                        {reg.payment.method && (
+                          <p className="text-xs text-gray-400">{reg.payment.method}</p>
+                        )}
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${PAYMENT_COLORS[reg.payment.status] || ""}`}>
+                            {reg.payment.status}
+                          </span>
+                          {reg.payment.status === "PENDING" && (reg.payment.txRef || reg.payment.chapaReference) && (
+                            <button
+                              type="button"
+                              onClick={() => verifyPayment(reg.id)}
+                              disabled={verifying === reg.id}
+                              title="Ask Chapa whether this payment succeeded"
+                              className="rounded-md border border-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-navy transition-colors hover:bg-gray-50 disabled:opacity-50"
+                            >
+                              {verifying === reg.id ? "Checking…" : "Verify"}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <span className="text-xs text-gray-400">No payment</span>

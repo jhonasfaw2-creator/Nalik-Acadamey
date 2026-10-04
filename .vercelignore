@@ -1,0 +1,6 @@
+# Prevent local environment files from being uploaded to Vercel.
+# Vercel reads its own environment variables from the dashboard.
+# Uploading .env overrides those and makes dashboard changes ineffective.
+.env
+.env.local
+.env.*.local

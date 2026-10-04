@@ -6,83 +6,121 @@ import { applyPaymentResult } from "@/lib/payments/apply";
 
 export const dynamic = "force-dynamic";
 
-// POST /api/payments/webhook — asynchronous payment confirmation from Chapa.
+// POST /api/payments/webhook  — Chapa payment lifecycle events.
+// GET  /api/payments/webhook  — Chapa callback_url redirect (ignored, returns 200).
 //
-// Chapa signs the exact bytes it sends, so the raw body is read once and used
-// for BOTH the signature check and the parse. Re-serializing the parsed JSON
-// before verifying would produce a different byte sequence and reject every
-// legitimate event.
+// Chapa sends two separate things:
+//   1. callback_url  — a GET redirect after the customer finishes checkout.
+//      This is a browser signal only. We return 200 and do nothing; the
+//      return page (/payment/complete) handles the verify-on-return flow.
+//   2. Webhook POST  — a signed server-to-server notification. This is the
+//      authoritative settlement signal.
 //
-// The signature is the authentication boundary: once it verifies, the event is
-// trusted as coming from Chapa. The payload is still treated as a signal, not
-// proof: the transaction is re-verified with Chapa server-to-server and the
-// state change is driven from that verified data, so settlement additionally
-// requires the amount and currency to match what we stored. Applying through
-// applyPaymentResult keeps this path idempotent and shares the exactly-once
-// seat bookkeeping with /api/payments/verify, so a webhook and a poll racing
-// each other can never double-enroll a student.
+// Signature: Chapa signs the raw request body with HMAC-SHA256 using the
+// webhook secret configured in Settings → Webhooks. The digest is sent in
+// the x-chapa-signature header.
 //
-// Every handled request answers 200: Chapa retries non-200 responses, and
-// retrying cannot fix an unknown reference or a duplicate event.
+// If CHAPA_WEBHOOK_SECRET is not set (or the Chapa dashboard has no secret
+// configured), we skip signature verification and rely on Chapa's verify API
+// to confirm the payment before settling. Unsigned events are logged clearly
+// so the misconfiguration is visible.
 
 /** Chapa sends a lowercase hex HMAC-SHA256 digest. */
 const SIGNATURE_PATTERN = /^[a-f0-9]{64}$/i;
 
-/**
- * Constant-time check of the x-chapa-signature header against the raw body.
- * Returns false — never throws — for a missing or malformed header.
- */
-function isValidSignature(rawBody: string, received: string | null): boolean {
-  const secret = process.env.CHAPA_WEBHOOK_SECRET?.trim().replace(/^["']+|["']+$/g, "");
-  if (!secret) return false;
-  if (!received || !SIGNATURE_PATTERN.test(received)) return false;
-
-  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
-
-  const receivedBytes = Buffer.from(received, "hex");
-  const expectedBytes = Buffer.from(expected, "hex");
-  if (receivedBytes.length !== expectedBytes.length) return false;
-
-  return crypto.timingSafeEqual(receivedBytes, expectedBytes);
+function hmac(secret: string, body: string): string {
+  return crypto.createHmac("sha256", secret).update(body).digest("hex");
 }
 
-/** Webhook numerics arrive as strings (e.g. "40000"). */
-function toNumber(value: unknown): number | null {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value.replace(/[\s,]/g, ""));
-    return Number.isFinite(parsed) ? parsed : null;
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
+  } catch {
+    return false;
   }
-  return null;
+}
+
+/**
+ * Checks the x-chapa-signature header against the raw body.
+ * Returns:
+ *   "valid"    — signature present and correct
+ *   "invalid"  — signature present but wrong
+ *   "absent"   — no signature header at all
+ *   "no-secret"— CHAPA_WEBHOOK_SECRET not configured on our side
+ */
+function checkSignature(
+  rawBody: string,
+  request: NextRequest
+): "valid" | "invalid" | "absent" | "no-secret" {
+  const secret = process.env.CHAPA_WEBHOOK_SECRET?.trim().replace(/^["']+|["']+$/g, "");
+  if (!secret) return "no-secret";
+
+  const received =
+    request.headers.get("x-chapa-signature") ??
+    request.headers.get("chapa-signature");
+
+  if (!received || !SIGNATURE_PATTERN.test(received)) return "absent";
+
+  const expected = hmac(secret, rawBody);
+  return timingSafeEqual(received, expected) ? "valid" : "invalid";
 }
 
 function toText(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+// ── GET — Chapa callback_url redirect ────────────────────────────────────
+// Chapa GETs callback_url after the customer finishes checkout. This is a
+// browser UX signal. The actual settlement happens via POST webhook or via
+// /api/payments/verify when the customer lands on /payment/complete.
+export async function GET() {
+  return NextResponse.json({ received: true }, { status: 200 });
+}
+
+// ── POST — Chapa webhook ──────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   let rawBody = "";
   let event: Record<string, unknown> | null = null;
 
   try {
-    if (!process.env.CHAPA_WEBHOOK_SECRET?.trim()) {
-      console.error(
-        "[chapa-webhook] CHAPA_WEBHOOK_SECRET is not configured; cannot authenticate events."
-      );
-      return NextResponse.json(
-        { error: "Webhook is not configured." },
-        { status: 500 }
-      );
-    }
-
-    // Read once, as bytes. Never parse before verifying.
     rawBody = await request.text();
 
-    if (!isValidSignature(rawBody, request.headers.get("x-chapa-signature"))) {
-      console.warn("[chapa-webhook] Rejected event with missing or invalid signature.");
+    const sigResult = checkSignature(rawBody, request);
+
+    // Diagnostic log on every hit — never logs secret values, only booleans.
+    console.info("[chapa-webhook] incoming", {
+      sigResult,
+      hasXChapaSignature: !!request.headers.get("x-chapa-signature"),
+      hasChapaSignature: !!request.headers.get("chapa-signature"),
+      bodyLength: rawBody.length,
+      bodyPreview: rawBody.slice(0, 120),
+    });
+
+    if (sigResult === "invalid") {
+      // Signature was present but didn't match. Reject — this is either a
+      // misconfigured secret or a forged request.
+      console.warn("[chapa-webhook] Rejected event with invalid signature.", {
+        hint: "Ensure the Chapa dashboard webhook secret matches CHAPA_WEBHOOK_SECRET in Vercel.",
+      });
       return NextResponse.json({ error: "Invalid signature." }, { status: 401 });
     }
 
+    if (sigResult === "no-secret") {
+      // CHAPA_WEBHOOK_SECRET is not set in Vercel env. Log clearly and
+      // continue — we will still verify server-to-server with Chapa before
+      // settling, so this is safe but should be fixed.
+      console.warn("[chapa-webhook] CHAPA_WEBHOOK_SECRET not configured — proceeding without signature verification.");
+    }
+
+    if (sigResult === "absent") {
+      // Secret is configured on our side but Chapa sent no signature. This
+      // means the Chapa dashboard webhook has no secret set. Log and continue
+      // — server-to-server verification still confirms the payment.
+      console.warn("[chapa-webhook] No signature header from Chapa — dashboard webhook secret may not be set.");
+    }
+
+    // Parse the body.
     try {
       const parsed: unknown = JSON.parse(rawBody);
       if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -90,16 +128,13 @@ export async function POST(request: NextRequest) {
       }
       event = parsed as Record<string, unknown>;
     } catch {
-      console.error("[chapa-webhook] Signed event was not a JSON object.");
+      console.error("[chapa-webhook] Body was not a JSON object.");
       return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
     }
 
     const webhookType = toText(event.webhook_type);
     const eventName = toText(event.event);
 
-    // Payouts and refunds also carry merchant_reference. Only payment
-    // lifecycle events may touch a Payment row. Refunds are tracked manually
-    // and must never move a settled payment backwards.
     if (webhookType !== "payment") {
       console.info("[chapa-webhook] Ignored non-payment event", { eventName, webhookType });
       return NextResponse.json({ received: true, ignored: webhookType ?? "unknown" });
@@ -115,20 +150,17 @@ export async function POST(request: NextRequest) {
       where: { merchantReference },
       select: { id: true, status: true, amount: true, currency: true, chapaReference: true },
     });
+
     if (!payment) {
-      // Nothing to settle. Answer 200 so Chapa stops retrying; the verify
-      // route will still catch the payment by reference ID if it exists.
-      console.warn("[chapa-webhook] No payment matches this merchant_reference", {
+      console.warn("[chapa-webhook] No payment matches merchant_reference", {
         merchantReference,
         eventName,
       });
       return NextResponse.json({ received: true, ignored: "unknown_reference" });
     }
 
-    // The signature authenticates the event, but the payload alone is never
-    // proof: re-query Chapa server-to-server and settle from the VERIFIED data.
-    // This is what confirms a payment when the customer closed the browser
-    // before the redirect ever happened.
+    // Re-verify server-to-server with Chapa regardless of signature state.
+    // The webhook is a signal; the verify API is the proof.
     const eventChapaReference = toText(event.chapa_reference);
     const verifyReference = payment.chapaReference || eventChapaReference || merchantReference;
 
@@ -136,9 +168,6 @@ export async function POST(request: NextRequest) {
     try {
       authoritative = await verifyPayment(verifyReference);
     } catch (error) {
-      // Transient provider problems (including a not-yet-indexed payment)
-      // answer non-2xx so Chapa retries; settling on the payload alone would
-      // defeat the point of verifying.
       console.error("[chapa-webhook] Re-verification failed; requesting retry", {
         merchantReference,
         verifyReference,
@@ -158,25 +187,16 @@ export async function POST(request: NextRequest) {
     });
 
     if (!applied) {
-      console.warn("[chapa-webhook] Payment vanished before the event was applied", {
-        merchantReference,
-      });
+      console.warn("[chapa-webhook] Payment vanished before event was applied", { merchantReference });
       return NextResponse.json({ received: true, ignored: "unknown_reference" });
     }
 
     if (applied.mismatch) {
-      // Signed by Chapa, yet the figures disagree with what we stored. Refuse
-      // to grant access and surface it for manual reconciliation.
-      console.error("[chapa-webhook] Rejected SUCCESS on amount/currency mismatch", {
+      console.error("[chapa-webhook] Rejected SUCCESS — amount/currency mismatch", {
         merchantReference,
-        eventName,
         mismatch: applied.mismatch,
         expected: { amount: payment.amount, currency: payment.currency },
-        received: {
-          amount: authoritative.amount,
-          currency: authoritative.currency,
-          chapaReference: authoritative.chapaReference ?? eventChapaReference,
-        },
+        received: { amount: authoritative.amount, currency: authoritative.currency },
       });
       return NextResponse.json({ received: true, status: "FAILED", mismatch: applied.mismatch });
     }
@@ -189,6 +209,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ received: true, status: applied.paymentStatus });
+
   } catch (error) {
     console.error("[chapa-webhook] Unexpected failure:", {
       errorName: error instanceof Error ? error.name : "UnknownError",

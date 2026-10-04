@@ -86,8 +86,19 @@ export default function PaymentCompleteClient() {
   const referenceId = firstParam("referenceId").toUpperCase();
   const merchantReference = firstParam("tx_ref", "trxref", "trx_ref", "merchant_reference");
   const chapaReference = firstParam("chapa_reference", "reference", "ref_id");
+
+  // When the Chapa dashboard return URL is a plain URL with no query params
+  // (e.g. https://nalik-acadamey.vercel.app/payment/complete), none of the
+  // above will be set. Read the reference we stored in sessionStorage just
+  // before navigating to Chapa's checkout page.
+  const storedRef = (() => {
+    try { return sessionStorage.getItem("chapa_pending_ref") ?? ""; }
+    catch { return ""; }
+  })();
+
+  const effectiveReferenceId = referenceId || (storedRef && !merchantReference && !chapaReference ? storedRef : "");
   /** Identifier to display and retry with before verification returns one. */
-  const displayReference = referenceId || merchantReference.toUpperCase();
+  const displayReference = effectiveReferenceId || merchantReference.toUpperCase() || storedRef;
 
   const [phase, setPhase] = useState<Phase>("checking");
   const [registration, setRegistration] = useState<RegistrationSummary | null>(null);
@@ -138,13 +149,13 @@ export default function PaymentCompleteClient() {
   );
 
   useEffect(() => {
-    if (!referenceId && !merchantReference && !chapaReference) {
+    if (!effectiveReferenceId && !merchantReference && !chapaReference) {
       setPhase("invalid");
       return;
     }
 
     const verifyQuery = new URLSearchParams();
-    if (referenceId) verifyQuery.set("referenceId", referenceId);
+    if (effectiveReferenceId) verifyQuery.set("referenceId", effectiveReferenceId);
     if (merchantReference) verifyQuery.set("merchantReference", merchantReference);
     if (chapaReference) verifyQuery.set("chapaReference", chapaReference);
 
@@ -162,6 +173,8 @@ export default function PaymentCompleteClient() {
       watching = false;
       setPhase(next);
       if (next === "success" || next === "failed") {
+        // Clear the stored reference — this checkout is complete.
+        try { sessionStorage.removeItem("chapa_pending_ref"); } catch { /* ignore */ }
         // Verification returns the canonical registration ID; the redirect
         // parameter may have been a merchant or Chapa reference instead.
         const resolvedId =
@@ -207,27 +220,32 @@ export default function PaymentCompleteClient() {
       if (cancelled) return;
 
       try {
-        const res = await fetch(`/api/payments/verify?${verifyQuery.toString()}`, {
-          cache: "no-store",
-        });
+        // If we have an identifier, use the full verify endpoint.
+        // If we have nothing (Chapa redirect carried no params and sessionStorage
+        // was unavailable), fall back to the cookie-based status endpoint.
+        const hasParams = verifyQuery.toString().length > 0;
+        const url = hasParams
+          ? `/api/payments/verify?${verifyQuery.toString()}`
+          : `/api/payments/status`;
+
+        const res = await fetch(url, { cache: "no-store" });
         const data = await res.json().catch(() => null);
         if (cancelled) return;
 
         const reg = (data?.registration ?? {}) as Record<string, unknown>;
+        // /api/payments/status returns referenceId at the top level, not nested.
+        const statusReg = !hasParams ? data as Record<string, unknown> : reg;
         const status = typeof data?.status === "string" ? data.status.toUpperCase() : "";
 
         if (status === "SUCCESS") {
-          finish("success", reg);
+          finish("success", { ...reg, ...statusReg });
           return;
         }
         if (status === "FAILED" || status === "CANCELLED" || status === "INCOMPLETE") {
-          finish("failed", reg);
+          finish("failed", { ...reg, ...statusReg });
           return;
         }
 
-        // PENDING, a rate limit, a transient provider fault, or a response with
-        // no status at all (e.g. a server misconfiguration). Never treat any of
-        // those as a failed payment.
         scheduleNext();
       } catch {
         scheduleNext();
@@ -240,7 +258,7 @@ export default function PaymentCompleteClient() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [referenceId, merchantReference, chapaReference, retryKey, loadReceipt]);
+  }, [effectiveReferenceId, merchantReference, chapaReference, retryKey, loadReceipt]);
 
   const retry = () => {
     setRegistration(null);
@@ -248,6 +266,10 @@ export default function PaymentCompleteClient() {
     setAttempt(0);
     setRetryKey((k) => k + 1);
   };
+
+  // The receipt is generated server-side from the registration ID, so the
+  // download is a plain link the browser can save directly as a PDF file.
+  const downloadId = registration?.referenceId || displayReference;
 
   const rows: { label: string; value: string; mono?: boolean }[] = [
     { label: "Amount paid", value: formatBirr(registration?.amount ?? null, registration?.currency ?? null) },
@@ -282,7 +304,7 @@ export default function PaymentCompleteClient() {
                 either way.
               </p>
               <p className="mt-3 font-mono text-[11px] text-gray-400">
-                {referenceId} · check {attempt} of {MAX_ATTEMPTS}
+                {effectiveReferenceId || displayReference} · check {attempt} of {MAX_ATTEMPTS}
               </p>
             </div>
           )}
@@ -327,15 +349,14 @@ export default function PaymentCompleteClient() {
               )}
 
               <div className="mt-5 grid grid-cols-1 gap-2.5 print:hidden sm:grid-cols-2">
-                {/* Opens the browser print dialog, where "Save as PDF" produces
-                    a copyable receipt file. */}
-                <button
-                  type="button"
-                  onClick={() => window.print()}
+                {/* Downloads a real PDF receipt generated server-side. */}
+                <a
+                  href={`/api/registrations/receipt?id=${encodeURIComponent(downloadId)}`}
+                  download={`nalik-receipt-${downloadId}.pdf`}
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-gold px-4 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover"
                 >
                   <Download size={15} /> Download Receipt
-                </button>
+                </a>
                 <a
                   href={`/registration?id=${encodeURIComponent(displayReference)}`}
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-navy/15 bg-white px-4 py-3 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
