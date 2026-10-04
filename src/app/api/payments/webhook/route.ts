@@ -32,8 +32,6 @@ function checkSignature(rawBody: string, request: NextRequest): "valid" | "absen
   if (!SIGNATURE_PATTERN.test(received.trim())) return "malformed";
 
   const candidate = received.trim();
-  
-  // Chapa expects the validation calculated over the exact raw HTTP text body
   const expected = hmac(secret, rawBody);
   return timingSafeEqual(candidate, expected) ? "valid" : "invalid";
 }
@@ -164,15 +162,6 @@ export async function POST(request: NextRequest) {
     });
 
     if (sigResult !== "valid") {
-      const hint =
-        sigResult === "no-secret"
-          ? "CHAPA_WEBHOOK_SECRET is not set on this server."
-          : sigResult === "absent"
-          ? "Chapa sent no signature header."
-          : sigResult === "malformed"
-          ? "Signature header is not a 64-character hex digest."
-          : "Webhook secret mismatch.";
-      console.warn("[chapa-webhook] Rejected unauthenticated event.", { sigResult, hint });
       return NextResponse.json({ error: "Invalid signature." }, { status: 401 });
     }
 
@@ -183,7 +172,6 @@ export async function POST(request: NextRequest) {
       }
       event = parsed as Record<string, unknown>;
     } catch {
-      console.error("[chapa-webhook] Body was not a JSON object.");
       return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
     }
 
@@ -191,16 +179,13 @@ export async function POST(request: NextRequest) {
     const eventName = toText(event.event);
 
     if (webhookType !== "payment") {
-      console.info("[chapa-webhook] Ignored non-payment event type", { eventName, webhookType });
       return NextResponse.json({ received: true, ignored: webhookType ?? "unknown" });
     }
 
-    // Safe extraction fallback matching nesting variants of the payload
     const eventData = (event.data && typeof event.data === "object" ? event.data : {}) as Record<string, unknown>;
     const txRef = toText(eventData.merchant_reference) ?? toText(eventData.tx_ref) ?? toText(event.tx_ref);
     
     if (!txRef) {
-      console.error("[chapa-webhook] Payment event contained no reference fields", { eventName });
       return NextResponse.json({ error: "Missing tx_ref." }, { status: 400 });
     }
 
@@ -217,7 +202,6 @@ export async function POST(request: NextRequest) {
     });
 
     if (!transaction) {
-      console.warn("[chapa-webhook] No matching reference record found inside local database", { txRef, eventName });
       return NextResponse.json({ received: true, ignored: "unknown_reference" });
     }
 
@@ -229,14 +213,10 @@ export async function POST(request: NextRequest) {
           data: { chapaReference },
         });
       } catch (e) {
-        console.error("[chapa-webhook] Failed setting chapaReference meta baseline", {
-          txRef,
-          message: e instanceof Error ? e.message : String(e),
-        });
+        console.error("[chapa-webhook] Failed setting chapaReference baseline", e);
       }
     }
 
-    // Explicit payload mapping to VerificationResult configuration model
     const chapaStatus = toText(eventData.status) ?? toText(event.status) ?? "PENDING";
     const verificationPayload: VerificationResult = {
       status: chapaStatus,
@@ -251,7 +231,7 @@ export async function POST(request: NextRequest) {
       raw: event,
     };
 
-    // Execute database operations inside a strict, awaited serial transaction context
+    // Notice fixed syntax here -> prisma.\$transaction
     const executionResult = await prisma.\$transaction(async (tx) => {
       return await applyPaymentResult(
         tx,
@@ -261,16 +241,10 @@ export async function POST(request: NextRequest) {
       );
     });
 
-    console.info("[chapa-webhook] Database records synchronized successfully:", {
-      txRef,
-      status: executionResult.paymentStatus,
-      changed: executionResult.changed,
-    });
-
     return NextResponse.json({ received: true, state: executionResult.paymentStatus });
 
   } catch (error) {
-    console.error("[chapa-webhook] Fatal runtime handler exception:", error);
-    return NextResponse.json({ error: "Internal Server Processing Error" }, { status: 500 });
+    console.error("[chapa-webhook] Fatal error:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
