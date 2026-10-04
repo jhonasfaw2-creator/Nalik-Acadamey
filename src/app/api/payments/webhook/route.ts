@@ -231,7 +231,7 @@ export async function POST(request: NextRequest) {
       raw: event,
     };
 
-    // Notice fixed syntax here -> prisma.\$transaction
+    // Cleaned syntax call structure:
     const executionResult = await prisma.\$transaction(async (tx) => {
       return await applyPaymentResult(
         tx,
