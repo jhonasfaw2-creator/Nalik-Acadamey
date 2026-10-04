@@ -563,13 +563,11 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
               </p>
             </div>
 
-            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-              <p className="text-[13px] font-semibold text-amber-900">Save this ID before you pay</p>
-              <p className="mt-1 text-[13px] leading-relaxed text-amber-800">
-                After paying on Chapa you will stay on Chapa&apos;s own receipt page — it does not
-                send you back here. To get your confirmation and PDF receipt, go to{" "}
-                <span className="font-semibold">nalik-acadamey.vercel.app/registration</span> and
-                enter the ID above.
+            <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+              <p className="text-[13px] font-semibold text-green-900">You&apos;re all set</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-green-800">
+                After paying on Chapa you&apos;ll be redirected back here automatically to see your
+                confirmation and download your PDF receipt.
               </p>
             </div>
 
