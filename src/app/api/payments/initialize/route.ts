@@ -32,6 +32,18 @@ function formatChapaPhone(phone: string): string | null {
   return /^\+[1-9]\d{7,14}$/.test(formatted) ? formatted : null;
 }
 
+async function generateUniqueTxRef(): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const txRef = `TX-${crypto.randomBytes(8).toString("hex").toUpperCase()}`;
+    const existing = await prisma.transaction.findUnique({
+      where: { txRef },
+      select: { id: true },
+    });
+    if (!existing) return txRef;
+  }
+  throw new Error("Could not generate a unique payment reference.");
+}
+
 export async function POST(request: NextRequest) {
   let referenceId = "";
 
@@ -126,7 +138,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    let txRef: string;
+    const txRef = await generateUniqueTxRef();
 
     if (existing) {
       referenceId = existing.referenceId;
@@ -137,7 +149,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      txRef = `${existing.referenceId}-retry-${crypto.randomBytes(8).toString("hex")}`;
       await prisma.transaction.create({
         data: {
           registrationId: existing.id,
@@ -151,7 +162,6 @@ export async function POST(request: NextRequest) {
       referenceId = await generateUniqueReferenceId(async (id) =>
         Boolean(await prisma.registration.findUnique({ where: { referenceId: id }, select: { id: true } })),
       );
-      txRef = referenceId;
       await prisma.registration.create({
         data: {
           referenceId,
@@ -229,16 +239,14 @@ export async function POST(request: NextRequest) {
       const message =
         error.httpStatus === 401 || error.httpStatus === 403
           ? "Chapa rejected the secret key. Check that CHAPA_SECRET_KEY contains the V2 secret key for this deployment."
-          : `Chapa could not initialize this payment${
-              error.httpStatus ? ` (HTTP ${error.httpStatus})` : ""
-            }: ${error.message}`;
+          : error.message;
+      const status =
+        error.httpStatus !== undefined && error.httpStatus >= 400 && error.httpStatus < 600
+          ? error.httpStatus
+          : 502;
       return NextResponse.json(
-        {
-          error: message,
-          providerStatus: error.httpStatus,
-          providerCode: error.code,
-        },
-        { status: 502 },
+        { error: message },
+        { status },
       );
     }
     if (error instanceof ChapaConfigError) {

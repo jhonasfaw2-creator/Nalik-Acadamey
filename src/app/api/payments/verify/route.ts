@@ -6,7 +6,7 @@ import { checkAndIncrement } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 
-const TX_REF_PATTERN = /^NA-\d{4}-[A-Z2-9]{6}(?:-retry-[a-f0-9]{16})?$/;
+const TX_REF_PATTERN = /^(?:TX-[A-F0-9]{16}|NA-\d{4}-[A-Z2-9]{6}(?:-retry-[a-f0-9]{16})?)$/;
 
 function successfulStatus(status: string): boolean {
   const normalized = status.trim().toUpperCase();
