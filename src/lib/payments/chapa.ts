@@ -45,6 +45,10 @@ function getSecretKey(): string {
   return key;
 }
 
+export function validateChapaV2Configuration(): void {
+  getSecretKey();
+}
+
 interface ChapaEnvelope {
   status?: string;
   message?: string;

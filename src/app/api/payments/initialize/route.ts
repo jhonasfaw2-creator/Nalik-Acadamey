@@ -3,7 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { readJson } from "@/lib/http";
 import { registrationSchema } from "@/lib/validators";
-import { initiatePayment, ChapaApiError, ChapaConfigError } from "@/lib/payments/chapa";
+import {
+  initiatePayment,
+  ChapaApiError,
+  ChapaConfigError,
+  validateChapaV2Configuration,
+} from "@/lib/payments/chapa";
 import { generateUniqueReferenceId } from "@/lib/reference";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +66,32 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+
+    validateChapaV2Configuration();
+
+    const previewDeploymentUrl =
+      process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : undefined;
+    const deploymentUrl = process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : request.nextUrl.origin;
+    const configuredAppUrl =
+      previewDeploymentUrl ??
+      process.env.NEXT_PUBLIC_APP_URL?.trim() ??
+      deploymentUrl;
+    let appUrl: URL;
+    try {
+      appUrl = new URL(configuredAppUrl);
+    } catch {
+      throw new ChapaConfigError("The application URL must be an absolute URL.");
+    }
+    if (appUrl.protocol !== "https:") {
+      throw new ChapaConfigError("The application URL must use HTTPS.");
+    }
+    appUrl.pathname = appUrl.pathname.replace(/\/+$/, "");
+    appUrl.search = "";
+    appUrl.hash = "";
 
     const course = await prisma.course.findUnique({ where: { id: courseId } });
     if (!course) {
@@ -162,24 +193,6 @@ export async function POST(request: NextRequest) {
       registrationId = registration.id;
     }
 
-    const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
-    if (!configuredAppUrl) {
-      throw new ChapaConfigError("NEXT_PUBLIC_APP_URL is not configured.");
-    }
-
-    let appUrl: URL;
-    try {
-      appUrl = new URL(configuredAppUrl);
-    } catch {
-      throw new ChapaConfigError("NEXT_PUBLIC_APP_URL must be an absolute URL.");
-    }
-    if (appUrl.protocol !== "https:") {
-      throw new ChapaConfigError("NEXT_PUBLIC_APP_URL must use HTTPS.");
-    }
-    appUrl.pathname = appUrl.pathname.replace(/\/+$/, "");
-    appUrl.search = "";
-    appUrl.hash = "";
-
     const [firstName, ...lastNameParts] = fullName.trim().split(/\s+/);
     const returnUrl = new URL(`${appUrl.pathname}/checkout/return`, appUrl);
     returnUrl.searchParams.set("tx_ref", txRef);
@@ -251,7 +264,7 @@ export async function POST(request: NextRequest) {
         message: error.message,
       });
       return NextResponse.json(
-        { error: "Payment system is not configured. Please contact support." },
+        { error: error.message },
         { status: 500 },
       );
     }
