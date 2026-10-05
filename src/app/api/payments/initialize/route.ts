@@ -1,256 +1,59 @@
-import crypto from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { readJson } from "@/lib/http";
-import { registrationSchema } from "@/lib/validators";
-import { initiatePayment, ChapaApiError, ChapaConfigError } from "@/lib/payments/chapa";
-import { generateUniqueReferenceId } from "@/lib/reference";
+import { NextResponse } from "next/server";
 
-export const dynamic = "force-dynamic";
-
-function formatChapaPhone(phone: string): string | null {
-  const compact = phone.trim().replace(/[\s()-]/g, "");
-  let formatted: string;
-
-  if (compact.startsWith("+")) {
-    formatted = compact;
-  } else if (compact.startsWith("00")) {
-    formatted = `+${compact.slice(2)}`;
-  } else if (compact.startsWith("251")) {
-    formatted = `+${compact}`;
-  } else if (compact.startsWith("0")) {
-    formatted = `+251${compact.slice(1)}`;
-  } else {
-    formatted = `+251${compact}`;
-  }
-
-  return /^\+[1-9]\d{7,14}$/.test(formatted) ? formatted : null;
-}
-
-export async function POST(request: NextRequest) {
-  let referenceId = "";
-
+export async function POST(req: Request) {
   try {
-    const body = await readJson(request);
-    if (!body) {
-      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    const { amount, email, firstName, lastName, phone, txRef } = await req.json();
+
+    // 1. Format Phone Number to E.164 standard for Chapa (+251...)
+    let formattedPhone = phone ? phone.trim() : "";
+    if (formattedPhone.startsWith("0")) {
+      formattedPhone = "+251" + formattedPhone.slice(1);
+    } else if (!formattedPhone.startsWith("+")) {
+      formattedPhone = "+251" + formattedPhone;
     }
 
-    const parsed = registrationSchema.safeParse(body);
-    if (!parsed.success) {
-      const fieldErrors = parsed.error.flatten().fieldErrors;
-      const firstError = Object.values(fieldErrors).flat()[0] || "Invalid input";
-      return NextResponse.json({ error: firstError, fields: fieldErrors }, { status: 400 });
-    }
-    const {
-      fullName,
-      email,
-      phone,
-      age,
-      courseId,
-      scheduleId,
-      previousExperience,
-      motivation,
-    } = parsed.data;
+    // 2. Base Application URL
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://nalik-acadamey.vercel.app";
+    const cleanAppUrl = appUrl.replace(/\/$/, "");
 
-    const normalizedEmail = email?.trim().toLowerCase() || null;
-    const formattedPhone = formatChapaPhone(phone);
-    if (!formattedPhone) {
-      return NextResponse.json(
-        { error: "Enter a valid phone number, including its country code if it is not Ethiopian." },
-        { status: 400 },
-      );
-    }
+    // 3. Convert Amount to Subunits (ETB * 100 for Chapa V2)
+    const amountInCents = Math.round(Number(amount) * 100);
 
-    const course = await prisma.course.findUnique({ where: { id: courseId } });
-    if (!course) {
-      return NextResponse.json({ error: "Course not found" }, { status: 404 });
-    }
-    if (!course.active) {
-      return NextResponse.json({ error: "This course is not available" }, { status: 400 });
-    }
-
-    const paymentAmount = course.discountPrice ?? course.price;
-    if (paymentAmount <= 0) {
-      return NextResponse.json({ error: "This course is not available for online payment." }, { status: 400 });
-    }
-
-    const schedule = await prisma.schedule.findFirst({
-      where: { id: scheduleId, active: true },
-    });
-    if (!schedule) {
-      return NextResponse.json({ error: "Schedule not found" }, { status: 400 });
-    }
-    if (schedule.availabilityOverride === false || schedule.enrolled >= schedule.maxSeats) {
-      return NextResponse.json({ error: "This session is full. Please choose another." }, { status: 400 });
-    }
-
-    const existing = await prisma.registration.findFirst({
-      where: {
-        courseId,
-        OR: [
-          { phone: formattedPhone },
-          ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
-        ],
+    // 4. Request Hosted Payment Session from Chapa V2
+    const chapaRes = await fetch("https://api.chapa.global/v2/payments/hosted", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.CHAPA_SECRET_KEY}`,
+        "Content-Type": "application/json",
       },
-    });
-
-    let registration;
-    let txRef: string;
-
-    if (existing) {
-      referenceId = existing.referenceId;
-      if (existing.status === "PAID" || existing.status === "CONFIRMED") {
-        return NextResponse.json(
-          { error: "You are already registered and paid for this course." },
-          { status: 409 },
-        );
-      }
-
-      const pendingTx = await prisma.transaction.findFirst({
-        where: { registrationId: existing.id, status: "PENDING" },
-        orderBy: { createdAt: "desc" },
-      });
-
-      if (pendingTx && pendingTx.amount === paymentAmount && pendingTx.currency === "ETB") {
-        txRef = pendingTx.txRef;
-      } else {
-        txRef = `${existing.referenceId}-retry-${crypto.randomBytes(8).toString("hex")}`;
-        await prisma.transaction.create({
-          data: {
-            registrationId: existing.id,
-            amount: paymentAmount,
-            currency: "ETB",
-            txRef,
-            status: "PENDING",
-          },
-        });
-      }
-
-      registration = existing;
-    } else {
-      referenceId = await generateUniqueReferenceId(async (id) =>
-        Boolean(await prisma.registration.findUnique({ where: { referenceId: id }, select: { id: true } }))
-      );
-
-      txRef = referenceId;
-
-      registration = await prisma.registration.create({
-        data: {
-          referenceId,
-          fullName: fullName.trim(),
-          email: normalizedEmail,
-          phone: formattedPhone,
-          age,
-          courseId,
-          scheduleId: schedule?.id,
-          previousExperience: previousExperience?.trim() || "",
-          motivation: motivation?.trim() || "",
-          status: "PENDING",
-          transactions: {
-            create: {
-              amount: paymentAmount,
-              currency: "ETB",
-              txRef,
-              status: "PENDING",
-            },
-          },
+      body: JSON.stringify({
+        amount: amountInCents,
+        currency: "ETB",
+        merchant_reference: txRef,
+        return_url: `${cleanAppUrl}/checkout/return?tx_ref=${txRef}`,
+        callback_url: `${cleanAppUrl}/api/payments/webhook`,
+        customer: {
+          email: email,
+          first_name: firstName,
+          last_name: lastName,
+          phone_number: formattedPhone || "+251900000000",
         },
-      });
-    }
-
-    // Build Chapa initialization payload
-    const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
-    if (!configuredAppUrl) {
-      throw new ChapaConfigError("NEXT_PUBLIC_APP_URL is not configured.");
-    }
-    let appUrl: URL;
-    try {
-      appUrl = new URL(configuredAppUrl);
-    } catch {
-      throw new ChapaConfigError("NEXT_PUBLIC_APP_URL must be an absolute URL.");
-    }
-    if (appUrl.protocol !== "https:") {
-      throw new ChapaConfigError("NEXT_PUBLIC_APP_URL must use HTTPS.");
-    }
-    appUrl.pathname = appUrl.pathname.replace(/\/+$/, "");
-    appUrl.search = "";
-    appUrl.hash = "";
-    const [firstName, ...lastNameParts] = fullName.trim().split(/\s+/);
-    const lastName = lastNameParts.join(" ") || "Student";
-    const returnUrl = new URL(`${appUrl.pathname}/checkout/return`, appUrl);
-    returnUrl.searchParams.set("tx_ref", txRef);
-    const callbackUrl = new URL(`${appUrl.pathname}/api/payments/webhook`, appUrl);
-
-    const chapaResult = await initiatePayment({
-      amount: paymentAmount * 100,
-      currency: "ETB",
-      merchant_reference: txRef,
-      customer: {
-        first_name: firstName,
-        last_name: lastName,
-        ...(normalizedEmail ? { email: normalizedEmail } : {}),
-        phone_number: formattedPhone,
-      },
-      return_url: returnUrl.toString(),
-      callback_url: callbackUrl.toString(),
-      customization: {
-        title: course.title,
-        description: `Nalik Academy - ${course.title}`,
-      },
-      meta: {
-        reference_id: referenceId,
-        ...(schedule ? { schedule: `${schedule.group}/${schedule.session}` } : {}),
-      },
+      }),
     });
 
-    if (chapaResult.chapa_reference) {
-      await prisma.transaction.update({
-        where: { txRef },
-        data: { chapaReference: chapaResult.chapa_reference },
-      });
-    }
+    const data = await chapaRes.json();
 
-    return NextResponse.json({
-      checkout_url: chapaResult.checkout_url,
-      referenceId,
-      txRef,
-      amount: paymentAmount,
-      currency: "ETB",
-    });
-  } catch (error) {
-    if (error instanceof ChapaApiError) {
-      console.error("[payments/initialize] Chapa API error:", {
-        referenceId: referenceId || undefined,
-        httpStatus: error.httpStatus,
-        code: error.code,
-        message: error.message,
-      });
+    if (!chapaRes.ok) {
+      console.error("CHAPA INIT ERROR:", data);
       return NextResponse.json(
-        { error: "Failed to initialize payment with Chapa. Please try again." },
-        { status: error.httpStatus && error.httpStatus >= 500 ? 502 : 400 }
+        { error: data.message || "Initialization failed", details: data },
+        { status: chapaRes.status }
       );
     }
 
-    if (error instanceof ChapaConfigError) {
-      console.error("[payments/initialize] Chapa configuration error:", {
-        referenceId: referenceId || undefined,
-        message: error.message,
-      });
-      return NextResponse.json(
-        { error: "Payment system is not configured. Please contact support." },
-        { status: 500 }
-      );
-    }
-
-    console.error("[payments/initialize] Unexpected error:", {
-      referenceId: referenceId || undefined,
-      errorName: error instanceof Error ? error.name : "UnknownError",
-      message: error instanceof Error ? error.message : String(error),
-    });
-    return NextResponse.json(
-      { error: "Failed to initialize payment. Please try again." },
-      { status: 500 }
-    );
+    return NextResponse.json({ checkout_url: data.data.checkout_url });
+  } catch (error: any) {
+    console.error("SERVER INITIALIZE ERROR:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
