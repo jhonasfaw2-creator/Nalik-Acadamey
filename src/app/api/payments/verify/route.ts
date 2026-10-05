@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
         status: true,
         paidAt: true,
         chapaReference: true,
+        paymentMethod: true,
         registration: {
           select: {
             id: true,
@@ -47,7 +48,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Payment transaction not found." }, { status: 404 });
     }
 
-    const verified = await verifyPayment(transaction.txRef);
+    if (transaction.status === "SUCCESS" || transaction.registration.status === "PAID" || transaction.registration.status === "CONFIRMED") {
+      return NextResponse.json({
+        status: "SUCCESS",
+        payment: {
+          studentName: transaction.registration.fullName,
+          course: transaction.registration.course.title,
+          courseId: transaction.registration.course.id,
+          amount: transaction.amount,
+          currency: transaction.currency,
+          tx_ref: txRef,
+          referenceId: transaction.registration.referenceId,
+          chapa_reference: transaction.chapaReference,
+          payment_method: transaction.paymentMethod,
+          paidAt: transaction.paidAt?.toISOString() ?? new Date().toISOString(),
+        },
+        downloadToken: createDownloadToken(transaction.registration.referenceId),
+      });
+    }
+
+    if (!transaction.chapaReference) {
+      return NextResponse.json({ status: "PENDING" });
+    }
+
+    const verified = await verifyPayment(transaction.chapaReference);
     if (verified.merchant_reference !== txRef) {
       console.error("[payments/verify] Chapa reference mismatch", {
         txRef,
@@ -58,7 +82,15 @@ export async function GET(request: NextRequest) {
 
     const status = verified.status.trim().toUpperCase();
     const isSuccess = status === "SUCCESS" || status === "PAID";
-    const amountMatches = verified.amount === transaction.amount;
+    const verifiedNetAmount =
+      verified.amount !== null &&
+      verified.service_fee !== null &&
+      verified.service_fee >= 0 &&
+      verified.service_fee <= verified.amount
+        ? verified.amount - verified.service_fee
+        : verified.amount;
+    const amountMatches =
+      verified.amount === transaction.amount || verifiedNetAmount === transaction.amount;
     const currencyMatches = verified.currency?.toUpperCase() === transaction.currency.toUpperCase();
 
     if (isSuccess && (!amountMatches || !currencyMatches)) {

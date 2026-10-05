@@ -101,13 +101,19 @@ export async function POST(request: NextRequest) {
           ? event.reference
           : undefined;
     const amount = getAmount(event.amount);
+    const serviceFee = getAmount(event.service_fee);
     const currency = typeof event.currency === "string" ? event.currency.trim().toUpperCase() : "";
+    const netAmount =
+      amount !== null && serviceFee !== null && serviceFee >= 0 && serviceFee <= amount
+        ? amount - serviceFee
+        : amount;
 
-    if (successful && (amount !== transaction.amount || currency !== transaction.currency.toUpperCase())) {
+    if (successful && (netAmount !== transaction.amount || currency !== transaction.currency.toUpperCase())) {
       console.error("[webhooks/chapa] Successful event does not match stored transaction", {
         merchantReference,
         expectedAmount: transaction.amount,
         receivedAmount: amount,
+        receivedServiceFee: serviceFee,
         expectedCurrency: transaction.currency,
         receivedCurrency: currency,
       });
@@ -127,6 +133,8 @@ export async function POST(request: NextRequest) {
             status: "SUCCESS",
             paidAt,
             ...(chapaReference ? { chapaReference } : {}),
+            ...(serviceFee !== null ? { serviceFee: Math.round(serviceFee) } : {}),
+            ...(typeof event.payment_method === "string" ? { paymentMethod: event.payment_method } : {}),
             rawWebhook: parsed as object,
           },
         });
@@ -147,6 +155,8 @@ export async function POST(request: NextRequest) {
           data: {
             status,
             ...(chapaReference ? { chapaReference } : {}),
+            ...(serviceFee !== null ? { serviceFee: Math.round(serviceFee) } : {}),
+            ...(typeof event.payment_method === "string" ? { paymentMethod: event.payment_method } : {}),
             rawWebhook: parsed as object,
           },
         });

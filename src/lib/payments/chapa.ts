@@ -119,6 +119,7 @@ export interface InitiatePaymentInput {
 
 export interface InitiatePaymentResult {
   checkout_url: string;
+  chapa_reference: string | null;
   created_at: string;
   expires_at: string;
 }
@@ -174,6 +175,12 @@ export async function initiatePayment(
 
   return {
     checkout_url: checkoutUrl,
+    chapa_reference:
+      typeof data.chapa_reference === "string"
+        ? data.chapa_reference
+        : typeof data.reference === "string"
+          ? data.reference
+          : null,
     created_at: typeof data.created_at === "string" ? data.created_at : new Date().toISOString(),
     expires_at: typeof data.expires_at === "string" ? data.expires_at : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
   };
@@ -192,13 +199,13 @@ export interface VerifyPaymentResult {
   raw: unknown;
 }
 
-export async function verifyPayment(merchantReference: string): Promise<VerifyPaymentResult> {
-  if (!merchantReference?.trim()) {
-    throw new ChapaConfigError("A merchant_reference is required to verify.");
+export async function verifyPayment(chapaReference: string): Promise<VerifyPaymentResult> {
+  if (!chapaReference?.trim()) {
+    throw new ChapaConfigError("A Chapa payment reference is required to verify.");
   }
 
   const data = await chapaFetch<Record<string, unknown>>(
-    `/payments/${encodeURIComponent(merchantReference.trim())}/verify`,
+    `/payments/${encodeURIComponent(chapaReference.trim())}/verify`,
     { method: "GET" }
   );
 

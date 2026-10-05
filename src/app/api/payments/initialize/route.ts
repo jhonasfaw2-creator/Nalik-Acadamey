@@ -172,6 +172,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    if (chapaResult.chapa_reference) {
+      await prisma.transaction.update({
+        where: { txRef },
+        data: { chapaReference: chapaResult.chapa_reference },
+      });
+    }
+
     return NextResponse.json({
       checkout_url: chapaResult.checkout_url,
       referenceId,
