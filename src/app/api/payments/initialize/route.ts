@@ -1,122 +1,259 @@
-import { NextResponse } from "next/server";
+import crypto from "node:crypto";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { readJson } from "@/lib/http";
+import { registrationSchema } from "@/lib/validators";
+import { initiatePayment, ChapaApiError, ChapaConfigError } from "@/lib/payments/chapa";
+import { generateUniqueReferenceId } from "@/lib/reference";
 
-export async function POST(req: Request) {
+export const dynamic = "force-dynamic";
+
+function formatChapaPhone(phone: string): string | null {
+  const compact = phone.trim().replace(/[\s()-]/g, "");
+  let formatted: string;
+
+  if (compact.startsWith("+")) {
+    formatted = compact;
+  } else if (compact.startsWith("00")) {
+    formatted = `+${compact.slice(2)}`;
+  } else if (compact.startsWith("251")) {
+    formatted = `+${compact}`;
+  } else if (compact.startsWith("0")) {
+    formatted = `+251${compact.slice(1)}`;
+  } else {
+    formatted = `+251${compact}`;
+  }
+
+  return /^\+[1-9]\d{7,14}$/.test(formatted) ? formatted : null;
+}
+
+export async function POST(request: NextRequest) {
+  let referenceId = "";
+
   try {
-    const body = await req.json().catch(() => ({}));
-    const { fullName, email, phone, age, courseId, scheduleId } = body;
+    const body = await readJson(request);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
 
-    if (!fullName || !phone || !courseId || !age) {
+    const parsed = registrationSchema.safeParse(body);
+    if (!parsed.success) {
+      const fieldErrors = parsed.error.flatten().fieldErrors;
+      const firstError = Object.values(fieldErrors).flat()[0] || "Invalid input";
+      return NextResponse.json({ error: firstError, fields: fieldErrors }, { status: 400 });
+    }
+
+    const {
+      fullName,
+      email,
+      phone,
+      age,
+      courseId,
+      scheduleId,
+      previousExperience,
+      motivation,
+    } = parsed.data;
+    const normalizedEmail = email?.trim().toLowerCase() || null;
+    const formattedPhone = formatChapaPhone(phone);
+    if (!formattedPhone) {
       return NextResponse.json(
-        { error: "Missing required registration details." },
-        { status: 400 }
+        { error: "Enter a valid phone number, including its country code if it is not Ethiopian." },
+        { status: 400 },
       );
     }
 
     const course = await prisma.course.findUnique({ where: { id: courseId } });
     if (!course) {
-      return NextResponse.json({ error: "Course not found." }, { status: 404 });
+      return NextResponse.json({ error: "Course not found" }, { status: 404 });
+    }
+    if (!course.active) {
+      return NextResponse.json({ error: "This course is not available" }, { status: 400 });
     }
 
-    const coursePrice = course.discountPrice ?? course.price;
-    if (!coursePrice || coursePrice <= 0) {
-      return NextResponse.json({ error: "Invalid course price." }, { status: 400 });
+    const paymentAmount = course.discountPrice ?? course.price;
+    if (paymentAmount <= 0) {
+      return NextResponse.json({ error: "This course is not available for online payment." }, { status: 400 });
     }
 
-    const referenceId = `NA-${new Date().getFullYear()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    const txRef = `TX-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const schedule = await prisma.schedule.findFirst({
+      where: { id: scheduleId, active: true },
+    });
+    if (!schedule) {
+      return NextResponse.json({ error: "Schedule not found" }, { status: 400 });
+    }
+    if (schedule.availabilityOverride === false || schedule.enrolled >= schedule.maxSeats) {
+      return NextResponse.json({ error: "This session is full. Please choose another." }, { status: 400 });
+    }
 
-    // Upsert registration record
-    const registration = await prisma.registration.upsert({
+    const existing = await prisma.registration.findFirst({
       where: {
-        email_courseId: {
-          email: email || `${phone}@nalikacademy.com`,
-          courseId: courseId,
-        },
-      },
-      update: {
-        fullName,
-        phone,
-        age: Number(age),
-        scheduleId: scheduleId || null,
-        status: "PENDING",
-      },
-      create: {
-        referenceId,
-        fullName,
-        email: email || `${phone}@nalikacademy.com`,
-        phone,
-        age: Number(age),
         courseId,
-        scheduleId: scheduleId || null,
-        status: "PENDING",
+        OR: [
+          { phone: formattedPhone },
+          ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+        ],
       },
     });
 
-    // Create pending transaction
-    await prisma.transaction.create({
-      data: {
-        registrationId: registration.id,
-        amount: coursePrice,
-        currency: "ETB",
-        txRef: txRef,
-        status: "PENDING",
-      },
-    });
+    let registrationId: string;
+    let txRef: string;
 
-    const nameParts = fullName.trim().split(" ");
-    const firstName = nameParts[0] || "Student";
-    const lastName = nameParts.slice(1).join(" ") || "User";
+    if (existing) {
+      referenceId = existing.referenceId;
+      if (existing.status === "PAID" || existing.status === "CONFIRMED") {
+        return NextResponse.json(
+          { error: "You are already registered and paid for this course." },
+          { status: 409 },
+        );
+      }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://nalikacademy.com";
+      const pendingTransaction = await prisma.transaction.findFirst({
+        where: { registrationId: existing.id, status: "PENDING" },
+        orderBy: { createdAt: "desc" },
+      });
 
-    // Chapa V2 Payload Structure
-    const chapaV2Payload = {
-      amount: coursePrice.toString(),
-      currency: "ETB",
-      email: email || "student@nalikacademy.com",
-      first_name: firstName,
-      last_name: lastName,
-      tx_ref: txRef,
-      callback_url: `${appUrl}/api/payments/webhook`,
-      return_url: `${appUrl}/checkout/return?tx_ref=${txRef}`,
-      customization: {
-        title: "Nalik Academy",
-        description: `Course Registration: ${course.title}`,
-      },
-    };
-
-    // Explicit V2 API Endpoint
-    const chapaRes = await fetch("https://api.chapa.co/v2/transaction/initialize", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.CHAPA_SECRET_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(chapaV2Payload),
-    });
-
-    const chapaData = await chapaRes.json();
-
-    if (!chapaRes.ok || chapaData.status === "failed") {
-      console.error("[Chapa V2 Initialization Error]:", chapaData);
-      return NextResponse.json(
-        { error: chapaData.message || "Failed to initialize payment with Chapa V2." },
-        { status: chapaRes.status || 400 }
+      if (
+        pendingTransaction &&
+        pendingTransaction.amount === paymentAmount &&
+        pendingTransaction.currency === "ETB"
+      ) {
+        txRef = pendingTransaction.txRef;
+      } else {
+        txRef = `${existing.referenceId}-retry-${crypto.randomBytes(8).toString("hex")}`;
+        await prisma.transaction.create({
+          data: {
+            registrationId: existing.id,
+            amount: paymentAmount,
+            currency: "ETB",
+            txRef,
+            status: "PENDING",
+          },
+        });
+      }
+      registrationId = existing.id;
+    } else {
+      referenceId = await generateUniqueReferenceId(async (id) =>
+        Boolean(await prisma.registration.findUnique({ where: { referenceId: id }, select: { id: true } })),
       );
+      txRef = referenceId;
+      const registration = await prisma.registration.create({
+        data: {
+          referenceId,
+          fullName: fullName.trim(),
+          email: normalizedEmail,
+          phone: formattedPhone,
+          age,
+          courseId,
+          scheduleId: schedule.id,
+          previousExperience: previousExperience?.trim() || "",
+          motivation: motivation?.trim() || "",
+          status: "PENDING",
+          transactions: {
+            create: {
+              amount: paymentAmount,
+              currency: "ETB",
+              txRef,
+              status: "PENDING",
+            },
+          },
+        },
+        select: { id: true },
+      });
+      registrationId = registration.id;
+    }
+
+    const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+    if (!configuredAppUrl) {
+      throw new ChapaConfigError("NEXT_PUBLIC_APP_URL is not configured.");
+    }
+
+    let appUrl: URL;
+    try {
+      appUrl = new URL(configuredAppUrl);
+    } catch {
+      throw new ChapaConfigError("NEXT_PUBLIC_APP_URL must be an absolute URL.");
+    }
+    if (appUrl.protocol !== "https:") {
+      throw new ChapaConfigError("NEXT_PUBLIC_APP_URL must use HTTPS.");
+    }
+    appUrl.pathname = appUrl.pathname.replace(/\/+$/, "");
+    appUrl.search = "";
+    appUrl.hash = "";
+
+    const [firstName, ...lastNameParts] = fullName.trim().split(/\s+/);
+    const returnUrl = new URL(`${appUrl.pathname}/checkout/return`, appUrl);
+    returnUrl.searchParams.set("tx_ref", txRef);
+    const callbackUrl = new URL(`${appUrl.pathname}/api/payments/webhook`, appUrl);
+
+    const chapaResult = await initiatePayment({
+      amount: paymentAmount,
+      currency: "ETB",
+      merchant_reference: txRef,
+      customer: {
+        first_name: firstName,
+        last_name: lastNameParts.join(" ") || "Student",
+        ...(normalizedEmail ? { email: normalizedEmail } : {}),
+        phone_number: formattedPhone,
+      },
+      return_url: returnUrl.toString(),
+      callback_url: callbackUrl.toString(),
+      customization: {
+        title: course.title,
+        description: `Nalik Academy - ${course.title}`,
+      },
+      meta: {
+        reference_id: referenceId,
+        schedule: `${schedule.group}/${schedule.session}`,
+      },
+    });
+
+    if (chapaResult.chapa_reference) {
+      await prisma.transaction.update({
+        where: { txRef },
+        data: { chapaReference: chapaResult.chapa_reference },
+      });
     }
 
     return NextResponse.json({
-      status: "success",
-      checkoutUrl: chapaData.data?.checkout_url,
-      txRef,
+      checkout_url: chapaResult.checkout_url,
+      checkoutUrl: chapaResult.checkout_url,
       referenceId,
+      txRef,
+      amount: paymentAmount,
+      currency: "ETB",
     });
-  } catch (err: any) {
-    console.error("Error initializing V2 payment:", err);
+  } catch (error) {
+    if (error instanceof ChapaApiError) {
+      console.error("[payments/initialize] Chapa API error", {
+        referenceId: referenceId || undefined,
+        httpStatus: error.httpStatus,
+        code: error.code,
+        message: error.message,
+      });
+      return NextResponse.json(
+        { error: "Failed to initialize payment with Chapa. Please try again." },
+        { status: error.httpStatus && error.httpStatus >= 500 ? 502 : 400 },
+      );
+    }
+    if (error instanceof ChapaConfigError) {
+      console.error("[payments/initialize] Chapa configuration error", {
+        referenceId: referenceId || undefined,
+        message: error.message,
+      });
+      return NextResponse.json(
+        { error: "Payment system is not configured. Please contact support." },
+        { status: 500 },
+      );
+    }
+
+    console.error("[payments/initialize] Unexpected failure", {
+      referenceId: referenceId || undefined,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      message: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
-      { error: err.message || "Internal server error" },
-      { status: 500 }
+      { error: "Failed to initialize payment. Please try again." },
+      { status: 500 },
     );
   }
 }
