@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
     const lastName = lastNameParts.join(" ") || "Student";
     const returnUrl = new URL(`${appUrl.pathname}/checkout/return`, appUrl);
     returnUrl.searchParams.set("tx_ref", txRef);
-    const callbackUrl = new URL(`${appUrl.pathname}/api/webhooks/chapa`, appUrl);
+    const callbackUrl = new URL(`${appUrl.pathname}/api/payments/webhook`, appUrl);
 
     const chapaResult = await initiatePayment({
       amount: paymentAmount,
