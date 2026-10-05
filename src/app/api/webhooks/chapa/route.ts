@@ -26,19 +26,23 @@ function getTimestamp(...values: unknown[]): Date {
   return new Date();
 }
 
-function hasValidSignature(rawBody: string, signature: string, secret: string): boolean {
+/**
+ * Secret-with-secret HMAC validation as instructed by Chapa Support for V2.
+ */
+function hasValidSignature(signature: string, secret: string): boolean {
   const received = signature.trim().replace(/^sha256=/i, "");
   if (!/^[\da-f]{64}$/i.test(received)) return false;
 
-  const expected = crypto.createHmac("sha256", secret).update(rawBody, "utf8").digest();
+  const expected = crypto.createHmac("sha256", secret).update(secret, "utf8").digest();
   const actual = Buffer.from(received, "hex");
+
   return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
 
 export async function POST(request: NextRequest) {
-  const webhookSecret = process.env.CHAPA_WEBHOOK_SECRET?.trim();
+  const webhookSecret = (process.env.CHAPA_WEBHOOK_SECRET || process.env.CHAPA_SECRET_KEY)?.trim();
   if (!webhookSecret) {
-    console.error("[webhooks/chapa] CHAPA_WEBHOOK_SECRET is not configured");
+    console.error("[webhooks/chapa] CHAPA_WEBHOOK_SECRET or CHAPA_SECRET_KEY is not configured");
     return NextResponse.json({ error: "Webhook is not configured." }, { status: 500 });
   }
 
@@ -46,8 +50,11 @@ export async function POST(request: NextRequest) {
     request.headers.get("x-chapa-signature") ??
     request.headers.get("chapa-signature") ??
     "";
+
   const rawBody = await request.text();
-  if (!hasValidSignature(rawBody, signature, webhookSecret)) {
+
+  if (!hasValidSignature(signature, webhookSecret)) {
+    console.error("[webhooks/chapa] Invalid signature match");
     return NextResponse.json({ error: "Invalid webhook signature." }, { status: 401 });
   }
 
@@ -57,6 +64,7 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Invalid webhook JSON." }, { status: 400 });
   }
+
   if (!isRecord(parsed)) {
     return NextResponse.json({ error: "Invalid webhook payload." }, { status: 400 });
   }
@@ -69,6 +77,7 @@ export async function POST(request: NextRequest) {
         ? event.tx_ref.trim()
         : "";
   const status = typeof event.status === "string" ? event.status.trim().toUpperCase() : "";
+
   if (!merchantReference || !status) {
     return NextResponse.json({ error: "Webhook is missing payment reference or status." }, { status: 400 });
   }
@@ -100,9 +109,11 @@ export async function POST(request: NextRequest) {
         : typeof event.reference === "string"
           ? event.reference
           : undefined;
+
     const amount = getAmount(event.amount);
     const serviceFee = getAmount(event.service_fee);
     const currency = typeof event.currency === "string" ? event.currency.trim().toUpperCase() : "";
+
     const netAmount =
       amount !== null && serviceFee !== null && serviceFee >= 0 && serviceFee <= amount
         ? amount - serviceFee
@@ -134,6 +145,7 @@ export async function POST(request: NextRequest) {
     }
 
     const paidAt = getTimestamp(event.updated_at, event.created_at);
+
     await prisma.$transaction(async (tx) => {
       if (successful) {
         await tx.transaction.update({
@@ -152,6 +164,7 @@ export async function POST(request: NextRequest) {
           where: { id: transaction.registration.id, status: "PENDING" },
           data: { status: "PAID", paidAt },
         });
+
         if (registration.count > 0 && transaction.registration.scheduleId) {
           await tx.schedule.update({
             where: { id: transaction.registration.scheduleId },
