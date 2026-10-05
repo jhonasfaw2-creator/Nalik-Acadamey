@@ -108,11 +108,20 @@ export async function POST(request: NextRequest) {
         ? amount - serviceFee
         : amount;
 
-    if (successful && (netAmount !== transaction.amount || currency !== transaction.currency.toUpperCase())) {
+    const expectedScaledAmount = transaction.amount * 100;
+    const amountMatches =
+      amount === transaction.amount ||
+      amount === expectedScaledAmount ||
+      netAmount === transaction.amount ||
+      netAmount === expectedScaledAmount;
+
+    if (successful && (!amountMatches || currency !== transaction.currency.toUpperCase())) {
       console.error("[webhooks/chapa] Successful event does not match stored transaction", {
         merchantReference,
         expectedAmount: transaction.amount,
+        expectedScaledAmount,
         receivedAmount: amount,
+        receivedNetAmount: netAmount,
         receivedServiceFee: serviceFee,
         expectedCurrency: transaction.currency,
         receivedCurrency: currency,

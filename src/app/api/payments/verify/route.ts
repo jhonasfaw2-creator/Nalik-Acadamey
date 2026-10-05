@@ -89,8 +89,12 @@ export async function GET(request: NextRequest) {
       verified.service_fee <= verified.amount
         ? verified.amount - verified.service_fee
         : verified.amount;
+    const expectedScaledAmount = transaction.amount * 100;
     const amountMatches =
-      verified.amount === transaction.amount || verifiedNetAmount === transaction.amount;
+      verified.amount === transaction.amount ||
+      verified.amount === expectedScaledAmount ||
+      verifiedNetAmount === transaction.amount ||
+      verifiedNetAmount === expectedScaledAmount;
     const currencyMatches = verified.currency?.toUpperCase() === transaction.currency.toUpperCase();
 
     if (isSuccess && (!amountMatches || !currencyMatches)) {

@@ -8,6 +8,25 @@ import { generateUniqueReferenceId } from "@/lib/reference";
 
 export const dynamic = "force-dynamic";
 
+function formatChapaPhone(phone: string): string | null {
+  const compact = phone.trim().replace(/[\s()-]/g, "");
+  let formatted: string;
+
+  if (compact.startsWith("+")) {
+    formatted = compact;
+  } else if (compact.startsWith("00")) {
+    formatted = `+${compact.slice(2)}`;
+  } else if (compact.startsWith("251")) {
+    formatted = `+${compact}`;
+  } else if (compact.startsWith("0")) {
+    formatted = `+251${compact.slice(1)}`;
+  } else {
+    formatted = `+251${compact}`;
+  }
+
+  return /^\+[1-9]\d{7,14}$/.test(formatted) ? formatted : null;
+}
+
 export async function POST(request: NextRequest) {
   let referenceId = "";
 
@@ -35,6 +54,13 @@ export async function POST(request: NextRequest) {
     } = parsed.data;
 
     const normalizedEmail = email?.trim().toLowerCase() || null;
+    const formattedPhone = formatChapaPhone(phone);
+    if (!formattedPhone) {
+      return NextResponse.json(
+        { error: "Enter a valid phone number, including its country code if it is not Ethiopian." },
+        { status: 400 },
+      );
+    }
 
     const course = await prisma.course.findUnique({ where: { id: courseId } });
     if (!course) {
@@ -63,7 +89,7 @@ export async function POST(request: NextRequest) {
       where: {
         courseId,
         OR: [
-          { phone: phone.trim() },
+          { phone: formattedPhone },
           ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
         ],
       },
@@ -114,7 +140,7 @@ export async function POST(request: NextRequest) {
           referenceId,
           fullName: fullName.trim(),
           email: normalizedEmail,
-          phone: phone.trim(),
+          phone: formattedPhone,
           age,
           courseId,
           scheduleId: schedule?.id,
@@ -157,14 +183,14 @@ export async function POST(request: NextRequest) {
     const callbackUrl = new URL(`${appUrl.pathname}/api/payments/webhook`, appUrl);
 
     const chapaResult = await initiatePayment({
-      amount: paymentAmount,
+      amount: paymentAmount * 100,
       currency: "ETB",
       merchant_reference: txRef,
       customer: {
         first_name: firstName,
         last_name: lastName,
         ...(normalizedEmail ? { email: normalizedEmail } : {}),
-        phone_number: phone.trim(),
+        phone_number: formattedPhone,
       },
       return_url: returnUrl.toString(),
       callback_url: callbackUrl.toString(),
