@@ -126,7 +126,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    let registrationId: string;
     let txRef: string;
 
     if (existing) {
@@ -138,36 +137,22 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const pendingTransaction = await prisma.transaction.findFirst({
-        where: { registrationId: existing.id, status: "PENDING" },
-        orderBy: { createdAt: "desc" },
+      txRef = `${existing.referenceId}-retry-${crypto.randomBytes(8).toString("hex")}`;
+      await prisma.transaction.create({
+        data: {
+          registrationId: existing.id,
+          amount: paymentAmount,
+          currency: "ETB",
+          txRef,
+          status: "PENDING",
+        },
       });
-
-      if (
-        pendingTransaction &&
-        pendingTransaction.amount === paymentAmount &&
-        pendingTransaction.currency === "ETB"
-      ) {
-        txRef = pendingTransaction.txRef;
-      } else {
-        txRef = `${existing.referenceId}-retry-${crypto.randomBytes(8).toString("hex")}`;
-        await prisma.transaction.create({
-          data: {
-            registrationId: existing.id,
-            amount: paymentAmount,
-            currency: "ETB",
-            txRef,
-            status: "PENDING",
-          },
-        });
-      }
-      registrationId = existing.id;
     } else {
       referenceId = await generateUniqueReferenceId(async (id) =>
         Boolean(await prisma.registration.findUnique({ where: { referenceId: id }, select: { id: true } })),
       );
       txRef = referenceId;
-      const registration = await prisma.registration.create({
+      await prisma.registration.create({
         data: {
           referenceId,
           fullName: fullName.trim(),
@@ -188,9 +173,7 @@ export async function POST(request: NextRequest) {
             },
           },
         },
-        select: { id: true },
       });
-      registrationId = registration.id;
     }
 
     const [firstName, ...lastNameParts] = fullName.trim().split(/\s+/);
