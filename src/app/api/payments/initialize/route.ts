@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
       });
       const message =
         error.httpStatus === 401 || error.httpStatus === 403
-          ? "Chapa rejected the API key. Configure a valid V2 CHASECK_ key for this deployment."
+          ? "Chapa rejected the secret key. Check that CHAPA_SECRET_KEY contains the V2 secret key for this deployment."
           : error.httpStatus === 400
             ? "Chapa rejected the payment details. Check the server logs for the provider error."
             : "Chapa could not initialize this payment. Please try again.";

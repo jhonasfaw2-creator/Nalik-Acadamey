@@ -37,11 +37,6 @@ function getSecretKey(): string {
   if (!key) {
     throw new ChapaConfigError("CHAPA_SECRET_KEY is not configured. Add it to the server environment.");
   }
-  if (!key.startsWith("CHASECK_")) {
-    throw new ChapaConfigError(
-      "CHAPA_SECRET_KEY must be a Chapa V2 secret key beginning with CHASECK_.",
-    );
-  }
   return key;
 }
 
