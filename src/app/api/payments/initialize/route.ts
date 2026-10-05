@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       motivation,
     } = parsed.data;
 
-    const normalizedEmail = email.toLowerCase();
+    const normalizedEmail = email?.trim().toLowerCase() || null;
 
     const course = await prisma.course.findUnique({ where: { id: courseId } });
     if (!course) {
@@ -59,8 +59,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "This session is full. Please choose another." }, { status: 400 });
     }
 
-    const existing = await prisma.registration.findUnique({
-      where: { email_courseId: { email: normalizedEmail, courseId } },
+    const existing = await prisma.registration.findFirst({
+      where: {
+        courseId,
+        OR: [
+          { phone: phone.trim() },
+          ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+        ],
+      },
     });
 
     let registration;
@@ -157,7 +163,7 @@ export async function POST(request: NextRequest) {
       customer: {
         first_name: firstName,
         last_name: lastName,
-        email: normalizedEmail,
+        ...(normalizedEmail ? { email: normalizedEmail } : {}),
         phone_number: phone.trim(),
       },
       return_url: returnUrl.toString(),

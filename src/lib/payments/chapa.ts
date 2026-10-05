@@ -105,7 +105,7 @@ export interface InitiatePaymentInput {
   customer: {
     first_name: string;
     last_name: string;
-    email: string;
+    email?: string;
     phone_number: string;
   };
   return_url: string;
@@ -133,8 +133,8 @@ export async function initiatePayment(
   if (!input.merchant_reference?.trim()) {
     throw new ChapaConfigError("Chapa merchant_reference is required.");
   }
-  if (!input.customer.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.customer.email)) {
-    throw new ChapaConfigError("Valid email is required.");
+  if (input.customer.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.customer.email)) {
+    throw new ChapaConfigError("A valid email is required when provided.");
   }
   if (!input.customer.first_name?.trim()) {
     throw new ChapaConfigError("First name is required.");
@@ -156,7 +156,12 @@ export async function initiatePayment(
     amount: input.amount,
     currency: input.currency ?? DEFAULT_CURRENCY,
     merchant_reference: input.merchant_reference,
-    customer: input.customer,
+    customer: {
+      first_name: input.customer.first_name,
+      last_name: input.customer.last_name,
+      phone_number: input.customer.phone_number,
+      ...(input.customer.email ? { email: input.customer.email } : {}),
+    },
     return_url: input.return_url,
     callback_url: input.callback_url,
     ...(input.customization ? { customization: input.customization } : {}),

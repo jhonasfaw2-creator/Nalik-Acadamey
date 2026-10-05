@@ -34,13 +34,16 @@ export async function POST(request: NextRequest) {
       motivation,
     } = parsed.data;
 
-    // Normalize so the same student registering with different casing is
-    // caught by the (email, courseId) duplicate guard.
-    const normalizedEmail = email.toLowerCase();
+    const normalizedEmail = email?.trim().toLowerCase() || null;
 
-    // Check duplicate
-    const existing = await prisma.registration.findUnique({
-      where: { email_courseId: { email: normalizedEmail, courseId } },
+    const existing = await prisma.registration.findFirst({
+      where: {
+        courseId,
+        OR: [
+          { phone: phone.trim() },
+          ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+        ],
+      },
     });
 
     if (existing) {
@@ -103,16 +106,10 @@ export async function POST(request: NextRequest) {
         },
       });
     } catch (error) {
-      // Two concurrent submissions can both pass the findUnique check above;
-      // the (email, courseId) unique index is the authoritative guard.
       if (isUniqueConstraintError(error)) {
-        const duplicate = await prisma.registration.findUnique({
-          where: { email_courseId: { email: normalizedEmail, courseId } },
-        });
         return NextResponse.json(
           {
             error: "You have already registered for this course.",
-            referenceId: duplicate?.referenceId,
           },
           { status: 409 }
         );

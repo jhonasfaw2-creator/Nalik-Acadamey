@@ -86,7 +86,7 @@ model Registration {
   id                 String        @id @default(cuid())
   referenceId        String        @unique // e.g. NA-2026-A1B2C3
   fullName           String
-  email              String
+  email              String?
   phone              String
   age                Int
   courseId           String

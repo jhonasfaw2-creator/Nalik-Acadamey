@@ -31,7 +31,10 @@ export const courseSchema = z.object({
 // (e.g. a NaN age used to produce a 500 instead of a clean 400).
 export const registrationSchema = z.object({
   fullName: z.string().trim().min(2, "Full name must be at least 2 characters").max(120),
-  email: z.string().trim().email("Please enter a valid email").max(200),
+  email: z.union([
+    z.string().trim().email("Please enter a valid email").max(200),
+    z.literal(""),
+  ]).optional(),
   phone: z.string().trim().min(8, "Phone must be at least 8 digits").max(30),
   age: z.coerce.number().int("Age must be a whole number").min(10, "Age must be 10–99").max(99, "Age must be 10–99"),
   courseId: z.string().min(1, "Course is required"),

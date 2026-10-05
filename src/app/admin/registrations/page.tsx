@@ -7,7 +7,7 @@ interface Registration {
   id: string;
   referenceId: string;
   fullName: string;
-  email: string;
+  email: string | null;
   phone: string;
   age: number;
   previousExperience: string;
@@ -317,7 +317,7 @@ export default function AdminRegistrations() {
                   <td className="px-4 py-3">
                     <p className="font-medium text-navy">{reg.fullName}</p>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{reg.email}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{reg.email || "—"}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{reg.phone}</td>
                   <td className="px-4 py-3 text-sm text-navy">{reg.course?.title || "No course"}</td>
                   <td className="px-4 py-3 text-sm font-medium text-navy">

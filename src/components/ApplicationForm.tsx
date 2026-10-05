@@ -71,7 +71,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
 
   // Student information (uncontrolled inputs)
   const fullNameRef = useRef<HTMLInputElement>(null);
-  const emailRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const ageRef = useRef<HTMLInputElement>(null);
 
@@ -178,7 +177,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const steps = [
     { label: "Course", done: Boolean(selectedCourseId) },
     { label: "Schedule", done: Boolean(selectedSessionId) },
-    { label: "Details", done: Boolean(fullNameRef.current?.value || emailRef.current?.value || phoneRef.current?.value || ageRef.current?.value) },
+    { label: "Details", done: Boolean(fullNameRef.current?.value || phoneRef.current?.value || ageRef.current?.value) },
     { label: "Review", done: false },
   ];
 
@@ -194,11 +193,11 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
       return;
     }
 
-    const requiredFields = [fullNameRef.current, emailRef.current, phoneRef.current, ageRef.current];
+    const requiredFields = [fullNameRef.current, phoneRef.current, ageRef.current];
     const invalidField = requiredFields.find((field) => !field?.checkValidity());
     if (invalidField !== undefined) {
       invalidField?.reportValidity();
-      setFormError("Complete your name, email, phone number, and age before continuing.");
+      setFormError("Complete your name, phone number, and age before continuing.");
       return;
     }
 
@@ -211,7 +210,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fullName: fullNameRef.current?.value.trim() ?? "",
-          email: emailRef.current?.value.trim() ?? "",
           phone: phoneRef.current?.value.trim() ?? "",
           age: Number(ageRef.current?.value),
           courseId: selectedCourseId,
@@ -424,15 +422,9 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                       <label htmlFor="reg-name" className="mb-1.5 block text-sm font-medium text-gray-700">Full name <span className="text-gold">*</span></label>
                       <input ref={fullNameRef} id="reg-name" type="text" placeholder="e.g. Daniel Kebede" autoComplete="name" required className={fieldClass} />
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div>
-                        <label htmlFor="reg-email" className="mb-1.5 block text-sm font-medium text-gray-700">Email <span className="text-gold">*</span></label>
-                        <input ref={emailRef} id="reg-email" type="email" placeholder="you@example.com" autoComplete="email" required className={fieldClass} />
-                      </div>
-                      <div>
-                        <label htmlFor="reg-phone" className="mb-1.5 block text-sm font-medium text-gray-700">Phone <span className="text-gold">*</span></label>
-                        <input ref={phoneRef} id="reg-phone" type="tel" placeholder="+251 9XX XXX XXX" autoComplete="tel" required className={fieldClass} />
-                      </div>
+                    <div>
+                      <label htmlFor="reg-phone" className="mb-1.5 block text-sm font-medium text-gray-700">Phone <span className="text-gold">*</span></label>
+                      <input ref={phoneRef} id="reg-phone" type="tel" placeholder="+251 9XX XXX XXX" autoComplete="tel" required className={fieldClass} />
                     </div>
                     <div>
                       <label htmlFor="reg-age" className="mb-1.5 block text-sm font-medium text-gray-700">Age <span className="text-gold">*</span></label>
