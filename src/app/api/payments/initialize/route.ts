@@ -230,9 +230,19 @@ export async function POST(request: NextRequest) {
         code: error.code,
         message: error.message,
       });
+      const message =
+        error.httpStatus === 401 || error.httpStatus === 403
+          ? "Chapa rejected the API key. Configure a valid V2 CHASECK_ key for this deployment."
+          : error.httpStatus === 400
+            ? "Chapa rejected the payment details. Check the server logs for the provider error."
+            : "Chapa could not initialize this payment. Please try again.";
       return NextResponse.json(
-        { error: "Failed to initialize payment with Chapa. Please try again." },
-        { status: error.httpStatus && error.httpStatus >= 500 ? 502 : 400 },
+        {
+          error: message,
+          providerStatus: error.httpStatus,
+          providerCode: error.code,
+        },
+        { status: 502 },
       );
     }
     if (error instanceof ChapaConfigError) {
