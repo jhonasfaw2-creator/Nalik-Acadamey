@@ -103,7 +103,7 @@ async function chapaFetch<T>(
 }
 
 export interface InitiatePaymentInput {
-  amount: number;
+  amount: number | string;
   currency?: typeof DEFAULT_CURRENCY;
   merchant_reference: string;
   customer: {
@@ -131,7 +131,8 @@ export interface InitiatePaymentResult {
 export async function initiatePayment(
   input: InitiatePaymentInput
 ): Promise<InitiatePaymentResult> {
-  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+  const amount = Number(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
     throw new ChapaConfigError("Chapa amount must be a positive number.");
   }
   if (!input.merchant_reference?.trim()) {
@@ -157,7 +158,7 @@ export async function initiatePayment(
   }
 
   const body = {
-    amount: input.amount,
+    amount: amount.toString(),
     currency: input.currency ?? DEFAULT_CURRENCY,
     merchant_reference: input.merchant_reference,
     customer: {

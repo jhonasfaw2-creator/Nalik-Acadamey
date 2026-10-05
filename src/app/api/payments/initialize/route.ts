@@ -34,7 +34,10 @@ function formatChapaPhone(phone: string): string | null {
 
 async function generateUniqueTxRef(): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const txRef = `TX-${crypto.randomBytes(8).toString("hex").toUpperCase()}`;
+    const txRef = `TX-${Date.now().toString().slice(-10)}-${Math.random()
+      .toString(36)
+      .substring(2, 6)
+      .toUpperCase()}`;
     const existing = await prisma.transaction.findUnique({
       where: { txRef },
       select: { id: true },
@@ -187,29 +190,26 @@ export async function POST(request: NextRequest) {
     }
 
     const [firstName, ...lastNameParts] = fullName.trim().split(/\s+/);
+    const lastName = lastNameParts.join(" ") || "Student";
     const returnUrl = new URL(`${appUrl.pathname}/checkout/return`, appUrl);
     returnUrl.searchParams.set("tx_ref", txRef);
     const callbackUrl = new URL(`${appUrl.pathname}/api/payments/webhook`, appUrl);
 
     const chapaResult = await initiatePayment({
-      amount: paymentAmount,
+      amount: paymentAmount.toString(),
       currency: "ETB",
       merchant_reference: txRef,
       customer: {
         first_name: firstName,
-        last_name: lastNameParts.join(" ") || "Student",
-        ...(normalizedEmail ? { email: normalizedEmail } : {}),
+        last_name: lastName,
+        email: normalizedEmail || "student@nalikacademy.com",
         phone_number: formattedPhone,
       },
       return_url: returnUrl.toString(),
       callback_url: callbackUrl.toString(),
       customization: {
-        title: course.title,
-        description: `Nalik Academy - ${course.title}`,
-      },
-      meta: {
-        reference_id: referenceId,
-        schedule: `${schedule.group}/${schedule.session}`,
+        title: "Nalik Academy",
+        description: `Course Registration: ${course.title}`,
       },
     });
 
