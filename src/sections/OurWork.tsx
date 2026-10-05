@@ -95,12 +95,6 @@ export default function SelectedWork() {
       ref={sectionRef}
       className="relative overflow-hidden bg-warm-white px-4 py-20 sm:px-6 lg:px-8"
     >
-      {/* Quiet background accent for a more editorial feel */}
-      <div
-        className="pointer-events-none absolute left-0 right-0 top-0 h-72 bg-gradient-to-b from-navy/5 via-transparent to-transparent"
-        aria-hidden="true"
-      />
-
       <div className="mx-auto max-w-7xl">
         <div ref={headingRef} className="max-w-2xl">
           <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">
@@ -115,7 +109,7 @@ export default function SelectedWork() {
           </p>
         </div>
 
-        {/* Featured: first cut leads, two more follow — an editorial 3-piece composition */}
+        {/* Featured: first cut leads, two more follow */}
         <div className="mt-12">
           <SectionLabel
             title="Some of his work"
@@ -185,7 +179,7 @@ function WorkCard({
 
   return (
     <article
-      className={`group reveal-child relative flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${className}`}
+      className={`group reveal-child relative flex flex-col overflow-hidden rounded-lg bg-white transition-colors duration-300 ${className}`}
       style={{ transitionDelay: delay }}
     >
       <div className="relative aspect-video overflow-hidden bg-navy">
@@ -222,7 +216,7 @@ function VideoThumb({
       <img
         src={project.thumbnailUrl}
         alt={`${project.title} thumbnail`}
-        className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+        className="absolute inset-0 h-full w-full object-cover"
         loading="lazy"
         decoding="async"
       />
@@ -231,7 +225,7 @@ function VideoThumb({
       <div className="absolute inset-0 flex items-center justify-center bg-navy/20 transition-colors duration-300 group-hover:bg-navy/30">
         <button
           onClick={onPlay}
-          className={`pointer-events-auto flex cursor-pointer items-center justify-center rounded-full bg-white/95 text-navy shadow-lg ring-1 ring-white/40 backdrop-blur-sm transition-all duration-300 group-hover:scale-110 group-hover:ring-gold/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold ${playSize}`}
+          className={`pointer-events-auto flex cursor-pointer items-center justify-center rounded-full bg-white text-navy ring-1 ring-white/40 transition-colors duration-300 group-hover:ring-gold/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold ${playSize}`}
           aria-label={`Play ${project.title}`}
         >
           <Play size={iconSize} className="ml-0.5 fill-navy" />
@@ -239,7 +233,7 @@ function VideoThumb({
       </div>
 
       {/* Platform pill */}
-      <div className="absolute left-4 top-4 flex items-center gap-1.5 rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-navy shadow-sm backdrop-blur-sm">
+      <div className="absolute left-4 top-4 flex items-center gap-1.5 rounded bg-white px-2.5 py-1 text-xs font-semibold text-navy">
         <span
           className={`inline-flex h-2 w-2 rounded-full ${isYouTube ? "bg-red-600" : "bg-gold"}`}
           aria-hidden="true"
@@ -290,7 +284,7 @@ function VideoPlayer({
       )}
       <button
         onClick={onClose}
-        className="absolute right-3 top-3 inline-flex h-9 items-center gap-2 rounded-full border border-white/20 bg-navy/70 px-3 text-xs font-medium text-white backdrop-blur-sm transition hover:bg-navy/90 focus:outline-none"
+        className="absolute right-3 top-3 inline-flex h-9 items-center gap-2 rounded-full border border-white/20 bg-navy/80 px-3 text-xs font-medium text-white transition-colors hover:bg-navy focus:outline-none"
         aria-label="Close video"
       >
         Close
@@ -330,7 +324,7 @@ function WorkMeta({
           {(project.skills ?? []).slice(0, 4).map((skill) => (
             <span
               key={skill}
-              className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700"
+              className="rounded border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700"
             >
               {skill}
             </span>

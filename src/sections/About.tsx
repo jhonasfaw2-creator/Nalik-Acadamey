@@ -1,70 +1,79 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Volume2, VolumeX } from "lucide-react";
 
 const DEFAULTS = {
-  badge: "About Us",
-  title: "Nalik Academy is where aspiring editors become professionals.",
+  badge: "About Nalik",
+  title: "Where aspiring editors become professionals.",
   paragraph1:
-    "We are a hands-on media production academy based in Ethiopia, focused on training the next generation of video editors, graphic designers, and visual storytellers. Our courses are built around real-world projects, not theory alone.",
+    "Nalik Academy is a hands-on creative media academy based in Ethiopia, focused on developing the next generation of video editors and visual storytellers.",
   paragraph2:
-    "Whether you are a complete beginner or looking to sharpen your skills, our structured programs take you from fundamentals to professional-level output using the same tools the industry relies on every day.",
+    "Our training goes beyond theory. You learn by working with real projects, professional workflows, and the tools used every day in modern media production.",
   video: "/assets/About/about.mp4",
   poster: "/assets/About/poster.jpg",
 };
 
 export default function About() {
-  const sectionRef = useRef<HTMLElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLDivElement>(null);
   const videoElRef = useRef<HTMLVideoElement>(null);
+
   const [isMuted, setIsMuted] = useState(true);
   const [content, setContent] = useState(DEFAULTS);
+  const [isVideoReady, setIsVideoReady] = useState(false);
 
+  /* Fetch editable content */
   useEffect(() => {
     fetch("/api/content?section=about")
       .then((r) => r.json())
       .then((d) => {
-        if (d.badge || d.title) {
-          setContent((prev) => ({
-            badge: d.badge || prev.badge,
-            title: d.title || prev.title,
-            paragraph1: d.paragraph1 || prev.paragraph1,
-            paragraph2: d.paragraph2 || prev.paragraph2,
-            video: d.video || prev.video,
-            poster: d.poster || prev.poster,
-          }));
-        }
+        setContent((prev) => ({
+          badge: d.badge || prev.badge,
+          title: d.title || prev.title,
+          paragraph1: d.paragraph1 || prev.paragraph1,
+          paragraph2: d.paragraph2 || prev.paragraph2,
+          video: d.video || prev.video,
+          poster: d.poster || prev.poster,
+        }));
       })
       .catch(() => {});
   }, []);
 
-  // Scroll reveal animation for text and video
+  /* Scroll reveal */
   useEffect(() => {
-    const els = [textRef.current, videoRef.current].filter(Boolean);
-    els.forEach((el, i) => {
-      if (!el) return;
-      el.classList.add("reveal");
-      el.style.transitionDelay = `${i * 0.15}s`;
+    const elements = [textRef.current, videoRef.current].filter(
+      Boolean
+    ) as HTMLElement[];
+
+    elements.forEach((el, index) => {
+      el.classList.add("about-reveal");
+      el.style.transitionDelay = `${index * 120}ms`;
     });
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            entry.target.classList.add("visible");
+            entry.target.classList.add("about-visible");
             observer.unobserve(entry.target);
           }
         });
       },
-      { threshold: 0.15 }
+      {
+        threshold: 0.15,
+      }
     );
-    els.forEach((el) => observer.observe(el!));
-    return () => els.forEach((el) => observer.unobserve(el!));
+
+    elements.forEach((el) => observer.observe(el));
+
+    return () => observer.disconnect();
   }, []);
 
-  // Instant scroll-triggered video play/pause
+  /* Intelligent video playback */
   useEffect(() => {
     const video = videoElRef.current;
+
     if (!video) return;
 
     const observer = new IntersectionObserver(
@@ -75,42 +84,96 @@ export default function About() {
           video.pause();
         }
       },
-      { threshold: 0.25 }
+      {
+        threshold: 0.25,
+      }
     );
 
     observer.observe(video);
+
     return () => observer.disconnect();
   }, [content.video]);
 
   const toggleSound = () => {
     const video = videoElRef.current;
+
     if (!video) return;
-    const next = !isMuted;
-    video.muted = next;
-    setIsMuted(next);
+
+    const nextMuted = !isMuted;
+
+    video.muted = nextMuted;
+    setIsMuted(nextMuted);
+
+    if (!nextMuted) {
+      video.play().catch(() => {});
+    }
   };
 
   return (
-    <section id="about" ref={sectionRef} className="bg-warm-white px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-6 sm:mb-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gold sm:text-sm">{content.badge}</p>
+    <section
+      id="about"
+      className="relative overflow-hidden bg-warm-white px-5 py-20 sm:px-8 sm:py-24 lg:px-10 lg:py-32"
+    >
+      <div className="mx-auto max-w-7xl">
+
+        {/* Section header */}
+        <div className="mb-12 sm:mb-16">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-gold">
+            {content.badge}
+          </p>
         </div>
 
-        <div className="grid items-center gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:gap-12">
-          <div ref={textRef} className="max-w-xl">
-            <h2 className="text-3xl font-bold leading-tight text-navy sm:text-4xl lg:text-[2.75rem] lg:leading-[1.05]">
+        <div className="grid items-center gap-14 lg:grid-cols-[1fr_0.75fr] lg:gap-24">
+
+          {/* Text */}
+          <div ref={textRef} className="max-w-2xl">
+
+            <h2 className="text-4xl font-bold leading-[1.05] tracking-tight text-navy sm:text-5xl lg:text-[3.5rem]">
               {content.title}
             </h2>
-            <div className="mt-5 space-y-4 text-base leading-relaxed text-gray-600 sm:text-[1.05rem]">
+
+            <div className="mt-8 max-w-xl space-y-5 text-base leading-7 text-gray-600 sm:text-lg sm:leading-8">
               <p>{content.paragraph1}</p>
+
               <p>{content.paragraph2}</p>
+            </div>
+
+            {/* Focus line */}
+            <div className="mt-10 border-t border-navy/10 pt-5">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-navy/50">
+                  Our Focus
+                </span>
+
+                <span className="text-sm font-medium text-navy">
+                  Video Editing
+                </span>
+
+                <span className="h-1 w-1 rounded-full bg-gold" />
+
+                <span className="text-sm font-medium text-navy">
+                  Visual Storytelling
+                </span>
+
+                <span className="h-1 w-1 rounded-full bg-gold" />
+
+                <span className="text-sm font-medium text-navy">
+                  Real Projects
+                </span>
+              </div>
             </div>
           </div>
 
-          <div ref={videoRef} className="flex justify-center lg:justify-end">
-            <div className="relative w-full max-w-[22rem] overflow-hidden rounded-[1.75rem] border border-gray-200 bg-navy shadow-[0_18px_60px_-28px_rgba(21,27,41,0.35)]">
-              <div className="aspect-[3/4] overflow-hidden bg-navy">
+          {/* Video */}
+          <div
+            ref={videoRef}
+            className="relative mx-auto w-full max-w-[26rem] lg:mx-0 lg:ml-auto"
+          >
+            <div className="relative">
+
+              {/* Video frame */}
+              <div className="relative aspect-[4/5] overflow-hidden bg-navy">
+
                 <video
                   ref={videoElRef}
                   muted={isMuted}
@@ -118,27 +181,40 @@ export default function About() {
                   playsInline
                   preload="metadata"
                   poster={content.poster}
-                  className="h-full w-full object-cover opacity-95"
+                  onCanPlay={() => setIsVideoReady(true)}
+                  className={`h-full w-full object-cover transition-all duration-1000 ${
+                    isVideoReady
+                      ? "scale-100 opacity-100"
+                      : "scale-[1.03] opacity-0"
+                  }`}
                 >
                   <source src={content.video} type="video/mp4" />
                 </video>
+
+                <div className="pointer-events-none absolute inset-0 bg-navy/20" />
+
+                {/* Video label */}
+                <div className="absolute left-5 top-5">
+                  <span className="border border-white/30 bg-navy/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
+                    Inside Nalik
+                  </span>
+                </div>
+
+                {/* Sound */}
+                <button
+                  onClick={toggleSound}
+                  aria-label={isMuted ? "Unmute video" : "Mute video"}
+                  className="absolute bottom-5 right-5 flex h-11 w-11 items-center justify-center rounded-full bg-white text-navy transition-colors duration-300 hover:bg-gold focus:outline-none focus:ring-2 focus:ring-white"
+                >
+                  {isMuted ? (
+                    <VolumeX size={17} strokeWidth={2} />
+                  ) : (
+                    <Volume2 size={17} strokeWidth={2} />
+                  )}
+                </button>
+
               </div>
 
-              <button
-                onClick={toggleSound}
-                aria-label={isMuted ? "Unmute video" : "Mute video"}
-                className="absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/85 text-navy shadow-sm backdrop-blur-sm transition-transform duration-200 hover:scale-105"
-              >
-                {isMuted ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" />
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                  </svg>
-                )}
-              </button>
             </div>
           </div>
         </div>

@@ -90,7 +90,7 @@ export default function Contact({ onApplyClick }: ContactProps) {
   return (
     <section id="contact" ref={sectionRef} className="bg-warm-white px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
       <div className="mx-auto max-w-5xl">
-        <div ref={panelRef} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04),0_12px_28px_rgba(15,23,42,0.04)]">
+        <div ref={panelRef} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
           <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[1.05fr_0.95fr] lg:p-10">
             <div className="flex flex-col justify-between">
               <div>
@@ -104,7 +104,7 @@ export default function Contact({ onApplyClick }: ContactProps) {
               </div>
 
               <div className="mt-8 space-y-4">
-                <div className="flex items-start gap-3 rounded-xl border border-gray-200 bg-warm-white p-3">
+                <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-warm-white p-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gold/10 text-gold">
                     <Phone size={18} />
                   </div>
@@ -116,7 +116,7 @@ export default function Contact({ onApplyClick }: ContactProps) {
                   </div>
                 </div>
 
-                <div className="flex items-start gap-3 rounded-xl border border-gray-200 bg-warm-white p-3">
+                <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-warm-white p-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-navy/5 text-navy">
                     <MapPin size={18} />
                   </div>
@@ -150,7 +150,7 @@ export default function Contact({ onApplyClick }: ContactProps) {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-warm-white">
+            <div className="overflow-hidden rounded-lg border border-gray-200 bg-warm-white">
               <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Location preview</p>
                 <a
@@ -180,7 +180,7 @@ export default function Contact({ onApplyClick }: ContactProps) {
                     aria-label={`Load map preview for ${PLACE_LABEL}`}
                     className="group absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold"
                   >
-                    <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-gold text-navy shadow-lg transition-transform duration-300 group-hover:scale-105">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gold text-navy">
                       <MapPin size={20} />
                     </span>
                     <span className="relative text-[11px] font-semibold uppercase tracking-[0.2em] text-white/75">

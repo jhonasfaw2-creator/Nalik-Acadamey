@@ -69,19 +69,12 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
     <>
       <nav
         className={cn(
-          "fixed top-0 left-0 right-0 z-50 transition-all duration-500",
+          "fixed top-0 left-0 right-0 z-50 transition-colors duration-500",
           scrolled
-            ? "bg-white/80 shadow-[0_1px_3px_rgba(0,0,0,0.08)] backdrop-blur-xl"
+            ? "bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
             : "bg-transparent"
         )}
       >
-        <div
-          className={cn(
-            "h-px transition-all duration-500",
-            scrolled ? "bg-gold/80" : "bg-gold/60"
-          )}
-        />
-
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           {/* Logo */}
           <a
@@ -93,7 +86,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
               <img
                 src="/assets/logo.jpeg"
                 alt="Nalik Academy"
-                className="h-10 w-10 rounded-xl object-cover shadow-sm transition-shadow duration-300 group-hover:shadow-md"
+                className="h-10 w-10 rounded-lg object-cover"
               />
             </div>
             <div className="hidden sm:block">
@@ -144,13 +137,6 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
               <Phone size={12} />
               +251 911 223 344
             </a>
-
-            <div
-              className={cn(
-                "h-5 w-px",
-                scrolled ? "bg-navy/10" : "bg-white/15"
-              )}
-            />
 
             <button
               onClick={handleApply}
@@ -213,7 +199,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
       >
         {/* Backdrop */}
         <div
-          className="absolute inset-0 bg-navy/95 backdrop-blur-sm"
+          className="absolute inset-0 bg-navy/95"
           onClick={() => setMobileOpen(false)}
         />
 
@@ -247,7 +233,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
           <button
             onClick={handleApply}
             className={cn(
-              "mt-6 inline-flex items-center gap-2 rounded-xl bg-gold px-8 py-3.5 text-base font-bold text-navy transition-all duration-300 hover:bg-gold-hover hover:shadow-lg hover:shadow-gold/20",
+              "mt-6 inline-flex items-center gap-2 rounded-lg bg-gold px-8 py-3.5 text-base font-bold text-navy transition-colors duration-300 hover:bg-gold-hover",
               mobileOpen ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
             )}
             style={{ transitionDelay: mobileOpen ? "500ms" : "0ms" }}

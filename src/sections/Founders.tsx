@@ -1,66 +1,121 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 
 const DEFAULTS = {
-  badge: "Behind Nalik Academy",
-  name: "Nalik Academy",
+  badge: "Meet the founder",
+  name: "",
   role: "Founder of Nalik Academy",
   portraitUrl: "/assets/natiii.jpg",
-  bioShort: "Ethiopian video editor and creative professional with experience editing social-media content for established Ethiopian creators and influencers, including Loft Haron Shirobaie.",
-  bioLong:
-    "I built Nalik Academy from a background in editing for social-media and creator content. Working with established Ethiopian creators and influencers shaped how I think about pacing, hooks, captions, sound design, colour grading, motion graphics, and the difference between a good cut and an edit that holds attention. This academy is my attempt to pass that practice on, not as theory but as the kind of hands-on editing work that shows up in real projects.",
+  bio:
+    "Before Nalik Academy, he worked as a freelance video editor in Ethiopia. He edited content for creators and social media personalities, including Loft Haron and Shirobaie. The work covered YouTube videos, short form clips, and longer stories, and it taught him how pacing, hooks, sound, and colour decide whether an edit holds attention." +
+    "\n\n" +
+    "The academy grew out of that experience. He wanted to teach editing the way he learned it, through real projects and practical decisions instead of theory alone. Students here work on the same kinds of edits he handled as a freelancer, with the same attention to story and finish.",
   specialties: [
-    "Storytelling",
-    "Pacing",
-    "Hooks",
-    "Sound Design",
+    "Video Editing",
+    "YouTube Editing",
+    "Short Form Editing",
+    "Short Film Editing",
     "Colour Grading",
+    "Sound Design",
     "Motion Graphics",
-    "Short-form Editing",
-    "Long-form Editing",
+    "Storytelling and Pacing",
   ],
-  featuredClients: ["Loft Haron Shirobaie"],
+  featuredClients: ["Loft Haron", "Shirobaie"],
 };
 
+/* The content endpoint stores lists as JSON strings or newline separated
+   text. Accept both so the section keeps loading with the existing data. */
+function toArray(value: unknown, fallback: string[]): string[] {
+  const clean = (list: unknown[]) =>
+    list
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+  if (Array.isArray(value)) {
+    const list = clean(value);
+    return list.length ? list : fallback;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    let parsed: unknown = null;
+
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      parsed = null;
+    }
+
+    if (Array.isArray(parsed)) {
+      const list = clean(parsed);
+      if (list.length) return list;
+    }
+
+    const list = value
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (list.length) return list;
+  }
+
+  return fallback;
+}
+
 export default function Founders() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const portraitRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const workRef = useRef<HTMLDivElement>(null);
+  const specRef = useRef<HTMLDivElement>(null);
+
   const [data, setData] = useState(DEFAULTS);
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     fetch("/api/content?section=founders")
       .then((r) => r.json())
       .then((d) => {
-        if (d.badge || d.name || d.portraitUrl) {
-          setData({
-            badge: d.badge || DEFAULTS.badge,
-            name: d.name || DEFAULTS.name,
-            role: d.role || DEFAULTS.role,
-            bioShort: d.bio || d.bioShort || DEFAULTS.bioShort,
-            bioLong: d.bio || d.bioLong || DEFAULTS.bioLong,
-            portraitUrl: d.portraitUrl || DEFAULTS.portraitUrl,
-            specialties: d.specialties || DEFAULTS.specialties,
-            // JSON from /api/content is a flat string map, so treat arrays as unknown and re-derive them safely.
-            featuredClients: ((d as unknown as { featuredClients?: string[] }).featuredClients) || DEFAULTS.featuredClients
-          });
-        }
+        if (!d || typeof d !== "object") return;
+
+        setData({
+          badge:
+            typeof d.badge === "string" && d.badge.trim()
+              ? d.badge
+              : DEFAULTS.badge,
+          name: typeof d.name === "string" ? d.name : DEFAULTS.name,
+          role:
+            typeof d.role === "string" && d.role.trim()
+              ? d.role
+              : DEFAULTS.role,
+          portraitUrl:
+            typeof d.portraitUrl === "string" && d.portraitUrl.trim()
+              ? d.portraitUrl
+              : DEFAULTS.portraitUrl,
+          bio:
+            typeof d.bio === "string" && d.bio.trim() ? d.bio : DEFAULTS.bio,
+          specialties: toArray(d.specialties, DEFAULTS.specialties),
+          featuredClients: toArray(d.featuredClients, DEFAULTS.featuredClients),
+        });
       })
       .catch(() => {});
   }, []);
 
   useEffect(() => {
-    if (!sectionRef.current || !mounted) return;
-    const els = [portraitRef.current, contentRef.current].filter(Boolean);
-    els.forEach((el, i) => {
-      if (!el) return;
-      el.classList.add("reveal");
-      el.style.transitionDelay = `${i * 0.12}s`;
+    const elements = [
+      headerRef.current,
+      imageRef.current,
+      contentRef.current,
+      workRef.current,
+      specRef.current,
+    ].filter(Boolean) as HTMLElement[];
+
+    elements.forEach((element, index) => {
+      element.classList.add("founder-reveal");
+      element.style.transitionDelay = `${index * 80}ms`;
     });
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -70,124 +125,262 @@ export default function Founders() {
           }
         });
       },
-      { threshold: 0.15 }
+      {
+        threshold: 0.12,
+      }
     );
-    els.forEach((el) => observer.observe(el!));
-    return () => els.forEach((el) => observer.unobserve(el!));
-  }, [mounted]);
 
-  const goToSelectedWork = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    elements.forEach((element) => observer.observe(element));
+
+    return () => observer.disconnect();
+  }, []);
+
+  const goToWork = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
+
     const target = document.getElementById("our-work");
+
     if (!target) return;
+
     const top = target.getBoundingClientRect().top + window.scrollY - 80;
-    window.scrollTo({ top, behavior: "smooth" });
+
+    window.scrollTo({
+      top,
+      behavior: "smooth",
+    });
   };
 
+  const bioParagraphs = data.bio
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
   return (
-    <section
-      id="founders"
-      ref={sectionRef}
-      className="relative isolate overflow-hidden bg-warm-white px-4 py-20 sm:px-6 lg:px-8"
-    >
-      {/* Quiet editorial accent, connected to the portfolio’s navy/gold */}
-      <div
-        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-navy/[0.04] via-transparent to-transparent"
-        aria-hidden="true"
-      />
+    <>
+      <section
+        id="founders"
+        className="relative overflow-hidden bg-warm-white"
+      >
+        {/* -----------------------------------------------------------
+            INTRO
+        ------------------------------------------------------------ */}
+        <div className="mx-auto max-w-7xl px-5 pt-20 sm:px-8 sm:pt-24 lg:px-12 lg:pt-32">
+          <div ref={headerRef}>
+            <div className="flex items-center justify-between gap-6 border-b border-gray-300/70 pb-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-gold">
+                {data.badge}
+              </p>
 
-      <div className="mx-auto max-w-7xl">
-        <div className="mx-4 sm:mx-6 lg:mx-8">
-          {/* Heading */}
-          <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">
-            {data.badge}
-          </p>
-          <h2 className="hero-title text-3xl font-bold leading-snug text-navy sm:text-4xl">
-            One editor. One academy.
-          </h2>
-          <p className="mt-4 hero-desc text-base leading-relaxed text-gray-600">
-            {data.bioShort}
-          </p>
-
-          <div className="mt-10 grid items-start gap-10 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-            {/* Portrait — natiii.jpg is a 1080×1920 phone photo, so cap its height
-                and crop from the top so the face stays in frame. */}
-            <div
-              ref={portraitRef}
-              className="group relative mx-auto w-full max-w-sm self-start overflow-hidden rounded-2xl bg-navy sm:sticky sm:top-24"
-            >
-              <img
-                src={data.portraitUrl}
-                alt={`${data.name}, founder portrait`}
-                className="aspect-[3/4] w-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
-                loading="lazy"
-                decoding="async"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-navy/40 via-transparent to-transparent" />
-
-              {/* Role over the portrait */}
-              <div className="absolute bottom-0 left-0 right-0 p-5">
-                <p className="text-sm font-semibold uppercase tracking-wide text-gold">
-                  {data.role}
-                </p>
-              </div>
+              <p className="hidden text-[10px] uppercase tracking-[0.22em] text-gray-400 sm:block">
+                Nalik Academy
+              </p>
             </div>
 
-            {/* Story */}
-            <div ref={contentRef} className="space-y-5">
-              <div>
-                <h3 className="text-lg font-semibold leading-snug text-navy">
-                  From editing for creators to building Nalik Academy
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-gray-600">
-                  {data.bioLong}
-                </p>
-              </div>
+            <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
+              <h2 className="lg:col-span-7 text-3xl font-semibold leading-[1.12] tracking-[-0.03em] text-navy sm:text-4xl lg:text-[2.75rem]">
+                He learned the craft editing for other creators. Nalik
+                Academy is where he teaches it.
+              </h2>
 
-              {data.featuredClients.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Selected creator & client work
-                  </p>
-                  <ul className="mt-2 flex flex-wrap gap-2">
-                    {data.featuredClients.map((client) => (
-                      <li
-                        key={client}
-                        className="rounded-full border border-gray-200 bg-white px-3 py-1 text-sm font-medium text-navy"
-                      >
-                        {client}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Editing specialties</p>
-                <ul className="mt-2 flex flex-wrap gap-1.5">
-                  {data.specialties.map((specialty) => (
-                    <li
-                      key={specialty}
-                      className="rounded-full bg-navy/5 border border-gray-200 px-2.5 py-1 text-[11px] font-medium text-navy"
-                    >
-                      {specialty}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <a
-                href="#our-work"
-                onClick={goToSelectedWork}
-                className="inline-flex items-center gap-2 text-sm font-medium text-gold transition-colors hover:text-gold-hover"
-              >
-                Explore His Work
-                <ArrowRight size={14} />
-              </a>
+              <p className="lg:col-span-5 lg:self-end lg:pl-8 text-base leading-7 text-gray-600 sm:text-lg sm:leading-8">
+                Nalik Academy was opened by an Ethiopian freelance video
+                editor. Everything taught here comes from his own editing
+                work for creators and social media personalities.
+              </p>
             </div>
           </div>
         </div>
-      </div>
-    </section>
+
+        {/* -----------------------------------------------------------
+            PORTRAIT AND STORY
+        ------------------------------------------------------------ */}
+        <div className="mx-auto mt-16 max-w-7xl px-5 sm:mt-20 sm:px-8 lg:px-12">
+          <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-0">
+            {/* Portrait */}
+            <div ref={imageRef} className="lg:col-span-7">
+              <figure>
+                <div className="relative h-[460px] w-full overflow-hidden bg-navy sm:h-[580px] lg:h-[760px]">
+                  <img
+                    src={data.portraitUrl}
+                    alt={`${data.name || data.role}, Ethiopian freelance video editor`}
+                    className="h-full w-full object-cover object-top"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </div>
+
+                <figcaption className="mt-5 flex items-baseline justify-between gap-6 border-t border-gray-300/70 pt-4">
+                  <div>
+                    <p className="text-sm font-semibold text-navy">
+                      {data.role}
+                    </p>
+
+                    <p className="mt-1 text-sm text-gray-500">
+                      Ethiopian freelance video editor
+                    </p>
+                  </div>
+
+                </figcaption>
+              </figure>
+            </div>
+
+            {/* Story */}
+            <div
+              ref={contentRef}
+              className="lg:col-span-5 lg:border-l lg:border-gray-300/70 lg:pl-12 lg:pt-24 xl:pl-16"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gold">
+                The story
+              </p>
+
+              <h3 className="mt-5 text-2xl font-semibold leading-snug tracking-[-0.02em] text-navy sm:text-[1.75rem]">
+                Behind the edit.
+              </h3>
+
+              <div className="mt-6 space-y-5 text-[15px] leading-7 text-gray-600 sm:text-base sm:leading-8">
+                {bioParagraphs.map((paragraph, index) => (
+                  <p key={index}>{paragraph}</p>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* -----------------------------------------------------------
+            PROFESSIONAL EXPERIENCE
+        ------------------------------------------------------------ */}
+        <div ref={workRef} className="mt-20 bg-navy sm:mt-24">
+          <div className="mx-auto max-w-7xl px-5 py-16 sm:px-8 lg:px-12 lg:py-20">
+            <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
+              <div className="lg:col-span-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gold">
+                  Selected creator work
+                </p>
+
+                <p className="mt-5 max-w-xs text-sm leading-6 text-white/60">
+                  Direct editing work with Ethiopian creators and social
+                  media personalities.
+                </p>
+              </div>
+
+              <div className="lg:col-span-8">
+                {data.featuredClients.map((client, index) => (
+                  <div
+                    key={client}
+                    className="flex items-baseline justify-between gap-6 border-b border-white/15 py-6 first:border-t first:border-white/15 lg:py-7"
+                  >
+                    <div className="flex items-baseline gap-5 sm:gap-8">
+                      <span className="text-xs tabular-nums text-gold">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+
+                      <span className="text-2xl font-semibold tracking-[-0.02em] text-white sm:text-3xl lg:text-4xl">
+                        {client}
+                      </span>
+                    </div>
+
+                    <span className="shrink-0 text-[10px] uppercase tracking-[0.22em] text-white/40">
+                      Creator
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* -----------------------------------------------------------
+            SPECIALTIES AND LINK TO WORK
+        ------------------------------------------------------------ */}
+        <div
+          ref={specRef}
+          className="mx-auto max-w-7xl px-5 py-16 sm:px-8 lg:px-12 lg:py-24"
+        >
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
+            <div className="lg:col-span-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gold">
+                Editing specialties
+              </p>
+
+              <p className="mt-5 max-w-xs text-sm leading-6 text-gray-500">
+                The skills he built as a freelancer. This is what students
+                learn at Nalik Academy.
+              </p>
+            </div>
+
+            <div className="lg:col-span-8">
+              <div className="grid grid-cols-1 border-t border-gray-300/70 sm:grid-cols-2">
+                {data.specialties.map((specialty, index) => (
+                  <div
+                    key={specialty}
+                    className="flex items-baseline gap-5 border-b border-gray-300/70 py-4 sm:odd:pr-10 sm:even:border-l sm:even:border-gray-300/70 sm:even:pl-10"
+                  >
+                    <span className="w-6 shrink-0 text-[11px] tabular-nums text-gold">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+
+                    <span className="text-[15px] font-medium text-navy sm:text-base">
+                      {specialty}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Link to Our Work */}
+          <div className="mt-16 flex flex-col gap-6 border-t border-gray-300/70 pt-8 sm:mt-20 sm:flex-row sm:items-end sm:justify-between">
+            <div className="max-w-md">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gold">
+                Our work
+              </p>
+
+              <p className="mt-4 text-lg leading-7 text-navy sm:text-xl">
+                See examples of the editing behind the academy.
+              </p>
+            </div>
+
+            <a
+              href="#our-work"
+              onClick={goToWork}
+              className="group inline-flex w-fit items-center gap-3"
+            >
+              <span className="border-b border-navy pb-1 text-sm font-semibold text-navy transition-colors duration-200 group-hover:border-gold group-hover:text-gold">
+                Visit Our Work
+              </span>
+
+              <ArrowUpRight
+                size={16}
+                strokeWidth={1.8}
+                className="text-navy transition-colors duration-200 group-hover:text-gold"
+              />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <style jsx>{`
+        .founder-reveal {
+          opacity: 0;
+          transform: translateY(20px);
+          transition:
+            opacity 700ms ease,
+            transform 700ms ease;
+        }
+
+        .founder-reveal.visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .founder-reveal {
+            opacity: 1;
+            transform: none;
+            transition: none;
+          }
+        }
+      `}</style>
+    </>
   );
 }

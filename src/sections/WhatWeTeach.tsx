@@ -11,10 +11,10 @@ const DEFAULTS = {
   description:
     "Every course at Nalik Academy is built around the software professionals actually use. You learn by doing, not by watching lectures.",
   tools: [
-    { name: "Adobe Premiere Pro", description: "Industry-standard video editing. From timeline basics to advanced multicam workflows, color correction, and export settings for any platform." },
+    { name: "Adobe Premiere Pro", description: "Video editing in Premiere Pro. Learn timeline basics, multicam workflows, color correction, and export settings for any platform." },
     { name: "Adobe Photoshop", description: "Essential for thumbnail design, title cards, image retouching, and visual assets that complement your video projects." },
     { name: "Adobe Illustrator", description: "Vector graphics for logos, lower thirds, motion graphics elements, and scalable design assets used across all media." },
-    { name: "DaVinci Resolve", description: "Professional-grade color grading and post-production. Used on major films and increasingly adopted for editing and audio finishing." },
+    { name: "DaVinci Resolve", description: "Color grading and post-production in DaVinci Resolve, a tool used on major films and increasingly adopted for editing and audio finishing." },
   ],
 };
 
@@ -91,7 +91,7 @@ export default function WhatWeTeach() {
           {content.tools.map((tool, i) => {
             const Icon = ICONS[i] || Film;
             return (
-              <div key={tool.name} className="card-hover group rounded-lg border border-white/10 bg-white/5 p-6">
+              <div key={tool.name} className="group rounded-lg border border-white/10 bg-navy-light p-6">
                 <div className="flex items-start gap-4">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gold/10 text-gold transition-colors duration-300 group-hover:bg-gold/20">
                     <Icon size={20} />

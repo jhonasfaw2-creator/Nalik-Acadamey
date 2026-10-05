@@ -17,9 +17,12 @@ function ReturnContent() {
       return;
     }
 
+    // Explicitly narrow to non-null string for TypeScript
+    const currentTxRef: string = txRef;
+
     async function verifyPayment() {
       try {
-        const res = await fetch(`/api/payments/verify?tx_ref=${encodeURIComponent(txRef)}`);
+        const res = await fetch(`/api/payments/verify?tx_ref=${encodeURIComponent(currentTxRef)}`);
         const data = await res.json();
 
         if (data.status === "SUCCESS") {

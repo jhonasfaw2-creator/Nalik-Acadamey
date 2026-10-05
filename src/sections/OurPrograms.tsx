@@ -8,12 +8,12 @@ const ICONS = [Film, Palette, SlidersHorizontal, Award];
 const DEFAULTS = {
   badge: "Our Programs",
   title: "What you get when you join Nalik Academy.",
-  description: "Every program is designed to take you from beginner to confident creator, with practical skills you can use immediately.",
+  description: "Every program is built to make you a confident creator, with practical skills you can use immediately.",
   programs: [
     { title: "Hands-On Video Editing", text: "Edit real projects from day one. Learn timeline workflow, transitions, multicam editing, and export settings for YouTube, TV, and cinema using Adobe Premiere Pro and DaVinci Resolve." },
     { title: "Graphic Design Foundations", text: "Create professional thumbnails, title cards, logos, and social media assets. Master Adobe Photoshop for image editing and Illustrator for scalable vector design." },
-    { title: "Color Grading & Finishing", text: "Go beyond basic corrections. Learn professional color grading workflows in DaVinci Resolve, the same tool used on major Hollywood productions." },
-    { title: "Portfolio-Ready Output", text: "Every course ends with a portfolio project. You graduate with real work to show employers or clients, not just a certificate of attendance." },
+    { title: "Color Grading & Finishing", text: "Learn professional color grading workflows in DaVinci Resolve, the same tool used on major film productions." },
+    { title: "Portfolio-Ready Output", text: "Every course ends with a portfolio project. You graduate with real work to show employers or clients." },
   ],
 };
 
@@ -86,7 +86,7 @@ export default function OurPrograms() {
           {content.programs.map((item, i) => {
             const Icon = ICONS[i] || Film;
             return (
-              <div key={item.title} className="card-hover group rounded-xl border border-gray-200 bg-white p-6">
+              <div key={item.title} className="group rounded-lg border border-gray-200 bg-white p-6">
                 <div className="flex items-start gap-4">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gold/10 text-gold transition-colors duration-300 group-hover:bg-gold/20"><Icon size={20} /></div>
                   <div>

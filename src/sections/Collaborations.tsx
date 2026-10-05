@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { ArrowRight, Asterisk } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { SOCIAL_LINKS } from "@/lib/socials";
 
 const INSTAGRAM_ICON =
@@ -57,17 +57,10 @@ export default function Collaborations() {
       ref={sectionRef}
       className="relative overflow-hidden bg-warm-white px-4 py-16 sm:px-6 lg:px-8"
     >
-      {/* Warm color glow for energy */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-24 left-1/2 h-72 w-[36rem] -translate-x-1/2 rounded-full bg-gold/15 blur-[100px]"
-      />
-
       <div className="relative mx-auto max-w-5xl">
-        {/* ── Header ─────────────────────────────── */}
+        {/* Header */}
         <div className="reveal-child mx-auto max-w-xl text-center">
-          <p className="flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-widest text-gold">
-            <Asterisk size={15} strokeWidth={2.5} aria-hidden="true" />
+          <p className="text-xs font-semibold uppercase tracking-widest text-gold">
             Client Work
           </p>
           <h2 className="mt-3 text-3xl font-black leading-tight tracking-tight text-navy sm:text-4xl">
@@ -75,11 +68,11 @@ export default function Collaborations() {
           </h2>
           <p className="mt-3 text-base text-gray-500">
             Freelance video editing for streamers, content creators, and
-            businesses — made for social media.
+            businesses, made for social media.
           </p>
         </div>
 
-        {/* ── Creators & Streamers ───────────────── */}
+        {/* Creators and streamers */}
         <div className="reveal-child mt-12">
           <p className="text-center text-xs font-semibold uppercase tracking-widest text-gray-400">
             Creators &amp; Streamers
@@ -89,9 +82,9 @@ export default function Collaborations() {
               <CastCard key={creator.name} creator={creator} index={i} />
             ))}
 
-            {/* "You?" invitation tile — fills the 8th slot, adds energy */}
-            <article className="reveal-child group flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-gold/50 bg-gold/[0.06] p-4 text-center transition-all duration-300 hover:-translate-y-1 hover:border-gold hover:bg-gold/10">
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-gold text-2xl font-black text-navy shadow-lg shadow-gold/30 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6">
+            {/* Invitation tile */}
+            <article className="reveal-child group flex flex-col items-center justify-center rounded-lg border border-gold/40 bg-gold/[0.06] p-4 text-center transition-colors duration-300 hover:border-gold">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-gold text-2xl font-black text-navy">
                 ?
               </span>
               <p className="mt-3 text-base font-bold text-navy">You next?</p>
@@ -106,7 +99,7 @@ export default function Collaborations() {
           </div>
         </div>
 
-        {/* ── Brands & Businesses ────────────────── */}
+        {/* Brands and businesses */}
         <div className="reveal-child mt-14">
           <p className="text-center text-xs font-semibold uppercase tracking-widest text-gray-400">
             Brands &amp; Businesses
@@ -118,21 +111,15 @@ export default function Collaborations() {
                 className="group text-center"
                 style={{ transitionDelay: `${i * 0.08}s` }}
               >
-                <div
-                  className={`relative aspect-[16/9] w-[122px] overflow-hidden rounded-xl ring-1 ring-gray-200 transition-all duration-300 group-hover:-translate-y-0.5 group-hover:shadow-[0_12px_24px_-10px_rgba(226,160,51,0.35)] group-hover:ring-gold/60 sm:w-[162px] ${
-                    i % 2 === 0
-                      ? "group-hover:rotate-[0.5deg]"
-                      : "group-hover:-rotate-[0.5deg]"
-                  }`}
-                >
+                <div className="relative aspect-[16/9] w-[122px] overflow-hidden rounded-lg ring-1 ring-gray-200 transition-colors duration-300 group-hover:ring-gold/60 sm:w-[162px]">
                   <Image
                     src={business.image}
                     alt={business.name}
                     fill
                     sizes="(max-width: 640px) 122px, 162px"
-                    className="object-cover transition-transform duration-500 group-hover:scale-105"
+                    className="object-cover"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-navy/70 via-navy/10 to-transparent" />
+                  <div className="absolute inset-0 bg-navy/45" />
                   <div className="absolute inset-x-0 bottom-0 p-2.5">
                     <p className="text-sm font-black text-white drop-shadow-sm">
                       {business.name}
@@ -147,7 +134,7 @@ export default function Collaborations() {
           </div>
         </div>
 
-        {/* ── Tiny CTA ───────────────────────────── */}
+        {/* CTA */}
         <div className="reveal-child mt-12 text-center">
           <a
             href="#contact"
@@ -173,37 +160,33 @@ function CastCard({
   creator: (typeof CREATORS)[number];
   index: number;
 }) {
-  const tilt = index % 2 === 0 ? "group-hover:rotate-1" : "group-hover:-rotate-1";
-
   return (
     <article
       className="reveal-child group mx-auto w-full max-w-[126px] text-center sm:max-w-[140px]"
       style={{ transitionDelay: `${(index % 4) * 0.06}s` }}
     >
-      <div
-        className={`relative aspect-[4/5] overflow-hidden rounded-3xl ring-1 ring-gray-200 transition-all duration-300 group-hover:-translate-y-1.5 group-hover:shadow-[0_20px_40px_-12px_rgba(21,27,41,0.25)] group-hover:ring-2 group-hover:ring-gold ${tilt}`}
-      >
+      <div className="relative aspect-[4/5] overflow-hidden rounded-lg ring-1 ring-gray-200 transition-all duration-300 group-hover:ring-gold">
         <Image
           src={creator.image}
           alt={creator.name}
           fill
           sizes="(max-width: 640px) 126px, 140px"
-          className="object-cover transition-transform duration-500 group-hover:scale-[1.06]"
+          className="object-cover"
         />
 
         {/* Role sticker */}
-        <span className="absolute left-2.5 top-2.5 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-navy shadow-sm backdrop-blur-sm">
+        <span className="absolute left-2.5 top-2.5 rounded bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-navy">
           {creator.role}
         </span>
 
         {/* Social pills on photo */}
-        <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1.5 bg-gradient-to-t from-navy/80 via-navy/30 to-transparent pb-3 pt-8 opacity-0 transition-all duration-300 group-hover:opacity-100">
+        <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1.5 bg-navy/70 pb-3 pt-8 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
           <SocialPill href={creator.tiktok} icon={TIKTOK_ICON} label={`${creator.name} on TikTok`} />
           <SocialPill href={creator.instagram} icon={INSTAGRAM_ICON} label={`${creator.name} on Instagram`} />
         </div>
       </div>
 
-      {/* Name BELOW photo — cast style */}
+      {/* Name below photo */}
       <h3 className="mt-3 text-base font-bold tracking-tight text-navy sm:text-lg">
         {creator.name}
       </h3>
@@ -224,10 +207,10 @@ function SocialPill({
   label: string;
 }) {
   const classes =
-    "flex h-8 w-8 items-center justify-center rounded-full backdrop-blur-sm transition-all duration-200 " +
+    "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-200 " +
     (href
-      ? "bg-white/90 text-navy hover:bg-gold hover:text-navy"
-      : "border border-dashed border-white/60 text-white/70");
+      ? "bg-white text-navy hover:bg-gold hover:text-navy"
+      : "border border-white/50 text-white/70");
 
   if (!href) {
     // Placeholder: dashed pill until a real URL is added.
