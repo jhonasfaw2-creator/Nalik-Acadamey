@@ -39,7 +39,6 @@ function formatBirr(amount: number) {
   return amount.toLocaleString("en-ET") + " Birr";
 }
 
-/** Session length in hours/minutes, e.g. "2 hours" or "1h 30m". */
 function computeDuration(startTime?: string, endTime?: string): string {
   if (!startTime || !endTime) return "";
   const [sh, sm] = startTime.split(":").map(Number);
@@ -77,7 +76,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
 
-  // ── Load courses + schedules ──────────────────────────────
+  // Load courses + schedules
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -90,13 +89,15 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
       .then((courseData) => {
         if (cancelled) return;
         if (Array.isArray(courseData)) {
-          setCourses(courseData.map((c: CourseOption) => ({
-            id: c.id,
-            title: c.title,
-            price: c.price,
-            discountPrice: c.discountPrice,
-            discountLabel: c.discountLabel,
-          })));
+          setCourses(
+            courseData.map((c: CourseOption) => ({
+              id: c.id,
+              title: c.title,
+              price: c.price,
+              discountPrice: c.discountPrice,
+              discountLabel: c.discountLabel,
+            }))
+          );
           const wanted = preselectedCourse;
           if (wanted) {
             const match = courseData.find((c: CourseOption) => c.title === wanted);
@@ -137,7 +138,9 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     };
     void loadSchedules();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [open, preselectedCourse, reloadKey]);
 
   useEffect(() => {
@@ -159,7 +162,9 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [open]);
 
   const selectedGroup = scheduleGroups.find((g) => g.group === selectedGroupId) as ScheduleGroup | undefined;
@@ -173,7 +178,9 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
       : "";
   const scheduleDays = selectedGroup?.days || "";
 
-  const fieldClass = "w-full rounded-xl border border-gray-200 bg-[#f9faf8] px-3.5 py-2.75 text-sm text-navy placeholder:text-gray-400 transition-all focus:border-gold focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold/20 disabled:bg-gray-50";
+  const fieldClass =
+    "w-full rounded-xl border border-gray-200 bg-[#f9faf8] px-3.5 py-2.75 text-sm text-navy placeholder:text-gray-400 transition-all focus:border-gold focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold/20 disabled:bg-gray-50";
+
   const steps = [
     { label: "Course", done: Boolean(selectedCourseId) },
     { label: "Schedule", done: Boolean(selectedSessionId) },
@@ -201,22 +208,39 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
       return;
     }
 
+    const activeCourse = courses.find((c) => c.id === selectedCourseId);
+    const paymentAmount = activeCourse ? (activeCourse.discountPrice ?? activeCourse.price) : 0;
+
+    if (!paymentAmount || paymentAmount <= 0) {
+      setFormError("Selected course price is invalid.");
+      return;
+    }
+
     setIsSubmitting(true);
     setFormError("");
 
     try {
+      const rawFullName = fullNameRef.current?.value.trim() ?? "";
+      const nameParts = rawFullName.split(" ");
+      const firstName = nameParts[0] || "Student";
+      const lastName = nameParts.slice(1).join(" ") || "User";
+
       const response = await fetch("/api/payments/initialize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullName: fullNameRef.current?.value.trim() ?? "",
+          amount: paymentAmount,
+          firstName: firstName,
+          lastName: lastName,
+          fullName: rawFullName,
           phone: phoneRef.current?.value.trim() ?? "",
           age: Number(ageRef.current?.value),
           courseId: selectedCourseId,
           scheduleId: selectedSessionId,
         }),
       });
-      const data: { checkout_url?: unknown; error?: string } = await response.json().catch(() => ({}));
+
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         setFormError(data.error || "We couldn't start your payment. Please try again.");
@@ -224,24 +248,20 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         return;
       }
 
-      if (typeof data.checkout_url !== "string") {
-        setFormError("We couldn't start your payment. Please try again.");
-        setIsSubmitting(false);
-        return;
-      }
-      const checkoutUrl = new URL(data.checkout_url);
-      if (checkoutUrl.protocol !== "https:") {
+      const checkoutUrl = data.checkoutUrl || data.checkout_url;
+
+      if (typeof checkoutUrl !== "string") {
         setFormError("We couldn't start your payment. Please try again.");
         setIsSubmitting(false);
         return;
       }
 
-      window.location.href = checkoutUrl.toString();
+      window.location.href = checkoutUrl;
     } catch {
       setFormError("Something went wrong. Please try again.");
       setIsSubmitting(false);
     }
-  }, [isSubmitting, selectedCourseId, selectedSessionId]);
+  }, [isSubmitting, selectedCourseId, selectedSessionId, courses]);
 
   return (
     <dialog ref={dialogRef} className="backdrop:bg-black/60 rounded-[28px] p-0 max-w-5xl w-[calc(100%-1.5rem)] max-h-[92vh]">
@@ -250,248 +270,299 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 py-3 sm:px-6">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">Nalik Academy</p>
-            <h2 className="mt-1 text-xl font-bold text-navy sm:text-2xl">
-              Register for a course
-            </h2>
+            <h2 className="mt-1 text-xl font-bold text-navy sm:text-2xl">Register for a course</h2>
           </div>
-          <button onClick={() => dialogRef.current?.close()} className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700" aria-label="Close">
+          <button
+            onClick={() => dialogRef.current?.close()}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+            aria-label="Close"
+          >
             <X size={18} />
           </button>
         </div>
 
         <div className="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_360px]">
-              <div className="space-y-5">
-                <div className="rounded-2xl border border-[#efe7da] bg-[#fffaf1] p-3 sm:p-4">
-                  <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">
-                    <span>Checkout flow</span>
-                    <span className="rounded-full bg-white px-2.5 py-1 text-[10px] text-gold">Fast & secure</span>
-                  </div>
-                  <div className="mt-3 grid grid-cols-4 gap-2">
-                    {steps.map((step, index) => (
-                      <div key={step.label} className="flex items-center gap-2">
-                        <div className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${step.done ? "bg-gold text-navy" : index === 0 ? "bg-navy text-white" : "bg-white text-gray-400 border border-gray-200"}`}>
-                          {index + 1}
-                        </div>
-                        <span className={`hidden text-[11px] font-medium sm:block ${step.done ? "text-navy" : "text-gray-500"}`}>{step.label}</span>
-                      </div>
-                    ))}
-                  </div>
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-[#efe7da] bg-[#fffaf1] p-3 sm:p-4">
+                <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+                  <span>Checkout flow</span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] text-gold">Fast & secure</span>
                 </div>
-
-                <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Choose a course</h3>
-                    <span className="text-[11px] font-medium text-gray-400">{courses.length} options</span>
-                  </div>
-                  {!coursesLoaded ? (
-                    <div className="flex items-center gap-2 rounded-xl border border-gray-200 px-3.5 py-3 text-sm text-gray-400">
-                      <Loader2 size={14} className="animate-spin" /> Loading courses...
+                <div className="mt-3 grid grid-cols-4 gap-2">
+                  {steps.map((step, index) => (
+                    <div key={step.label} className="flex items-center gap-2">
+                      <div
+                        className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${
+                          step.done ? "bg-gold text-navy" : index === 0 ? "bg-navy text-white" : "bg-white text-gray-400 border border-gray-200"
+                        }`}
+                      >
+                        {index + 1}
+                      </div>
+                      <span className={`hidden text-[11px] font-medium sm:block ${step.done ? "text-navy" : "text-gray-500"}`}>
+                        {step.label}
+                      </span>
                     </div>
-                  ) : loadError && courses.length === 0 ? (
+                  ))}
+                </div>
+              </div>
+
+              <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Choose a course</h3>
+                  <span className="text-[11px] font-medium text-gray-400">{courses.length} options</span>
+                </div>
+                {!coursesLoaded ? (
+                  <div className="flex items-center gap-2 rounded-xl border border-gray-200 px-3.5 py-3 text-sm text-gray-400">
+                    <Loader2 size={14} className="animate-spin" /> Loading courses...
+                  </div>
+                ) : loadError && courses.length === 0 ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-center">
+                    <p className="text-sm font-medium text-amber-800">{loadError}</p>
+                    <button
+                      onClick={() => setReloadKey((k) => k + 1)}
+                      className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-700"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {courses.map((c) => {
+                      const coursePrice = c.discountPrice ?? c.price;
+                      const isSelected = selectedCourseId === c.id;
+                      return (
+                        <label
+                          key={c.id}
+                          className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-3.5 transition-all ${
+                            isSelected ? "border-gold bg-[#fffaf1] shadow-sm" : "border-gray-200 hover:border-gold/50 hover:bg-[#fffaf1]/50"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="course"
+                            value={c.id}
+                            checked={isSelected}
+                            onChange={(e) => {
+                              setSelectedCourseId(e.target.value);
+                              setSelectedGroupId("");
+                              setSelectedSessionId("");
+                            }}
+                            className="accent-gold"
+                          />
+                          <span className="flex-1">
+                            <span className="flex items-start justify-between gap-3">
+                              <span className="block text-sm font-semibold text-navy">{c.title}</span>
+                              <span className="text-right">
+                                <span className="block text-base font-bold text-gold">{formatBirr(coursePrice)}</span>
+                                {c.discountPrice && (
+                                  <span className="block text-[10px] text-gray-400 line-through">{formatBirr(c.price)}</span>
+                                )}
+                              </span>
+                            </span>
+                            {c.discountLabel && (
+                              <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                {c.discountLabel}
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Choose a schedule</h3>
+                  <span className="text-[11px] font-medium text-gray-400">Availability</span>
+                </div>
+                {scheduleGroups.length === 0 ? (
+                  scheduleError ? (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-center">
-                      <p className="text-sm font-medium text-amber-800">{loadError}</p>
-                      <button onClick={() => setReloadKey((k) => k + 1)} className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-700">
+                      <p className="text-sm font-medium text-amber-800">{scheduleError}</p>
+                      <button
+                        onClick={() => setReloadKey((key) => key + 1)}
+                        className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-700"
+                      >
                         Try Again
                       </button>
                     </div>
                   ) : (
-                    <div className="space-y-2.5">
-                      {courses.map((c) => {
-                        const coursePrice = c.discountPrice ?? c.price;
-                        const isSelected = selectedCourseId === c.id;
-                        return (
-                          <label key={c.id} className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-3.5 transition-all ${isSelected ? "border-gold bg-[#fffaf1] shadow-sm" : "border-gray-200 hover:border-gold/50 hover:bg-[#fffaf1]/50"}`}>
+                    <div className="rounded-xl bg-warm-white px-4 py-3 text-sm text-gray-500">
+                      No schedule groups are open right now. Please try again later.
+                    </div>
+                  )
+                ) : (
+                  <div className="space-y-3">
+                    {scheduleGroups.map((g) => {
+                      const groupSelected = selectedGroupId === g.group;
+                      return (
+                        <div
+                          key={g.group}
+                          className={`rounded-2xl border p-3 transition-all ${
+                            groupSelected ? "border-gold bg-[#fffaf1]" : "border-gray-200 bg-white"
+                          }`}
+                        >
+                          <label className="flex cursor-pointer items-start gap-3">
                             <input
                               type="radio"
-                              name="course"
-                              value={c.id}
-                              checked={isSelected}
-                              onChange={(e) => { setSelectedCourseId(e.target.value); setSelectedGroupId(""); setSelectedSessionId(""); }}
-                              className="accent-gold"
+                              name="schedule-group"
+                              value={g.group}
+                              checked={groupSelected}
+                              onChange={() => {
+                                setSelectedGroupId(g.group);
+                                setSelectedSessionId("");
+                              }}
+                              className="mt-0.5 accent-gold"
                             />
                             <span className="flex-1">
-                              <span className="flex items-start justify-between gap-3">
-                                <span className="block text-sm font-semibold text-navy">{c.title}</span>
-                                <span className="text-right">
-                                  <span className="block text-base font-bold text-gold">{formatBirr(coursePrice)}</span>
-                                  {c.discountPrice && <span className="block text-[10px] text-gray-400 line-through">{formatBirr(c.price)}</span>}
-                                </span>
+                              <span className="flex items-center justify-between gap-2">
+                                <span className="text-sm font-bold text-navy">Schedule {g.group}</span>
+                                {g.isFull ? (
+                                  <span className="text-[11px] font-bold text-red-500">Full</span>
+                                ) : (
+                                  <span className="text-[11px] text-gray-500">Open</span>
+                                )}
                               </span>
-                              {c.discountLabel && <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">{c.discountLabel}</span>}
+                              <span className="mt-1 flex items-center gap-1 text-xs text-gray-500">
+                                <Calendar size={11} /> {g.days}
+                              </span>
                             </span>
                           </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                </section>
 
-                <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Choose a schedule</h3>
-                    <span className="text-[11px] font-medium text-gray-400">Availability</span>
-                  </div>
-                  {scheduleGroups.length === 0 ? (
-                    scheduleError ? (
-                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-center">
-                        <p className="text-sm font-medium text-amber-800">{scheduleError}</p>
-                        <button onClick={() => setReloadKey((key) => key + 1)} className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-700">
-                          Try Again
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="rounded-xl bg-warm-white px-4 py-3 text-sm text-gray-500">
-                        No schedule groups are open right now. Please try again later.
-                      </div>
-                    )
-                  ) : (
-                    <div className="space-y-3">
-                      {scheduleGroups.map((g) => {
-                        const groupSelected = selectedGroupId === g.group;
-                        return (
-                          <div key={g.group} className={`rounded-2xl border p-3 transition-all ${groupSelected ? "border-gold bg-[#fffaf1]" : "border-gray-200 bg-white"}`}>
-                            <label className="flex cursor-pointer items-start gap-3">
-                              <input
-                                type="radio"
-                                name="schedule-group"
-                                value={g.group}
-                                checked={groupSelected}
-                                onChange={() => { setSelectedGroupId(g.group); setSelectedSessionId(""); }}
-                                className="mt-0.5 accent-gold"
-                              />
-                              <span className="flex-1">
-                                <span className="flex items-center justify-between gap-2">
-                                  <span className="text-sm font-bold text-navy">Schedule {g.group}</span>
-                                  {g.isFull ? <span className="text-[11px] font-bold text-red-500">Full</span> : <span className="text-[11px] text-gray-500">Open</span>}
-                                </span>
-                                <span className="mt-1 flex items-center gap-1 text-xs text-gray-500">
-                                  <Calendar size={11} /> {g.days}
-                                </span>
-                              </span>
-                            </label>
-
-                            {groupSelected && (
-                              <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
-                                {g.sessions.map((s) => {
-                                  // isFull already includes the admin's
-                                  // Available/Full marking from the API.
-                                  const isFull = s.isFull;
-                                  return (
-                                    <label key={s.id} className={`flex items-start gap-3 rounded-xl border p-3 transition-all ${selectedSessionId === s.id ? "border-gold bg-white" : "border-gray-200 hover:border-gold/50"}`}>
-                                      <input
-                                        type="radio"
-                                        name="schedule-session"
-                                        value={s.id}
-                                        checked={selectedSessionId === s.id}
-                                        onChange={() => setSelectedSessionId(s.id)}
-                                        disabled={isFull}
-                                        className="mt-0.5 accent-gold"
-                                      />
-                                      <span className="flex-1">
-                                        <span className="flex items-center justify-between gap-2">
-                                          <span className="text-sm font-semibold text-navy">{s.session}</span>
-                                          {isFull ? (
-                                            <span className="text-[11px] font-bold text-red-500">Full</span>
-                                          ) : (
-                                            <span className="text-[11px] font-medium text-gray-500">{s.seatsAvailable} seats</span>
-                                          )}
-                                        </span>
-                                        <span className="mt-1 flex items-center gap-2 text-xs text-gray-500">
-                                          <span>{s.startTime} – {s.endTime}</span>
-                                          <span>•</span>
-                                          <span>{computeDuration(s.startTime, s.endTime)}</span>
-                                        </span>
+                          {groupSelected && (
+                            <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
+                              {g.sessions.map((s) => {
+                                const isFull = s.isFull;
+                                return (
+                                  <label
+                                    key={s.id}
+                                    className={`flex items-start gap-3 rounded-xl border p-3 transition-all ${
+                                      selectedSessionId === s.id ? "border-gold bg-white" : "border-gray-200 hover:border-gold/50"
+                                    }`}
+                                  >
+                                    <input
+                                      type="radio"
+                                      name="schedule-session"
+                                      value={s.id}
+                                      checked={selectedSessionId === s.id}
+                                      onChange={() => setSelectedSessionId(s.id)}
+                                      disabled={isFull}
+                                      className="mt-0.5 accent-gold"
+                                    />
+                                    <span className="flex-1">
+                                      <span className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-semibold text-navy">{s.session}</span>
+                                        {isFull ? (
+                                          <span className="text-[11px] font-bold text-red-500">Full</span>
+                                        ) : (
+                                          <span className="text-[11px] font-medium text-gray-500">{s.seatsAvailable} seats</span>
+                                        )}
                                       </span>
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </section>
-
-                <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
-                  <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Your details</h3>
-                  <div className="mt-4 space-y-4">
-                    <div>
-                      <label htmlFor="reg-name" className="mb-1.5 block text-sm font-medium text-gray-700">Full name <span className="text-gold">*</span></label>
-                      <input ref={fullNameRef} id="reg-name" type="text" placeholder="e.g. Daniel Kebede" autoComplete="name" required className={fieldClass} />
-                    </div>
-                    <div>
-                      <label htmlFor="reg-phone" className="mb-1.5 block text-sm font-medium text-gray-700">Phone <span className="text-gold">*</span></label>
-                      <input ref={phoneRef} id="reg-phone" type="tel" placeholder="+251 9XX XXX XXX" autoComplete="tel" required className={fieldClass} />
-                    </div>
-                    <div>
-                      <label htmlFor="reg-age" className="mb-1.5 block text-sm font-medium text-gray-700">Age <span className="text-gold">*</span></label>
-                      <input ref={ageRef} id="reg-age" type="number" min={10} max={99} placeholder="22" required className={fieldClass} />
-                    </div>
+                                      <span className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                                        <span>
+                                          {s.startTime} – {s.endTime}
+                                        </span>
+                                        <span>•</span>
+                                        <span>{computeDuration(s.startTime, s.endTime)}</span>
+                                      </span>
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                </section>
-              </div>
+                )}
+              </section>
 
-              <aside className="lg:pt-2">
-                <div className="lg:sticky lg:top-0">
-                  <div className="rounded-2xl border border-gray-200 bg-[#fafaf8] p-4 sm:p-5">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Order summary</h3>
-                      <span className="rounded-full bg-gold/10 px-2 py-1 text-[10px] font-semibold text-navy">Secure</span>
-                    </div>
-
-                    <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
-                      <p className="text-sm font-semibold text-navy">{selectedCourse?.title || "Course not selected"}</p>
-                      <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-                        <span>Schedule</span>
-                        <span className="font-medium text-navy">{scheduleText || "Not selected"}</span>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-                        <span>Days</span>
-                        <span className="font-medium text-navy">{scheduleDays || "—"}</span>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-                        <span>Duration</span>
-                        <span className="font-medium text-navy">{duration || "—"}</span>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 rounded-2xl bg-navy p-4 text-white">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-sm text-white/70">Total</span>
-                        <span className="text-2xl font-bold text-gold">{price ? formatBirr(price) : "—"}</span>
-                      </div>
-                      <p className="mt-2 text-[11px] text-white/65">
-                        Continue to Chapa&apos;s secure checkout to complete your payment.
-                      </p>
-                    </div>
-
-                    {formError && (
-                      <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-[11px] text-red-600" role="alert">
-                        <AlertCircle size={12} className="mt-0.5 shrink-0 text-red-500" />
-                        <span>{formError}</span>
-                      </div>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={handleSubmit}
-                      disabled={isSubmitting}
-                      aria-busy={isSubmitting}
-                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gold px-5 py-3.5 text-base font-bold tracking-wide text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
-                      {isSubmitting ? "Redirecting to Chapa…" : "Continue to secure payment"}
-                    </button>
+              <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Your details</h3>
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <label htmlFor="reg-name" className="mb-1.5 block text-sm font-medium text-gray-700">
+                      Full name <span className="text-gold">*</span>
+                    </label>
+                    <input ref={fullNameRef} id="reg-name" type="text" placeholder="e.g. Daniel Kebede" autoComplete="name" required className={fieldClass} />
+                  </div>
+                  <div>
+                    <label htmlFor="reg-phone" className="mb-1.5 block text-sm font-medium text-gray-700">
+                      Phone <span className="text-gold">*</span>
+                    </label>
+                    <input ref={phoneRef} id="reg-phone" type="tel" placeholder="+251 9XX XXX XXX" autoComplete="tel" required className={fieldClass} />
+                  </div>
+                  <div>
+                    <label htmlFor="reg-age" className="mb-1.5 block text-sm font-medium text-gray-700">
+                      Age <span className="text-gold">*</span>
+                    </label>
+                    <input ref={ageRef} id="reg-age" type="number" min={10} max={99} placeholder="22" required className={fieldClass} />
                   </div>
                 </div>
-              </aside>
+              </section>
             </div>
+
+            <aside className="lg:pt-2">
+              <div className="lg:sticky lg:top-0">
+                <div className="rounded-2xl border border-gray-200 bg-[#fafaf8] p-4 sm:p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Order summary</h3>
+                    <span className="rounded-full bg-gold/10 px-2 py-1 text-[10px] font-semibold text-navy">Secure</span>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
+                    <p className="text-sm font-semibold text-navy">{selectedCourse?.title || "Course not selected"}</p>
+                    <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                      <span>Schedule</span>
+                      <span className="font-medium text-navy">{scheduleText || "Not selected"}</span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                      <span>Days</span>
+                      <span className="font-medium text-navy">{scheduleDays || "—"}</span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                      <span>Duration</span>
+                      <span className="font-medium text-navy">{duration || "—"}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl bg-navy p-4 text-white">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-white/70">Total</span>
+                      <span className="text-2xl font-bold text-gold">{price ? formatBirr(price) : "—"}</span>
+                    </div>
+                    <p className="mt-2 text-[11px] text-white/65">
+                      Continue to Chapa&apos;s secure checkout to complete your payment.
+                    </p>
+                  </div>
+
+                  {formError && (
+                    <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-[11px] text-red-600" role="alert">
+                      <AlertCircle size={12} className="mt-0.5 shrink-0 text-red-500" />
+                      <span>{formError}</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={isSubmitting}
+                    aria-busy={isSubmitting}
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gold px-5 py-3.5 text-base font-bold tracking-wide text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
+                    {isSubmitting ? "Redirecting to Chapa…" : "Continue to secure payment"}
+                  </button>
+                </div>
+              </div>
+            </aside>
+          </div>
         </div>
       </div>
-
     </dialog>
   );
 }
