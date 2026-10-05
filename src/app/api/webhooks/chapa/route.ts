@@ -37,9 +37,11 @@ function verifySignature(rawBody: string, signature: string, secret: string): bo
 }
 
 export async function POST(request: NextRequest) {
-  const secret = process.env.CHAPA_WEBHOOK_SECRET?.trim();
+  const secret =
+    process.env.CHAPA_WEBHOOK_SECRET?.trim() ||
+    process.env.CHAPA_SECRET_KEY?.trim();
   if (!secret) {
-    console.error("[webhooks/chapa] CHAPA_WEBHOOK_SECRET is not configured");
+    console.error("[webhooks/chapa] No webhook signing secret is configured");
     return NextResponse.json({ error: "Webhook is not configured." }, { status: 500 });
   }
 
@@ -64,25 +66,44 @@ export async function POST(request: NextRequest) {
   }
 
   const event = isRecord(payload.data) ? payload.data : payload;
-  const merchantReference =
+  const reference =
     typeof event.merchant_reference === "string"
       ? event.merchant_reference.trim()
       : typeof event.tx_ref === "string"
         ? event.tx_ref.trim()
+        : typeof event.reference === "string"
+          ? event.reference.trim()
+          : "";
+  const eventName =
+    typeof event.event === "string"
+      ? event.event.trim().toLowerCase()
+      : typeof payload.event === "string"
+        ? payload.event.trim().toLowerCase()
         : "";
-  const status = typeof event.status === "string" ? event.status.trim().toUpperCase() : "";
-  if (!merchantReference || !status) {
+  const rawStatus =
+    typeof event.status === "string"
+      ? event.status.trim().toUpperCase()
+      : typeof payload.status === "string"
+        ? payload.status.trim().toUpperCase()
+        : "";
+  const success = eventName === "payment.success" || rawStatus === "SUCCESS" || rawStatus === "PAID";
+  const status = success ? "SUCCESS" : rawStatus || eventName.split(".").at(-1)?.toUpperCase() || "";
+  if (!reference || !status) {
     return NextResponse.json(
       { error: "Webhook is missing payment reference or status." },
       { status: 400 },
     );
   }
 
+  let merchantReference = reference;
   try {
-    const transaction = await prisma.transaction.findUnique({
-      where: { txRef: merchantReference },
+    const transaction = await prisma.transaction.findFirst({
+      where: {
+        OR: [{ txRef: reference }, { chapaReference: reference }],
+      },
       select: {
         id: true,
+        txRef: true,
         amount: true,
         currency: true,
         registration: { select: { id: true, scheduleId: true } },
@@ -91,12 +112,12 @@ export async function POST(request: NextRequest) {
 
     if (!transaction) {
       console.warn("[webhooks/chapa] Ignoring event for unknown merchant reference", {
-        merchantReference,
+        reference,
       });
       return NextResponse.json({ received: true });
     }
 
-    const success = status === "SUCCESS" || status === "PAID";
+    merchantReference = transaction.txRef;
     const failure = ["FAILED", "CANCELLED", "INCOMPLETE", "BLOCKED"].includes(status);
     if (!success && !failure) {
       return NextResponse.json({ received: true, status: "ignored" });
