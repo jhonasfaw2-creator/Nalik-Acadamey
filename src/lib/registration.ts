@@ -1,48 +1,20 @@
 // ── Shared registration display helpers ─────────────────────────────
-// Used by /payment/return (confirmation), /registration (public lookup),
-// and the lookup API so every surface formats data identically.
-
-export interface DerivedPayment {
-  amount: number | null;
-  currency: string;
-  status: string; // SUCCESS once the registration is paid or confirmed
-  paidAt: string | null;
-}
-
-/**
- * Provides a course-price fallback for registrations without a successful
- * transaction, preserving the shared registration-view contract.
- */
-export function derivePayment(input: {
-  registrationStatus: string;
-  paidAt?: Date | string | null;
-  course?: { price: number; discountPrice: number | null } | null;
-}): DerivedPayment {
-  const paid =
-    input.registrationStatus === "PAID" || input.registrationStatus === "CONFIRMED";
-  const course = input.course ?? null;
-  return {
-    amount: course ? (course.discountPrice ?? course.price) : null,
-    currency: "ETB",
-    status: paid ? "SUCCESS" : "PENDING",
-    paidAt: input.paidAt ? new Date(input.paidAt).toISOString() : null,
-  };
-}
+// Shared registration display helpers used by the public registration lookup.
 
 export interface RegistrationSummary {
   referenceId: string;
   fullName: string;
   course: string | null;
+  courseId: string | null;
+  downloadToken: string | null;
+  courseMaterials: { id: string; title: string; fileUrl: string; fileType: string }[];
+  courseMaterialsError: string | null;
   scheduleDays: string | null;
   scheduleSession: string | RegistrationSummaryScheduleSession | null;
   startTime: string | null;
   endTime: string | null;
   startDate: string | null;
-  amount: number | null;
-  currency: string | null;
-  paymentStatus: string;
   registrationStatus: string;
-  paidAt: string | null;
 }
 
 interface RegistrationSummaryScheduleSession {
@@ -84,39 +56,22 @@ export function formatDays(days: string | null | undefined): string {
 }
 
 /**
- * Display state derived from BOTH statuses. The database only stores
- * PENDING / PAID / CONFIRMED; "ENROLLED" is presentation — a PAID or
- * CONFIRMED registration reads as enrolled to the student.
+ * PAID is retained as a legacy registration status for existing records.
  */
-export function getEnrollmentState(summary: {
-  registrationStatus: string;
-  paymentStatus: string;
-}): {
-  enrolled: boolean;
-  enrollmentLabel: string;
-  paymentLabel: string;
+export function getRegistrationState(registrationStatus: string): {
+  label: string;
   tone: "success" | "pending" | "failed";
 } {
-  const paid = summary.paymentStatus === "SUCCESS";
-  const confirmed = summary.registrationStatus === "CONFIRMED";
-  const pending = summary.registrationStatus === "PENDING" || !paid;
-
-  if (paid && confirmed) {
-    return { enrolled: true, enrollmentLabel: "ENROLLED", paymentLabel: "PAID", tone: "success" };
+  if (registrationStatus === "PAID" || registrationStatus === "CONFIRMED") {
+    return { label: "ENROLLED", tone: "success" };
   }
-  if (paid) {
-    return { enrolled: true, enrollmentLabel: "ENROLLED", paymentLabel: "PAID", tone: "success" };
-  }
-  if (pending) {
+  if (registrationStatus === "PENDING") {
     return {
-      enrolled: false,
-      enrollmentLabel: "NOT ENROLLED",
-      paymentLabel: "PENDING",
+      label: "PENDING",
       tone: "pending",
     };
   }
-  // Unreachable in practice; keeps tone exhaustive.
-  return { enrolled: false, enrollmentLabel: "NOT ENROLLED", paymentLabel: summary.paymentStatus, tone: "failed" };
+  return { label: registrationStatus, tone: "failed" };
 }
 
 /** True when the reference ID looks like ours (NA-YYYY-XXXXXX). Loose on purpose. */

@@ -14,6 +14,7 @@
     "db:verify": "node scripts/verify-schema.mjs",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
+    "test:payments": "tsx --test src/lib/payments/chapa.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -24,7 +25,6 @@
     "jose": "^6.2.10",
     "lucide-react": "^1.34.0",
     "next": "^16.3.5",
-    "pdf-lib": "^1.17.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "tailwind-merge": "^3.3.0",

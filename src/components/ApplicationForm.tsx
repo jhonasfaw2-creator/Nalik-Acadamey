@@ -75,6 +75,10 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
+  const [registrationCreated, setRegistrationCreated] = useState<{
+    referenceId: string;
+    paymentId: string;
+  } | null>(null);
 
   // Load courses + schedules
   useEffect(() => {
@@ -146,7 +150,10 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (open) dialog.showModal();
+    if (open) {
+      setRegistrationCreated(null);
+      dialog.showModal();
+    }
     else dialog.close();
   }, [open]);
 
@@ -170,7 +177,6 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const selectedGroup = scheduleGroups.find((g) => g.group === selectedGroupId) as ScheduleGroup | undefined;
   const selectedSession = selectedGroup?.sessions.find((s) => s.id === selectedSessionId);
   const selectedCourse = courses.find((c) => c.id === selectedCourseId);
-  const price = selectedCourse ? selectedCourse.discountPrice ?? selectedCourse.price : 0;
   const duration = computeDuration(selectedSession?.startTime, selectedSession?.endTime);
   const scheduleText =
     selectedGroup && selectedSession
@@ -208,30 +214,16 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
       return;
     }
 
-    const activeCourse = courses.find((c) => c.id === selectedCourseId);
-    const paymentAmount = activeCourse ? (activeCourse.discountPrice ?? activeCourse.price) : 0;
-
-    if (!paymentAmount || paymentAmount <= 0) {
-      setFormError("Selected course price is invalid.");
-      return;
-    }
-
     setIsSubmitting(true);
     setFormError("");
 
     try {
       const rawFullName = fullNameRef.current?.value.trim() ?? "";
-      const nameParts = rawFullName.split(" ");
-      const firstName = nameParts[0] || "Student";
-      const lastName = nameParts.slice(1).join(" ") || "User";
 
-      const response = await fetch("/api/payments/initialize", {
+      const response = await fetch("/api/registrations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: paymentAmount,
-          firstName: firstName,
-          lastName: lastName,
           fullName: rawFullName,
           phone: phoneRef.current?.value.trim() ?? "",
           age: Number(ageRef.current?.value),
@@ -243,25 +235,39 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setFormError(data.error || "We couldn't start your payment. Please try again.");
+        setFormError(data.error || "We couldn't submit your registration. Please try again.");
         setIsSubmitting(false);
         return;
       }
 
-      const checkoutUrl = data.checkoutUrl || data.checkout_url;
-
-      if (typeof checkoutUrl !== "string") {
-        setFormError("We couldn't start your payment. Please try again.");
+      if (typeof data.referenceId !== "string" || typeof data.paymentId !== "string") {
+        setFormError("Your registration was submitted, but we couldn't retrieve its payment details. Please contact support.");
         setIsSubmitting(false);
         return;
       }
 
-      window.location.href = checkoutUrl;
+      setRegistrationCreated({ referenceId: data.referenceId, paymentId: data.paymentId });
+      const initializeResponse = await fetch("/api/payments/initialize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId: data.paymentId }),
+      });
+      const initializeData = await initializeResponse.json().catch(() => ({}));
+      if (!initializeResponse.ok || typeof initializeData.checkoutUrl !== "string") {
+        setFormError(
+          initializeData.error ||
+            "Your registration is saved, but checkout could not start. Try again below.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
+      window.location.assign(initializeData.checkoutUrl);
+      setIsSubmitting(false);
     } catch {
       setFormError("Something went wrong. Please try again.");
       setIsSubmitting(false);
     }
-  }, [isSubmitting, selectedCourseId, selectedSessionId, courses]);
+  }, [isSubmitting, selectedCourseId, selectedSessionId]);
 
   return (
     <dialog ref={dialogRef} className="backdrop:bg-black/60 rounded-[28px] p-0 max-w-5xl w-[calc(100%-1.5rem)] max-h-[92vh]">
@@ -281,13 +287,65 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
           </button>
         </div>
 
+        {registrationCreated ? (
+          <div className="overflow-y-auto px-4 py-12 text-center sm:px-6">
+            <h3 className="text-2xl font-bold text-navy">Payment required</h3>
+            <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-gray-600">
+              Your registration is saved, but your place is not confirmed until Chapa verifies your payment.
+              Save your registration ID to check its status.
+            </p>
+            <p className="mx-auto mt-5 w-fit rounded-xl bg-warm-white px-5 py-3 font-mono text-lg font-bold tracking-wide text-navy">
+              {registrationCreated.referenceId}
+            </p>
+            {formError && (
+              <p className="mx-auto mt-4 max-w-md text-sm text-red-600" role="alert">
+                {formError}
+              </p>
+            )}
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={async () => {
+                setIsSubmitting(true);
+                setFormError("");
+                try {
+                  const response = await fetch("/api/payments/initialize", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ paymentId: registrationCreated.paymentId }),
+                  });
+                  const data = await response.json().catch(() => ({}));
+                  if (!response.ok || typeof data.checkoutUrl !== "string") {
+                    setFormError(data.error || "Checkout could not start. Please try again.");
+                    return;
+                  }
+                  window.location.assign(data.checkoutUrl);
+                } catch {
+                  setFormError("We couldn't reach the payment service. Please try again.");
+                } finally {
+                  setIsSubmitting(false);
+                }
+              }}
+              className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-gold px-5 py-3 text-sm font-bold text-navy transition-colors hover:bg-gold-hover disabled:opacity-60"
+            >
+              {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
+              {isSubmitting ? "Starting checkout..." : "Continue to secure payment"}
+            </button>
+            <a
+              href={`/registration?id=${encodeURIComponent(registrationCreated.referenceId)}`}
+              className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-5 py-3 text-sm font-semibold text-navy transition-colors hover:bg-gray-50"
+            >
+              View registration
+            </a>
+          </div>
+        ) : (
         <div className="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_360px]">
             <div className="space-y-5">
               <div className="rounded-2xl border border-[#efe7da] bg-[#fffaf1] p-3 sm:p-4">
                 <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">
-                  <span>Checkout flow</span>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] text-gold">Fast & secure</span>
+                  <span>Registration steps</span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] text-gold">Simple and clear</span>
                 </div>
                 <div className="mt-3 grid grid-cols-4 gap-2">
                   {steps.map((step, index) => (
@@ -510,8 +568,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
               <div className="lg:sticky lg:top-0">
                 <div className="rounded-2xl border border-gray-200 bg-[#fafaf8] p-4 sm:p-5">
                   <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Order summary</h3>
-                    <span className="rounded-full bg-gold/10 px-2 py-1 text-[10px] font-semibold text-navy">Secure</span>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Registration summary</h3>
                   </div>
 
                   <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
@@ -531,12 +588,9 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                   </div>
 
                   <div className="mt-4 rounded-2xl bg-navy p-4 text-white">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-white/70">Total</span>
-                      <span className="text-2xl font-bold text-gold">{price ? formatBirr(price) : "—"}</span>
-                    </div>
-                    <p className="mt-2 text-[11px] text-white/65">
-                      Continue to Chapa&apos;s secure checkout to complete your payment.
+                    <p className="text-sm font-semibold text-gold">Next steps</p>
+                    <p className="mt-2 text-xs leading-relaxed text-white/75">
+                      Complete payment through Chapa. Enrollment is confirmed only after server-side verification.
                     </p>
                   </div>
 
@@ -555,13 +609,14 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                     className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gold px-5 py-3.5 text-base font-bold tracking-wide text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
-                    {isSubmitting ? "Redirecting to Chapa…" : "Continue to secure payment"}
+                    {isSubmitting ? "Starting secure checkout..." : "Register and pay"}
                   </button>
                 </div>
               </div>
             </aside>
           </div>
         </div>
+        )}
       </div>
     </dialog>
   );

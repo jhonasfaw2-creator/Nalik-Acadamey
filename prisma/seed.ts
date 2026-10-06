@@ -58,10 +58,9 @@ async function main() {
     { section: "founders", key: "badge", value: "Meet the founder" },
     { section: "founders", key: "name", value: "" },
     { section: "founders", key: "role", value: "Founder of Nalik Academy" },
-    { section: "founders", key: "bio", value: "Before Nalik Academy, he worked as a freelance video editor in Ethiopia. He edited content for creators and social media personalities, including Loft Haron and Shirobaie. The work covered YouTube videos, short form clips, and longer stories, and it taught him how pacing, hooks, sound, and colour decide whether an edit holds attention.\n\nThe academy grew out of that experience. He wanted to teach editing the way he learned it, through real projects and practical decisions instead of theory alone. Students here work on the same kinds of edits he handled as a freelancer, with the same attention to story and finish." },
+    { section: "founders", key: "bio", value: "Before Nalik Academy, he worked as a freelance video editor in Ethiopia. The work covered YouTube videos, short form clips, and longer stories, and it taught him how pacing, hooks, sound, and colour decide whether an edit holds attention.\n\nThe academy grew out of that experience. He wanted to teach editing the way he learned it, through real projects and practical decisions instead of theory alone. Students here work on the same kinds of edits he handled as a freelancer, with the same attention to story and finish." },
     { section: "founders", key: "portraitUrl", value: "/assets/natiii.jpg" },
     { section: "founders", key: "specialties", value: JSON.stringify(["Video Editing", "YouTube Editing", "Short Form Editing", "Short Film Editing", "Colour Grading", "Sound Design", "Motion Graphics", "Storytelling and Pacing"]) },
-    { section: "founders", key: "featuredClients", value: JSON.stringify(["Loft Haron", "Shirobaie"]) },
     // Contact
     { section: "contact", key: "badge", value: "Get in Touch" },
     { section: "contact", key: "title", value: "Ready to start your creative journey?" },
@@ -84,6 +83,16 @@ async function main() {
       create: item,
     });
   }
+
+  // Drop content keys that are no longer part of the founders section. The
+  // upsert loop above never removes rows, so a key that leaves the model
+  // otherwise lingers in the database forever.
+  await prisma.content.deleteMany({
+    where: { section: "founders", key: { notIn: content
+      .filter((item) => item.section === "founders")
+      .map((item) => item.key) },
+    },
+  });
 
   // ── Courses ──────────────────────────────────────────
   const courses = [

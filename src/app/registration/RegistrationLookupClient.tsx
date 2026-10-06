@@ -15,6 +15,13 @@ import type { RegistrationSummary } from "@/lib/registration";
 
 type LookupState = "idle" | "loading" | "found" | "error";
 
+interface CourseMaterial {
+  id: string;
+  title: string;
+  fileUrl: string;
+  fileType: string;
+}
+
 export default function RegistrationLookupClient() {
   const searchParams = useSearchParams();
   const [id, setId] = useState("");
@@ -40,20 +47,37 @@ export default function RegistrationLookupClient() {
       const data = await res.json();
       if (data.found && data.registration) {
         const reg = data.registration;
+        let courseMaterials: CourseMaterial[] = [];
+        let courseMaterialsError: string | null = null;
+        if (reg.downloadToken && reg.courseId) {
+          try {
+            const materialsResponse = await fetch(
+              `/api/courses/${encodeURIComponent(reg.courseId)}/materials?token=${encodeURIComponent(reg.downloadToken)}`,
+              { cache: "no-store" },
+            );
+            if (!materialsResponse.ok) throw new Error(`Materials request failed (${materialsResponse.status})`);
+            const materialsData = await materialsResponse.json();
+            if (!Array.isArray(materialsData.materials)) throw new Error("Invalid course materials response");
+            courseMaterials = materialsData.materials;
+          } catch (materialsError) {
+            console.error("Could not load enrolled course materials", materialsError);
+            courseMaterialsError = "Course materials could not be loaded. Please try checking your registration again.";
+          }
+        }
         setRegistration({
           referenceId: reg.referenceId,
           fullName: reg.fullName,
           course: reg.course,
+          courseId: reg.courseId,
+          downloadToken: reg.downloadToken ?? null,
+          courseMaterials,
+          courseMaterialsError,
           scheduleDays: reg.schedule?.days ?? null,
           scheduleSession: reg.schedule ? { group: reg.schedule.group, label: reg.schedule.session } : null,
           startTime: reg.schedule?.startTime ?? null,
           endTime: reg.schedule?.endTime ?? null,
           startDate: reg.schedule?.startDate ?? null,
-          amount: reg.amount,
-          currency: reg.currency,
-          paymentStatus: reg.paymentStatus,
           registrationStatus: reg.registrationStatus,
-          paidAt: reg.paidAt,
         });
         setState("found");
         return true;
@@ -83,7 +107,7 @@ export default function RegistrationLookupClient() {
     lookup(id);
   };
 
-  const unpaid = registration != null && registration.paymentStatus !== "SUCCESS";
+  const pending = registration?.registrationStatus === "PENDING";
 
   return (
     <div className="flex min-h-screen flex-col bg-warm-white">
@@ -142,32 +166,21 @@ export default function RegistrationLookupClient() {
             <div className="mt-8">
               <RegistrationDetails registration={registration} highlightReference />
 
-              {unpaid && (
+              {pending && (
                 <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 px-4 py-4">
                   <p className="text-sm text-amber-700">
-                    We haven&apos;t confirmed your registration yet. We&apos;ll contact you with the
-                    payment details once a place is secured.
+                    Your registration has been received and is pending confirmation. We&apos;ll contact you with the next steps.
                   </p>
                 </div>
               )}
 
               <div className="mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                {registration.paymentStatus === "SUCCESS" && (
-                  <>
-                    <a
-                      href={`/api/registrations/receipt?id=${encodeURIComponent(registration.referenceId)}`}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-gold px-4 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover"
-                    >
-                      <Download size={15} /> Download Receipt
-                    </a>
-                    <a
-                      href={`/api/registrations/lookup/ics?id=${encodeURIComponent(registration.referenceId)}`}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-navy/15 bg-white px-4 py-3 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
-                    >
-                      <CalendarPlus size={15} /> Add Schedule to Calendar
-                    </a>
-                  </>
-                )}
+                <a
+                  href={`/api/registrations/lookup/ics?id=${encodeURIComponent(registration.referenceId)}`}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-navy/15 bg-white px-4 py-3 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
+                >
+                  <CalendarPlus size={15} /> Add Schedule to Calendar
+                </a>
                 <button
                   type="button"
                   onClick={() => window.print()}
@@ -176,6 +189,31 @@ export default function RegistrationLookupClient() {
                   <Printer size={15} /> Print Confirmation
                 </button>
               </div>
+              {registration.downloadToken && (
+                <section className="mt-5 rounded-xl border border-gray-200 bg-white p-4">
+                  <h2 className="text-sm font-semibold text-navy">Course materials</h2>
+                  {registration.courseMaterialsError ? (
+                    <p className="mt-2 text-xs text-red-600">{registration.courseMaterialsError}</p>
+                  ) : registration.courseMaterials.length > 0 ? (
+                    <ul className="mt-3 space-y-2">
+                      {registration.courseMaterials.map((material) => (
+                        <li key={material.id}>
+                          <a
+                            href={material.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-sm font-medium text-navy hover:text-gold"
+                          >
+                            <Download size={15} /> {material.title}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-gray-500">No course materials are available yet.</p>
+                  )}
+                </section>
+              )}
             </div>
           )}
 

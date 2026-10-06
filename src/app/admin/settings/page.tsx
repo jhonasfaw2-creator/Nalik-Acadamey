@@ -217,11 +217,11 @@ export default function AdminSettings() {
         <div className="rounded-xl border border-gray-200 bg-white p-6">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Enrollment Settings</h2>
           <p className="text-sm text-gray-600">
-            Student registrations remain pending until Chapa payment verification confirms a successful transaction.
+            New student registrations remain pending until an administrator confirms enrollment.
           </p>
           <ul className="mt-3 space-y-1 text-xs text-gray-500">
-            <li>• <strong>Pending</strong>: registered, payment not confirmed</li>
-            <li>• <strong>Paid</strong>: transaction verified by Chapa, enrolled</li>
+            <li>• <strong>Pending</strong>: registration received, awaiting review</li>
+            <li>• <strong>Enrolled</strong>: registration confirmed by an administrator</li>
           </ul>
         </div>
       </div>

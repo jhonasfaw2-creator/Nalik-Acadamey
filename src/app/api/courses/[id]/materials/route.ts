@@ -54,7 +54,7 @@ export async function GET(
 
     if (!isConfirmed) {
       return NextResponse.json(
-        { error: "Course materials are only available for paid registrations." },
+        { error: "Course materials are only available for enrolled registrations." },
         { status: 409 }
       );
     }

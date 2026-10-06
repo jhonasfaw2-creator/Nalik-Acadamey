@@ -184,16 +184,13 @@ img {
   }
 }
 
-/* ── Printing the payment receipt ─────────────────────────────────
-   "Download Receipt" opens the browser print dialog, where "Save as
-   PDF" produces a copyable receipt. Chrome and Safari backgrounds are
-   transparent by default, so every colour is forced to print ink. */
+/* Keep the public registration confirmation legible when printed. */
 @media print {
   body {
     background: #fff !important;
   }
 
-  /* Drop the page furniture and keep only the receipt itself. */
+  /* Drop page furniture and keep the registration confirmation. */
   header, nav, footer, .print\:hidden {
     display: none !important;
   }

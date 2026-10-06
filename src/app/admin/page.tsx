@@ -1,16 +1,13 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Users, DollarSign, Clock, BookOpen, CheckCircle } from "lucide-react";
+import { Users, Clock, BookOpen, CheckCircle } from "lucide-react";
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
     totalRegistrations: 0,
     pending: 0,
-    paid: 0,
-    confirmed: 0,
-    paidRegistrations: 0,
-    totalRevenue: 0,
+    enrolled: 0,
     activeCourses: 0,
   });
   const [loading, setLoading] = useState(true);
@@ -22,18 +19,11 @@ export default function AdminDashboard() {
       fetch("/api/admin/registrations").then((r) => { if (!r.ok) throw new Error("Failed to load registrations"); return r.json(); }),
       fetch("/api/admin/courses").then((r) => { if (!r.ok) throw new Error("Failed to load courses"); return r.json(); }),
     ]).then(([regData, courses]) => {
-      const registrations: {
-        status: string;
-        payment: { amount: number | null; status: string } | null;
-      }[] = regData.applications || [];
-      const paidRows = registrations.filter((r) => r.payment?.status === "SUCCESS");
+      const registrations: { status: string }[] = regData.applications || [];
       setStats({
         totalRegistrations: registrations.length,
         pending: regData.statusCounts?.PENDING || 0,
-        paid: regData.statusCounts?.PAID || 0,
-        confirmed: regData.statusCounts?.CONFIRMED || 0,
-        paidRegistrations: paidRows.length,
-        totalRevenue: paidRows.reduce((sum, r) => sum + (r.payment?.amount || 0), 0),
+        enrolled: (regData.statusCounts?.PAID || 0) + (regData.statusCounts?.CONFIRMED || 0),
         activeCourses: (courses || []).filter((c: { active: boolean }) => c.active).length,
       });
       setLoading(false);
@@ -45,13 +35,10 @@ export default function AdminDashboard() {
 
   useEffect(() => { loadStats(); }, [loadStats]);
 
-  const formatBirr = (n: number) => n.toLocaleString("en-ET") + " Birr";
-
   const cards = [
     { label: "Total Registrations", value: stats.totalRegistrations, icon: Users, color: "bg-blue-50 text-blue-600" },
     { label: "Pending", value: stats.pending, icon: Clock, color: "bg-amber-50 text-amber-600" },
-    { label: "Paid", value: stats.paid, icon: CheckCircle, color: "bg-blue-100 text-blue-600" },
-    { label: "Confirmed", value: stats.confirmed, icon: Users, color: "bg-green-50 text-green-600" },
+    { label: "Enrolled", value: stats.enrolled, icon: CheckCircle, color: "bg-green-50 text-green-600" },
     { label: "Active Courses", value: stats.activeCourses, icon: BookOpen, color: "bg-purple-50 text-purple-600" },
   ];
 
@@ -74,7 +61,7 @@ export default function AdminDashboard() {
       ) : (
         <>
           {/* Stat cards */}
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {cards.map((card) => {
               const Icon = card.icon;
               return (
@@ -89,20 +76,6 @@ export default function AdminDashboard() {
                 </div>
               );
             })}
-          </div>
-
-          {/* Revenue card */}
-          <div className="mt-4 rounded-xl border border-gray-200 bg-white p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Paid Revenue</p>
-                <p className="mt-1 text-2xl font-bold text-gold">{formatBirr(stats.totalRevenue)}</p>
-                <p className="mt-0.5 text-xs text-gray-400">{stats.paidRegistrations} of {stats.totalRegistrations} registrations paid</p>
-              </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gold/10">
-                <DollarSign size={22} className="text-gold" />
-              </div>
-            </div>
           </div>
 
           {/* Quick links */}

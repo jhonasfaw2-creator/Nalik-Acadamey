@@ -9,7 +9,7 @@ async function verifySchema() {
     SELECT table_name, column_name
     FROM information_schema.columns
     WHERE table_schema = current_schema()
-      AND table_name IN ('Registration', 'Transaction', 'CourseMaterial')
+      AND table_name IN ('Registration', 'Course', 'Schedule', 'CourseMaterial', 'Payment', 'PaymentWebhookEvent')
   `;
 
   const availableColumns = new Set(
@@ -22,20 +22,27 @@ async function verifySchema() {
     "Registration.phone",
     "Registration.courseId",
     "Registration.createdAt",
-    "Transaction.id",
-    "Transaction.registrationId",
-    "Transaction.amount",
-    "Transaction.currency",
-    "Transaction.txRef",
-    "Transaction.chapaReference",
-    "Transaction.status",
-    "Transaction.createdAt",
+    "Registration.status",
+    "Course.id",
+    "Schedule.id",
     "CourseMaterial.id",
     "CourseMaterial.courseId",
     "CourseMaterial.title",
     "CourseMaterial.fileUrl",
     "CourseMaterial.fileType",
     "CourseMaterial.sortOrder",
+    "Payment.id",
+    "Payment.registrationId",
+    "Payment.merchantReference",
+    "Payment.chapaReference",
+    "Payment.amount",
+    "Payment.currency",
+    "Payment.status",
+    "Payment.checkoutUrl",
+    "Payment.verifiedAt",
+    "PaymentWebhookEvent.id",
+    "PaymentWebhookEvent.dedupKey",
+    "PaymentWebhookEvent.event",
   ];
 
   const missingColumns = requiredColumns.filter((column) => !availableColumns.has(column));
@@ -43,33 +50,8 @@ async function verifySchema() {
     throw new Error(`Missing required schema columns: ${missingColumns.join(", ")}`);
   }
 
-  const foreignKeys = await prisma.$queryRaw`
-    SELECT constraint_row.confdeltype AS "deleteAction"
-    FROM pg_constraint AS constraint_row
-    JOIN pg_class AS source_table
-      ON source_table.oid = constraint_row.conrelid
-    JOIN pg_namespace AS source_schema
-      ON source_schema.oid = source_table.relnamespace
-    JOIN pg_class AS target_table
-      ON target_table.oid = constraint_row.confrelid
-    JOIN pg_attribute AS source_column
-      ON source_column.attrelid = source_table.oid
-      AND source_column.attnum = constraint_row.conkey[1]
-    WHERE constraint_row.contype = 'f'
-      AND source_schema.nspname = current_schema()
-      AND source_table.relname = 'Transaction'
-      AND source_column.attname = 'registrationId'
-      AND target_table.relname = 'Registration'
-  `;
-
-  if (!foreignKeys.some(({ deleteAction }) => deleteAction === "c")) {
-    throw new Error(
-      "Missing Transaction.registrationId foreign key to Registration with cascade delete.",
-    );
-  }
-
   console.log("Database schema verification passed.");
-  console.log("Registration and Transaction tables, required columns, and cascade relation exist.");
+  console.log("Registration, course, schedule, course material, and payment tables have the required columns.");
 }
 
 verifySchema()

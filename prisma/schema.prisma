@@ -1,4 +1,4 @@
-// Nalik Academy - Prisma Schema (Chapa V2)
+// Nalik Academy - Prisma Schema
 // Database: PostgreSQL (Neon)
 
 generator client {
@@ -81,7 +81,7 @@ model CourseMaterial {
 }
 
 // ── Registrations (student applications) ──────────────
-// One registration per student per course. Linked to Chapa transactions.
+// One registration per student per course.
 model Registration {
   id                 String        @id @default(cuid())
   referenceId        String        @unique // e.g. NA-2026-A1B2C3
@@ -95,39 +95,74 @@ model Registration {
   schedule           Schedule?     @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
   previousExperience String        @default("")
   motivation         String        @default("")
-  status             String        @default("PENDING") // PENDING, PAID, CONFIRMED
+  status             String        @default("PENDING") // PENDING, CONFIRMED; PAID is retained for legacy enrollments
   paidAt             DateTime?
+  transactions       Transaction[]
+  payments           Payment[]
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
-
-  transactions       Transaction[]
 
   @@unique([email, courseId])
   @@index([status])
   @@index([referenceId])
 }
 
-// ── Transactions (Chapa V2 payments) ──────────────────
-// One registration can have multiple payment attempts. Only one SUCCESS.
 model Transaction {
-  id                 String        @id @default(cuid())
-  registrationId     String
-  registration       Registration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-  amount             Int           // amount in minor units (cents) — always from course price
-  currency           String        @default("ETB")
-  txRef              String        @unique // our merchant reference (tx_ref)
-  chapaReference     String?       @unique // Chapa's reference from webhook/verify
-  status             String        @default("PENDING") // PENDING, SUCCESS, FAILED, CANCELLED, INCOMPLETE
-  paymentMethod      String?       // telebirr, cbebirr, card, bank_transfer, etc.
-  serviceFee         Int?          // fee charged by Chapa
-  rawWebhook         Json?         // audit trail
-  paidAt             DateTime?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  id             String       @id @default(cuid())
+  registrationId String
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  amount         Int
+  currency       String       @default("ETB")
+  txRef          String       @unique
+  chapaReference String?      @unique
+  status         String       @default("PENDING")
+  paymentMethod  String?
+  serviceFee     Int?
+  rawWebhook     Json?
+  paidAt         DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  @@index([status])
   @@index([chapaReference])
   @@index([registrationId])
+  @@index([status])
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+  INCOMPLETE
+  BLOCKED
+  AUTH_NEEDED
+  INVALID
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  registrationId    String
+  registration      Registration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  merchantReference String        @unique
+  chapaReference    String?       @unique
+  amount            Int           // Chapa amount in minor currency units
+  currency          String        @default("ETB")
+  status            PaymentStatus @default(PENDING)
+  checkoutUrl       String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  verifiedAt        DateTime?
+
+  @@index([registrationId, createdAt])
+  @@index([status])
+}
+
+model PaymentWebhookEvent {
+  id             String   @id @default(cuid())
+  dedupKey       String   @unique
+  event          String
+  chapaReference String?
+  createdAt      DateTime @default(now())
 }
 
 // ── Settings (key-value store) ────────────────────────

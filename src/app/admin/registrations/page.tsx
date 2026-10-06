@@ -14,30 +14,33 @@ interface Registration {
   motivation: string;
   status: string;
   createdAt: string;
-  txRef: string | null;
   course: { id: string; title: string } | null;
   schedule: { id: string; group: string; session: string; days: string; startTime: string; endTime: string } | null;
-  payment: {
-    amount: number | null;
-    currency: string;
-    status: string;
-    paidAt: string | null;
-  } | null;
+  payments: { status: string; amount: number; currency: string }[];
 }
 
 const STATUS_OPTIONS = [
   { value: "", label: "All" },
   { value: "PENDING", label: "Pending" },
-  { value: "PAID", label: "Paid" },
+  { value: "PAID", label: "Enrolled (legacy)" },
   { value: "CONFIRMED", label: "Confirmed" },
 ];
 
-const PAYMENT_COLORS: Record<string, string> = {
+const STATUS_COLORS: Record<string, string> = {
+  PENDING: "bg-yellow-100 text-yellow-700",
+  PAID: "bg-green-100 text-green-700",
+  CONFIRMED: "bg-green-100 text-green-700",
+};
+
+const PAYMENT_STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-700",
   SUCCESS: "bg-green-100 text-green-700",
   FAILED: "bg-red-100 text-red-700",
-  CANCELLED: "bg-gray-200 text-gray-600",
-  INCOMPLETE: "bg-orange-100 text-orange-700",
+  CANCELLED: "bg-red-100 text-red-700",
+  INCOMPLETE: "bg-gray-100 text-gray-600",
+  BLOCKED: "bg-gray-100 text-gray-600",
+  AUTH_NEEDED: "bg-gray-100 text-gray-600",
+  INVALID: "bg-red-100 text-red-700",
 };
 
 interface CourseOption {
@@ -68,6 +71,7 @@ export default function AdminRegistrations() {
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [schedules, setSchedules] = useState<ScheduleOption[]>([]);
   const [reassigning, setReassigning] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [reassignError, setReassignError] = useState("");
 
   // ── Add Student (manual enrollment) state ──
@@ -149,8 +153,6 @@ export default function AdminRegistrations() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  const formatBirr = (n: number) => n.toLocaleString("en-ET") + " Birr";
-
   const reassign = async (id: string, courseId: string, scheduleId: string) => {
     setReassigning(id);
     setReassignError("");
@@ -168,6 +170,28 @@ export default function AdminRegistrations() {
       }
     } finally {
       setReassigning(null);
+    }
+  };
+
+  const confirmRegistration = async (id: string) => {
+    setConfirming(id);
+    setError("");
+    try {
+      const response = await fetch(`/api/admin/registrations/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "CONFIRMED" }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setError(data.error || "Failed to confirm registration.");
+      } else {
+        load();
+      }
+    } catch {
+      setError("Could not reach the server to confirm this registration.");
+    } finally {
+      setConfirming(null);
     }
   };
 
@@ -304,10 +328,9 @@ export default function AdminRegistrations() {
                 <th className="px-4 py-3 font-medium text-gray-500">Email</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Phone</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Course</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Amount paid</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Transaction reference</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Registration date</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Payment status</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Payment</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Registration status</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Action</th>
               </tr>
             </thead>
@@ -320,23 +343,38 @@ export default function AdminRegistrations() {
                   <td className="px-4 py-3 text-sm text-gray-600">{reg.email || "—"}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{reg.phone}</td>
                   <td className="px-4 py-3 text-sm text-navy">{reg.course?.title || "No course"}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-navy">
-                    {reg.payment?.status === "SUCCESS" && reg.payment.amount != null
-                      ? `${formatBirr(reg.payment.amount)} (${reg.payment.currency})`
-                      : "—"}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-600">{reg.txRef || "—"}</td>
                   <td className="px-4 py-3 text-xs text-gray-500">
                     {new Date(reg.createdAt).toLocaleString("en-GB", {
                       day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
                     })}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${PAYMENT_COLORS[reg.payment?.status ?? "PENDING"] || "bg-gray-100 text-gray-600"}`}>
-                      {reg.payment?.status === "SUCCESS" ? "PAID" : reg.payment?.status ?? "PENDING"}
+                    {reg.payments[0] ? (
+                      <div>
+                        <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${PAYMENT_STATUS_COLORS[reg.payments[0].status] || "bg-gray-100 text-gray-600"}`}>
+                          {reg.payments[0].status}
+                        </span>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {(reg.payments[0].amount / 100).toFixed(2)} {reg.payments[0].currency}
+                        </p>
+                      </div>
+                    ) : <span className="text-xs text-gray-400">No payment</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[reg.status] || "bg-gray-100 text-gray-600"}`}>
+                      {reg.status === "PAID" ? "ENROLLED" : reg.status}
                     </span>
                   </td>
                   <td className="px-4 py-3">
+                    {reg.status === "PENDING" && (!reg.payments.length || reg.payments.some((payment) => payment.status === "SUCCESS")) && (
+                      <button
+                        onClick={() => void confirmRegistration(reg.id)}
+                        disabled={confirming === reg.id}
+                        className="mr-2 rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-700 transition-colors hover:bg-green-50"
+                      >
+                        {confirming === reg.id ? "Confirming..." : "Confirm"}
+                      </button>
+                    )}
                     <button
                       onClick={() => setReassigning(reassigning === reg.id ? null : reg.id)}
                       className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-navy transition-colors hover:bg-gray-50"
@@ -351,7 +389,7 @@ export default function AdminRegistrations() {
                 if (!reg) return null;
                 return (
                   <tr className="bg-gold/5">
-                    <td colSpan={9} className="px-4 py-4">
+                    <td colSpan={8} className="px-4 py-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                         <div className="flex-1">
                           <label className="mb-1 block text-xs font-medium text-gray-500">
@@ -451,7 +489,7 @@ export default function AdminRegistrations() {
                 </div>
                 <h2 className="text-lg font-bold text-navy">Student added</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  {created.fullName} was added with payment status pending.
+                  {created.fullName} was added with registration status pending.
                 </p>
                 <div className="mx-auto mt-5 max-w-xs rounded-lg bg-warm-white px-4 py-3 text-left">
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Registration ID</p>
@@ -566,7 +604,7 @@ export default function AdminRegistrations() {
                     )}
                   </div>
                   <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
-                    Payment status is updated automatically after Chapa verifies payment.
+                    Confirmed registrations are enrolled and count toward the selected schedule capacity.
                   </p>
                   <div className="flex justify-end gap-3 pt-2">
                     <button type="button" onClick={closeAddModal} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">

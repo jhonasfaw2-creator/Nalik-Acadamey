@@ -1,13 +1,11 @@
+import type { Metadata } from "next";
 import CheckoutReturnClient from "./CheckoutReturnClient";
 
-export default async function CheckoutReturnPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ tx_ref?: string | string[]; merchant_reference?: string | string[] }>;
-}) {
-  const params = await searchParams;
-  const txRefValue = params.tx_ref ?? params.merchant_reference ?? "";
-  const txRef = Array.isArray(txRefValue) ? txRefValue[0] ?? "" : txRefValue;
+export const metadata: Metadata = {
+  title: "Payment status",
+  robots: { index: false, follow: false },
+};
 
-  return <CheckoutReturnClient txRef={txRef} />;
+export default function CheckoutReturnPage() {
+  return <CheckoutReturnClient />;
 }

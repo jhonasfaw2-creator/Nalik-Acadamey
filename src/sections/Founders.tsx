@@ -9,7 +9,7 @@ const DEFAULTS = {
   role: "Founder of Nalik Academy",
   portraitUrl: "/assets/natiii.jpg",
   bio:
-    "Before Nalik Academy, he worked as a freelance video editor in Ethiopia. He edited content for creators and social media personalities, including Loft Haron and Shirobaie. The work covered YouTube videos, short form clips, and longer stories, and it taught him how pacing, hooks, sound, and colour decide whether an edit holds attention." +
+    "Before Nalik Academy, he worked as a freelance video editor in Ethiopia. The work covered YouTube videos, short form clips, and longer stories, and it taught him how pacing, hooks, sound, and colour decide whether an edit holds attention." +
     "\n\n" +
     "The academy grew out of that experience. He wanted to teach editing the way he learned it, through real projects and practical decisions instead of theory alone. Students here work on the same kinds of edits he handled as a freelancer, with the same attention to story and finish.",
   specialties: [
@@ -22,53 +22,12 @@ const DEFAULTS = {
     "Motion Graphics",
     "Storytelling and Pacing",
   ],
-  featuredClients: ["Loft Haron", "Shirobaie"],
 };
-
-/* The content endpoint stores lists as JSON strings or newline separated
-   text. Accept both so the section keeps loading with the existing data. */
-function toArray(value: unknown, fallback: string[]): string[] {
-  const clean = (list: unknown[]) =>
-    list
-      .filter((item): item is string => typeof item === "string")
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-  if (Array.isArray(value)) {
-    const list = clean(value);
-    return list.length ? list : fallback;
-  }
-
-  if (typeof value === "string" && value.trim()) {
-    let parsed: unknown = null;
-
-    try {
-      parsed = JSON.parse(value);
-    } catch {
-      parsed = null;
-    }
-
-    if (Array.isArray(parsed)) {
-      const list = clean(parsed);
-      if (list.length) return list;
-    }
-
-    const list = value
-      .split("\n")
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-    if (list.length) return list;
-  }
-
-  return fallback;
-}
 
 export default function Founders() {
   const headerRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const workRef = useRef<HTMLDivElement>(null);
   const specRef = useRef<HTMLDivElement>(null);
 
   const [data, setData] = useState(DEFAULTS);
@@ -95,8 +54,10 @@ export default function Founders() {
               : DEFAULTS.portraitUrl,
           bio:
             typeof d.bio === "string" && d.bio.trim() ? d.bio : DEFAULTS.bio,
-          specialties: toArray(d.specialties, DEFAULTS.specialties),
-          featuredClients: toArray(d.featuredClients, DEFAULTS.featuredClients),
+          specialties:
+            Array.isArray(d.specialties) && d.specialties.length
+              ? (d.specialties as string[])
+              : DEFAULTS.specialties,
         });
       })
       .catch(() => {});
@@ -107,7 +68,6 @@ export default function Founders() {
       headerRef.current,
       imageRef.current,
       contentRef.current,
-      workRef.current,
       specRef.current,
     ].filter(Boolean) as HTMLElement[];
 
@@ -240,49 +200,6 @@ export default function Founders() {
               <div className="mt-6 space-y-5 text-[15px] leading-7 text-gray-600 sm:text-base sm:leading-8">
                 {bioParagraphs.map((paragraph, index) => (
                   <p key={index}>{paragraph}</p>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* -----------------------------------------------------------
-            PROFESSIONAL EXPERIENCE
-        ------------------------------------------------------------ */}
-        <div ref={workRef} className="mt-20 bg-navy sm:mt-24">
-          <div className="mx-auto max-w-7xl px-5 py-16 sm:px-8 lg:px-12 lg:py-20">
-            <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
-              <div className="lg:col-span-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gold">
-                  Selected creator work
-                </p>
-
-                <p className="mt-5 max-w-xs text-sm leading-6 text-white/60">
-                  Direct editing work with Ethiopian creators and social
-                  media personalities.
-                </p>
-              </div>
-
-              <div className="lg:col-span-8">
-                {data.featuredClients.map((client, index) => (
-                  <div
-                    key={client}
-                    className="flex items-baseline justify-between gap-6 border-b border-white/15 py-6 first:border-t first:border-white/15 lg:py-7"
-                  >
-                    <div className="flex items-baseline gap-5 sm:gap-8">
-                      <span className="text-xs tabular-nums text-gold">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-
-                      <span className="text-2xl font-semibold tracking-[-0.02em] text-white sm:text-3xl lg:text-4xl">
-                        {client}
-                      </span>
-                    </div>
-
-                    <span className="shrink-0 text-[10px] uppercase tracking-[0.22em] text-white/40">
-                      Creator
-                    </span>
-                  </div>
                 ))}
               </div>
             </div>

@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     const ics = buildScheduleIcs({
       referenceId: registration.referenceId,
       courseTitle: registration.course?.title || "Class",
-      days: registration.schedule.days.split(",").map((day) => day.trim()).filter(Boolean),
+      days: registration.schedule.days.split(",").map((day: string) => day.trim()).filter(Boolean),
       startTime: registration.schedule.startTime,
       endTime: registration.schedule.endTime,
       startDate: registration.schedule.startDate ? registration.schedule.startDate.toISOString() : null,

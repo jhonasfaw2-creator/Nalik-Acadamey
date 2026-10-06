@@ -1,9 +1,7 @@
 "use client";
 
 // ── Shared registration details card ────────────────────────────────
-// One component renders the enrollment summary everywhere: the payment
-// confirmation page and the public /registration lookup page. Keeps the two
-// surfaces consistent and avoids duplicated formatting logic.
+// Shared registration summary for the public /registration lookup page.
 
 import { useEffect, useState } from "react";
 import {
@@ -14,7 +12,6 @@ import {
   GraduationCap,
   User,
   Hash,
-  CreditCard,
   School,
   Copy,
   Check,
@@ -23,7 +20,7 @@ import {
   formatDays,
   formatDate,
   formatTime,
-  getEnrollmentState,
+  getRegistrationState,
   type RegistrationSummary,
 } from "@/lib/registration";
 
@@ -34,7 +31,7 @@ interface RegistrationDetailsProps {
 }
 
 export default function RegistrationDetails({ registration, highlightReference = false }: RegistrationDetailsProps) {
-  const state = getEnrollmentState(registration);
+  const state = getRegistrationState(registration.registrationStatus);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -110,14 +107,9 @@ export default function RegistrationDetails({ registration, highlightReference =
       strong: highlightReference,
     },
     {
-      icon: <CreditCard size={15} className="text-gold" />,
-      label: "Payment status",
-      value: <StatusPill label={state.paymentLabel} tone={state.tone} />,
-    },
-    {
       icon: <GraduationCap size={15} className="text-gold" />,
-      label: "Enrollment status",
-      value: <StatusPill label={state.enrollmentLabel} tone={state.tone} />,
+      label: "Registration status",
+      value: <StatusPill label={state.label} tone={state.tone} />,
     }
   );
 

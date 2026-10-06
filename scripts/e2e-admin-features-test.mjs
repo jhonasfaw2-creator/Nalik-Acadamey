@@ -85,23 +85,30 @@ const manual = await fetch(`${BASE}/api/admin/registrations/manual`, {
   headers: auth,
   body: JSON.stringify({
     fullName: "Manual Student", email, phone: "+251911223344", age: 24,
-    courseId: course.id, scheduleId: schedule.id, paymentStatus: "PAID",
+    courseId: course.id, scheduleId: schedule.id,
   }),
 });
 const manualData = await manual.json().catch(() => ({}));
-check("manual PAID enrollment created", manual.status === 201 && manualData.success, JSON.stringify(manualData));
+check("manual registration created", manual.status === 201 && manualData.success, JSON.stringify(manualData));
 const ref = manualData?.application?.referenceId;
 
-const dbApp = await prisma.application.findUnique({ where: { referenceId: ref } });
-check("registration status is PAID", dbApp?.status === "PAID");
-check("paidAt stamped for manual PAID", dbApp?.paidAt != null);
+const dbApp = await prisma.registration.findUnique({ where: { referenceId: ref } });
+check("registration starts pending", dbApp?.status === "PENDING");
+const confirm = await fetch(`${BASE}/api/admin/registrations/${dbApp.id}`, {
+  method: "PUT",
+  headers: auth,
+  body: JSON.stringify({ status: "CONFIRMED" }),
+});
+check("admin can confirm registration", confirm.status === 200);
+const confirmed = await prisma.registration.findUnique({ where: { referenceId: ref } });
+check("registration status is confirmed", confirmed?.status === "CONFIRMED");
 const schedAfter = await prisma.schedule.findUnique({ where: { id: schedule.id } });
 check("seat occupied (enrolled +1)", schedAfter.enrolled === schedule.enrolled + 1, `${schedule.enrolled}→${schedAfter.enrolled}`);
 
 // Lookup works with the manual reference ID
 const lookup = await (await fetch(`${BASE}/api/registrations/lookup?id=${ref}`)).json();
 check("manual student visible on public lookup", lookup.found === true && lookup.registration.fullName === "Manual Student");
-check("lookup shows PAID/ENROLLED for manual student", lookup.registration.paymentStatus === "SUCCESS");
+check("lookup shows confirmed registration", lookup.registration.registrationStatus === "CONFIRMED");
 
 // Pending variant
 const email2 = `manual-pending-${Date.now()}@test.nalik`;
@@ -110,20 +117,20 @@ const manual2 = await fetch(`${BASE}/api/admin/registrations/manual`, {
   headers: auth,
   body: JSON.stringify({
     fullName: "Pending Manual", email: email2, phone: "+251911223345", age: 25,
-    courseId: course.id, scheduleId: schedule.id, paymentStatus: "PENDING",
+    courseId: course.id, scheduleId: schedule.id,
   }),
 });
 const manual2Data = await manual2.json().catch(() => ({}));
 check("manual PENDING enrollment created", manual2.status === 201, JSON.stringify(manual2Data));
-const dbApp2 = await prisma.application.findUnique({ where: { referenceId: manual2Data?.application?.referenceId } });
-check("pending manual stays PENDING / PENDING", dbApp2?.status === "PENDING" && dbApp2?.paidAt == null);
+const dbApp2 = await prisma.registration.findUnique({ where: { referenceId: manual2Data?.application?.referenceId } });
+check("pending manual registration stays PENDING", dbApp2?.status === "PENDING");
 
 const dup = await fetch(`${BASE}/api/admin/registrations/manual`, {
   method: "POST",
   headers: auth,
   body: JSON.stringify({
     fullName: "Dup Student", email, phone: "+251911223344", age: 24,
-    courseId: course.id, scheduleId: schedule.id, paymentStatus: "PENDING",
+    courseId: course.id, scheduleId: schedule.id,
   }),
 });
 check("duplicate email+course rejected (409)", dup.status === 409, `status=${dup.status}`);
@@ -186,7 +193,7 @@ const auto = await fetch(`${BASE}/api/admin/schedules`, {
 check("admin can reset to Auto", auto.status === 200);
 
 console.log("\n── Cleanup ──");
-const del = await prisma.application.deleteMany({ where: { email: { in: [email, email2] } } });
+const del = await prisma.registration.deleteMany({ where: { email: { in: [email, email2] } } });
 console.log(`  removed ${del.count} test registrations`);
 await prisma.schedule.update({ where: { id: schedule.id }, data: { enrolled: schedule.enrolled } });
 await prisma.schedule.update({ where: { id: target.id }, data: { availabilityOverride: null } });

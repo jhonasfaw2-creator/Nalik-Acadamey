@@ -1,239 +1,331 @@
-// ── Chapa V2 REST client ────────────────────────────────────────────────
-// Docs: https://docs.chapa.global/docs/v2/integrations/accept-payment
-//       https://docs.chapa.global/docs/v2/integrations/verify-payment
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import type { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
 const CHAPA_API_BASE = "https://api.chapa.global/v2";
-const DEFAULT_CURRENCY = "ETB" as const;
-const REQUEST_TIMEOUT_MS = 20_000;
+type PaymentStatus =
+  | "PENDING"
+  | "SUCCESS"
+  | "FAILED"
+  | "CANCELLED"
+  | "INCOMPLETE"
+  | "BLOCKED"
+  | "AUTH_NEEDED"
+  | "INVALID";
 
-if (typeof window !== "undefined") {
-  throw new Error("src/lib/payments/chapa.ts is server-only and must not be imported into client code.");
+export interface VerifiedChapaPayment {
+  chapaReference: string;
+  merchantReference: string;
+  amount: number;
+  currency: string;
+  status: PaymentStatus;
 }
 
-export class ChapaConfigError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ChapaConfigError";
+interface ChapaApiResponse {
+  status?: unknown;
+  message?: unknown;
+  data?: unknown;
+}
+
+function getTestSecretKey(): string {
+  const secretKey = process.env.CHAPA_SECRET_KEY;
+  if (!secretKey) throw new Error("CHAPA_SECRET_KEY is not configured");
+  if (!secretKey.startsWith("CHAPA_TEST_")) {
+    throw new Error("CHAPA_SECRET_KEY must be a Chapa TEST-mode secret key");
+  }
+  return secretKey;
+}
+
+export function verifyChapaWebhookSignature(rawBody: Buffer, signature: string | null): boolean {
+  const secret = process.env.CHAPA_WEBHOOK_SECRET;
+  if (!secret || !signature || !/^[a-f0-9]{64}$/.test(signature)) return false;
+
+  const expected = createHmac("sha256", secret).update(rawBody).digest();
+  const supplied = Buffer.from(signature, "hex");
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
+
+export function normalizeChapaStatus(status: unknown): PaymentStatus {
+  if (typeof status !== "string") return "INVALID";
+
+  switch (status.toLowerCase()) {
+    case "success":
+      return "SUCCESS";
+    case "pending":
+      return "PENDING";
+    case "failed":
+      return "FAILED";
+    case "cancelled":
+      return "CANCELLED";
+    case "incomplete":
+      return "INCOMPLETE";
+    case "blocked":
+      return "BLOCKED";
+    case "auth_needed":
+      return "AUTH_NEEDED";
+    default:
+      return "INVALID";
   }
 }
 
-export class ChapaApiError extends Error {
-  readonly httpStatus: number | undefined;
-  readonly code: string | undefined;
+export function parseVerifiedChapaPayment(
+  response: unknown,
+  expected: {
+    chapaReference: string;
+    merchantReference: string;
+    amount: number;
+    currency: string;
+  },
+): VerifiedChapaPayment | null {
+  if (!response || typeof response !== "object") return null;
+  const body = response as ChapaApiResponse;
+  if (body.status !== "success" || !body.data || typeof body.data !== "object") return null;
 
-  constructor(
-    message: string,
-    options: { httpStatus?: number; code?: string } = {}
+  const data = body.data as Record<string, unknown>;
+  const amount = typeof data.amount === "number" ? data.amount : Number(data.amount);
+  const chapaReference = data.chapa_reference;
+  const merchantReference = data.merchant_reference;
+  const currency = data.currency;
+  const status = normalizeChapaStatus(data.status);
+
+  if (
+    typeof chapaReference !== "string" ||
+    typeof merchantReference !== "string" ||
+    typeof currency !== "string" ||
+    !Number.isFinite(amount) ||
+    chapaReference !== expected.chapaReference ||
+    merchantReference !== expected.merchantReference ||
+    amount !== expected.amount ||
+    currency.toUpperCase() !== expected.currency.toUpperCase() ||
+    status === "INVALID"
   ) {
-    super(message);
-    this.name = "ChapaApiError";
-    this.httpStatus = options.httpStatus;
-    this.code = options.code;
+    return null;
   }
+
+  return {
+    chapaReference,
+    merchantReference,
+    amount,
+    currency: currency.toUpperCase(),
+    status,
+  };
 }
 
-function getSecretKey(): string {
-  const key = process.env.CHAPA_SECRET_KEY?.trim();
-  if (!key) {
-    throw new ChapaConfigError("CHAPA_SECRET_KEY is not configured. Add it to the server environment.");
-  }
-  return key;
+export function normalizeEthiopianPhone(phone: string): string | null {
+  const compact = phone.replace(/[\s()-]/g, "");
+  if (/^\+251[79]\d{8}$/.test(compact)) return compact;
+  if (/^251[79]\d{8}$/.test(compact)) return `+${compact}`;
+  if (/^0[79]\d{8}$/.test(compact)) return `+251${compact.slice(1)}`;
+  return null;
 }
 
-export function validateChapaV2Configuration(): void {
-  getSecretKey();
+export function toChapaMinorUnits(amountInBirr: number): number | null {
+  if (!Number.isSafeInteger(amountInBirr) || amountInBirr <= 1) return null;
+  const amount = amountInBirr * 100;
+  return Number.isSafeInteger(amount) && amount > 100 && amount <= 2_147_483_647
+    ? amount
+    : null;
 }
 
-interface ChapaEnvelope {
-  status?: string;
-  message?: string;
-  data?: Record<string, unknown>;
-  error?: { code?: string; details?: unknown } | string | null;
+export function generateMerchantReference(): string {
+  return `NA${randomBytes(9).toString("hex")}`;
 }
 
-async function chapaFetch<T>(
-  path: string,
-  init: { method: "GET" | "POST"; body?: unknown }
-): Promise<T> {
-  const key = getSecretKey();
-
-  let response: Response;
-  try {
-    response = await fetch(`${CHAPA_API_BASE}${path}`, {
-      method: init.method,
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
+export async function initializeHostedPayment(paymentId: string): Promise<string> {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: {
+      registration: {
+        include: { course: { select: { title: true } } },
       },
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
-      cache: "no-store",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-  } catch (cause) {
-    throw new ChapaApiError(
-      `Could not reach Chapa: ${cause instanceof Error ? cause.message : "unknown error"}`
-    );
-  }
-
-  const text = await response.text();
-  let payload: ChapaEnvelope = {};
-  if (text) {
-    try {
-      payload = JSON.parse(text) as ChapaEnvelope;
-    } catch {
-      payload = {};
-    }
-  }
-
-  const envelopeErrored = payload.status === "error";
-  if (!response.ok || envelopeErrored) {
-    const code =
-      typeof payload.error === "string"
-        ? payload.error
-        : payload.error && typeof payload.error === "object" && "code" in payload.error
-        ? String(payload.error.code)
-        : undefined;
-    throw new ChapaApiError(
-      payload.message || `Chapa request failed with HTTP ${response.status}`,
-      { httpStatus: response.status, code }
-    );
-  }
-
-  return (payload.data ?? payload) as T;
-}
-
-export interface InitiatePaymentInput {
-  amount: number | string;
-  currency?: typeof DEFAULT_CURRENCY;
-  merchant_reference: string;
-  customer: {
-    first_name: string;
-    last_name: string;
-    email?: string;
-    phone_number: string;
-  };
-  return_url: string;
-  callback_url: string;
-  customization?: {
-    title?: string;
-    description?: string;
-  };
-  meta?: Record<string, string>;
-}
-
-export interface InitiatePaymentResult {
-  checkout_url: string;
-  chapa_reference: string | null;
-  created_at: string;
-  expires_at: string;
-}
-
-export async function initiatePayment(
-  input: InitiatePaymentInput
-): Promise<InitiatePaymentResult> {
-  const amount = Number(input.amount);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new ChapaConfigError("Chapa amount must be a positive number.");
-  }
-  if (!input.merchant_reference?.trim()) {
-    throw new ChapaConfigError("Chapa merchant_reference is required.");
-  }
-  if (input.customer.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.customer.email)) {
-    throw new ChapaConfigError("A valid email is required when provided.");
-  }
-  if (!input.customer.first_name?.trim()) {
-    throw new ChapaConfigError("First name is required.");
-  }
-  if (!input.customer.last_name?.trim()) {
-    throw new ChapaConfigError("Last name is required.");
-  }
-  if (!input.customer.phone_number?.trim()) {
-    throw new ChapaConfigError("Phone number is required.");
-  }
-  if (!input.return_url?.trim()) {
-    throw new ChapaConfigError("Return URL is required.");
-  }
-  if (!input.callback_url?.trim()) {
-    throw new ChapaConfigError("Callback URL is required.");
-  }
-
-  const body = {
-    amount: amount.toString(),
-    currency: input.currency ?? DEFAULT_CURRENCY,
-    merchant_reference: input.merchant_reference,
-    customer: {
-      first_name: input.customer.first_name,
-      last_name: input.customer.last_name,
-      phone_number: input.customer.phone_number,
-      ...(input.customer.email ? { email: input.customer.email } : {}),
     },
-    return_url: input.return_url,
-    callback_url: input.callback_url,
-    ...(input.customization ? { customization: input.customization } : {}),
-    ...(input.meta ? { meta: input.meta } : {}),
-  };
+  });
+  if (!payment) throw new Error("PAYMENT_NOT_FOUND");
+  if (payment.status !== "PENDING") throw new Error("PAYMENT_NOT_PENDING");
+  if (payment.checkoutUrl) return payment.checkoutUrl;
 
-  const data = await chapaFetch<Record<string, unknown>>("/payments/hosted", {
+  const nameParts = payment.registration.fullName.trim().split(/\s+/);
+  const phoneNumber = normalizeEthiopianPhone(payment.registration.phone);
+  if (!phoneNumber) throw new Error("INVALID_CUSTOMER_PHONE");
+
+  const customer: Record<string, string> = {
+    first_name: nameParts[0],
+    last_name: nameParts.slice(1).join(" ") || nameParts[0],
+    phone_number: phoneNumber,
+  };
+  if (payment.registration.email) customer.email = payment.registration.email;
+
+  const response = await fetch(`${CHAPA_API_BASE}/payments/hosted`, {
     method: "POST",
-    body,
+    headers: {
+      Authorization: `Bearer ${getTestSecretKey()}`,
+      "Content-Type": "application/json",
+      "Idempotency-Key": payment.merchantReference,
+    },
+    body: JSON.stringify({
+      amount: payment.amount,
+      currency: payment.currency,
+      merchant_reference: payment.merchantReference,
+      customer,
+      meta: {
+        registration_reference: payment.registration.referenceId,
+        course: payment.registration.course.title,
+      },
+    }),
+    signal: AbortSignal.timeout(15_000),
   });
 
-  const checkoutUrl = typeof data.checkout_url === "string" ? data.checkout_url : "";
-  if (!checkoutUrl) {
-    throw new ChapaApiError("Chapa did not return a checkout_url.");
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("CHAPA_INVALID_RESPONSE");
+  }
+  const data =
+    body && typeof body === "object" && "data" in body
+      ? (body as { data?: unknown }).data
+      : null;
+  const checkoutUrl =
+    data && typeof data === "object" && "checkout_url" in data
+      ? (data as { checkout_url?: unknown }).checkout_url
+      : null;
+  if (
+    !response.ok ||
+    !body ||
+    typeof body !== "object" ||
+    (body as ChapaApiResponse).status !== "success" ||
+    typeof checkoutUrl !== "string"
+  ) {
+    console.error("Chapa payment initialization failed", { status: response.status });
+    throw new Error("CHAPA_INITIALIZATION_FAILED");
   }
 
-  return {
-    checkout_url: checkoutUrl,
-    chapa_reference:
-      typeof data.chapa_reference === "string"
-        ? data.chapa_reference
-        : typeof data.reference === "string"
-          ? data.reference
-          : null,
-    created_at: typeof data.created_at === "string" ? data.created_at : new Date().toISOString(),
-    expires_at: typeof data.expires_at === "string" ? data.expires_at : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-  };
-}
-
-export interface VerifyPaymentResult {
-  status: string;
-  amount: number | null;
-  currency: string | null;
-  merchant_reference: string | null;
-  chapa_reference: string | null;
-  payment_method: string | null;
-  service_fee: number | null;
-  created_at: string | null;
-  updated_at: string | null;
-  raw: unknown;
-}
-
-export async function verifyPayment(chapaReference: string): Promise<VerifyPaymentResult> {
-  if (!chapaReference?.trim()) {
-    throw new ChapaConfigError("A Chapa payment reference is required to verify.");
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(checkoutUrl);
+  } catch {
+    throw new Error("CHAPA_INVALID_CHECKOUT_URL");
+  }
+  if (parsedUrl.protocol !== "https:" || parsedUrl.hostname !== "checkout.chapa.global") {
+    throw new Error("CHAPA_INVALID_CHECKOUT_URL");
   }
 
-  const data = await chapaFetch<Record<string, unknown>>(
-    `/payments/${encodeURIComponent(chapaReference.trim())}/verify`,
-    { method: "GET" }
+  await prisma.payment.update({
+    where: { id: payment.id },
+    data: { checkoutUrl: parsedUrl.toString() },
+  });
+  return parsedUrl.toString();
+}
+
+export async function verifyChapaPayment(chapaReference: string): Promise<unknown> {
+  const response = await fetch(
+    `${CHAPA_API_BASE}/payments/${encodeURIComponent(chapaReference)}/verify`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${getTestSecretKey()}`,
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    },
   );
 
-  return {
-    status: typeof data.status === "string" ? data.status : "PENDING",
-    amount: typeof data.amount === "number" ? data.amount : typeof data.amount === "string" ? Number(data.amount) : null,
-    currency: typeof data.currency === "string" ? data.currency : null,
-    merchant_reference:
-      typeof data.merchant_reference === "string"
-        ? data.merchant_reference
-        : typeof data.tx_ref === "string"
-          ? data.tx_ref
-          : null,
-    chapa_reference: typeof data.chapa_reference === "string" ? data.chapa_reference : null,
-    payment_method: typeof data.payment_method === "string" ? data.payment_method : null,
-    service_fee: typeof data.service_fee === "number" ? data.service_fee : typeof data.service_fee === "string" ? Number(data.service_fee) : null,
-    created_at: typeof data.created_at === "string" ? data.created_at : null,
-    updated_at: typeof data.updated_at === "string" ? data.updated_at : null,
-    raw: data,
-  };
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error("CHAPA_INVALID_RESPONSE");
+  }
+  if (!response.ok) {
+    console.error("Chapa payment verification failed", { status: response.status });
+    throw new Error("CHAPA_VERIFICATION_FAILED");
+  }
+  return body;
+}
+
+export async function reconcileVerifiedPayment(
+  tx: Prisma.TransactionClient,
+  paymentId: string,
+  chapaReference: string,
+  verified: VerifiedChapaPayment | null,
+): Promise<PaymentStatus> {
+  const payment = await tx.payment.findUnique({
+    where: { id: paymentId },
+    include: { registration: { select: { id: true, scheduleId: true, status: true } } },
+  });
+  if (!payment) throw new Error("PAYMENT_NOT_FOUND");
+
+  const otherPayment = await tx.payment.findUnique({
+    where: { chapaReference },
+    select: { id: true },
+  });
+  if (otherPayment && otherPayment.id !== payment.id) {
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: { status: "INVALID", verifiedAt: new Date() },
+    });
+    return "INVALID";
+  }
+
+  if (!verified) {
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: { status: "INVALID", chapaReference, verifiedAt: new Date() },
+    });
+    return "INVALID";
+  }
+
+  if (payment.status === "SUCCESS" && verified.status !== "SUCCESS") return "SUCCESS";
+
+  await tx.payment.update({
+    where: { id: payment.id },
+    data: {
+      chapaReference: verified.chapaReference,
+      status: verified.status,
+      verifiedAt: new Date(),
+    },
+  });
+
+  if (verified.status !== "SUCCESS") return verified.status;
+
+  const claim = await tx.registration.updateMany({
+    where: { id: payment.registration.id, status: "PENDING" },
+    data: { status: "CONFIRMED" },
+  });
+  if (claim.count === 0) return "SUCCESS";
+
+  const scheduleId = payment.registration.scheduleId;
+  if (!scheduleId) throw new Error("PAYMENT_REGISTRATION_WITHOUT_SCHEDULE");
+  const schedule = await tx.schedule.findUnique({
+    where: { id: scheduleId },
+    select: { maxSeats: true },
+  });
+  if (!schedule) throw new Error("PAYMENT_SCHEDULE_NOT_FOUND");
+
+  const seat = await tx.schedule.updateMany({
+    where: {
+      id: scheduleId,
+      active: true,
+      enrolled: { lt: schedule.maxSeats },
+      OR: [{ availabilityOverride: null }, { availabilityOverride: true }],
+    },
+    data: { enrolled: { increment: 1 } },
+  });
+  if (seat.count !== 1) throw new Error("PAYMENT_SCHEDULE_FULL");
+
+  return "SUCCESS";
+}
+
+export function createWebhookDedupKey(input: {
+  event: string;
+  chapaReference: string;
+  status: string;
+  updatedAt: string;
+  rawBody: Buffer;
+}): string {
+  const identity = input.updatedAt
+    ? `${input.event}:${input.chapaReference}:${input.status}:${input.updatedAt}`
+    : `${input.event}:${input.chapaReference}:${input.status}:${createHash("sha256").update(input.rawBody).digest("hex")}`;
+  return createHash("sha256").update(identity).digest("hex");
 }

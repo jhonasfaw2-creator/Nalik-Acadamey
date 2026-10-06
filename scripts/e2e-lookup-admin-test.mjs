@@ -34,7 +34,7 @@ check("admin login", login.status === 200 && cookie, `status=${login.status}`);
 const authHeaders = { "content-type": "application/json", cookie };
 
 // ── Grab target registration + an alternative schedule ──
-const app = await prisma.application.findUnique({
+const app = await prisma.registration.findUnique({
   where: { referenceId: ref },
   include: { schedule: true, course: true },
 });
