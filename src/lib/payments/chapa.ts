@@ -3,6 +3,8 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 const CHAPA_API_BASE = "https://api.chapa.global/v2";
+const CHAPA_CHECKOUT_HOST = "checkout.chapa.global";
+type ChapaMode = "test" | "live";
 type PaymentStatus =
   | "PENDING"
   | "SUCCESS"
@@ -14,9 +16,11 @@ type PaymentStatus =
   | "INVALID";
 
 export interface VerifiedChapaPayment {
-  chapaReference: string;
+  // Chapa returns null until a payment attempt has produced a reference.
+  chapaReference: string | null;
   merchantReference: string;
   amount: number;
+  serviceFee: number | null;
   currency: string;
   status: PaymentStatus;
 }
@@ -27,18 +31,22 @@ interface ChapaApiResponse {
   data?: unknown;
 }
 
-function getTestSecretKey(): string {
-  const secretKey = process.env.CHAPA_SECRET_KEY;
+function getChapaCredentials(): { secretKey: string; mode: ChapaMode } {
+  const secretKey = process.env.CHAPA_SECRET_KEY?.trim();
   if (!secretKey) throw new Error("CHAPA_SECRET_KEY is not configured");
-  if (!secretKey.startsWith("CHAPA_TEST_")) {
-    throw new Error("CHAPA_SECRET_KEY must be a Chapa TEST-mode secret key");
-  }
-  return secretKey;
+  if (secretKey.startsWith("CHAPA_TEST_")) return { secretKey, mode: "test" };
+  if (secretKey.startsWith("CHAPA_LIVE_")) return { secretKey, mode: "live" };
+  throw new Error("CHAPA_SECRET_KEY must be a Chapa TEST or LIVE secret key");
+}
+
+/** The environment of the configured secret key; Chapa webhooks must match it. */
+export function getChapaMode(): ChapaMode {
+  return getChapaCredentials().mode;
 }
 
 export function verifyChapaWebhookSignature(rawBody: Buffer, signature: string | null): boolean {
   const secret = process.env.CHAPA_WEBHOOK_SECRET;
-  if (!secret || !signature || !/^[a-f0-9]{64}$/.test(signature)) return false;
+  if (!secret || !signature || !/^[a-f0-9]{64}$/i.test(signature)) return false;
 
   const expected = createHmac("sha256", secret).update(rawBody).digest();
   const supplied = Buffer.from(signature, "hex");
@@ -68,10 +76,34 @@ export function normalizeChapaStatus(status: unknown): PaymentStatus {
   }
 }
 
+/** Chapa returns integer cents as either a JSON number or a numeric string. */
+export function parseChapaAmount(value: unknown): number | null {
+  if (typeof value === "number") {
+    return value >= 0 && Number.isSafeInteger(value) ? value : null;
+  }
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!/^\d+(?:\.0+)?$/.test(trimmed)) return null;
+  const amount = Number(trimmed);
+  return Number.isSafeInteger(amount) ? amount : null;
+}
+
+/**
+ * Chapa reports the initialized (net) amount on verification, but some
+ * responses (for example List Payments and webhooks) report the gross amount
+ * with service_fee included. Accept either representation.
+ */
+export function chapaAmountMatches(
+  amount: number,
+  serviceFee: number | null,
+  expected: number,
+): boolean {
+  return amount === expected || (serviceFee !== null && amount - serviceFee === expected);
+}
+
 export function parseVerifiedChapaPayment(
   response: unknown,
   expected: {
-    chapaReference: string;
     merchantReference: string;
     amount: number;
     currency: string;
@@ -82,22 +114,26 @@ export function parseVerifiedChapaPayment(
   if (body.status !== "success" || !body.data || typeof body.data !== "object") return null;
 
   const data = body.data as Record<string, unknown>;
-  const amount = typeof data.amount === "number" ? data.amount : Number(data.amount);
-  const chapaReference = data.chapa_reference;
+  const amount = parseChapaAmount(data.amount);
+  const serviceFee = parseChapaAmount(data.service_fee);
+  const chapaReference =
+    typeof data.chapa_reference === "string" && data.chapa_reference
+      ? data.chapa_reference
+      : null;
   const merchantReference = data.merchant_reference;
   const currency = data.currency;
   const status = normalizeChapaStatus(data.status);
 
   if (
-    typeof chapaReference !== "string" ||
     typeof merchantReference !== "string" ||
     typeof currency !== "string" ||
-    !Number.isFinite(amount) ||
-    chapaReference !== expected.chapaReference ||
+    amount === null ||
     merchantReference !== expected.merchantReference ||
-    amount !== expected.amount ||
+    !chapaAmountMatches(amount, serviceFee, expected.amount) ||
     currency.toUpperCase() !== expected.currency.toUpperCase() ||
-    status === "INVALID"
+    status === "INVALID" ||
+    // A completed payment must carry Chapa's own reference.
+    (status === "SUCCESS" && chapaReference === null)
   ) {
     return null;
   }
@@ -106,6 +142,7 @@ export function parseVerifiedChapaPayment(
     chapaReference,
     merchantReference,
     amount,
+    serviceFee,
     currency: currency.toUpperCase(),
     status,
   };
@@ -129,6 +166,18 @@ export function toChapaMinorUnits(amountInBirr: number): number | null {
 
 export function generateMerchantReference(): string {
   return `NA${randomBytes(9).toString("hex")}`;
+}
+
+function getReturnUrl(): string | null {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (!appUrl) return null;
+  try {
+    const parsed = new URL(appUrl);
+    if (parsed.protocol !== "https:") return null;
+    return new URL("/checkout/return", parsed.origin).toString();
+  } catch {
+    return null;
+  }
 }
 
 export async function initializeHostedPayment(paymentId: string): Promise<string> {
@@ -155,10 +204,11 @@ export async function initializeHostedPayment(paymentId: string): Promise<string
   };
   if (payment.registration.email) customer.email = payment.registration.email;
 
+  const returnUrl = getReturnUrl();
   const response = await fetch(`${CHAPA_API_BASE}/payments/hosted`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${getTestSecretKey()}`,
+      Authorization: `Bearer ${getChapaCredentials().secretKey}`,
       "Content-Type": "application/json",
       "Idempotency-Key": payment.merchantReference,
     },
@@ -167,6 +217,7 @@ export async function initializeHostedPayment(paymentId: string): Promise<string
       currency: payment.currency,
       merchant_reference: payment.merchantReference,
       customer,
+      ...(returnUrl ? { return_url: returnUrl } : {}),
       meta: {
         registration_reference: payment.registration.referenceId,
         course: payment.registration.course.title,
@@ -206,15 +257,72 @@ export async function initializeHostedPayment(paymentId: string): Promise<string
   } catch {
     throw new Error("CHAPA_INVALID_CHECKOUT_URL");
   }
-  if (parsedUrl.protocol !== "https:" || parsedUrl.hostname !== "checkout.chapa.global") {
+  if (parsedUrl.protocol !== "https:" || parsedUrl.hostname !== CHAPA_CHECKOUT_HOST) {
     throw new Error("CHAPA_INVALID_CHECKOUT_URL");
   }
 
+  const checkoutUrlString = parsedUrl.toString();
+  // The checkout URL segment is a checkout-session reference, not the payment
+  // reference Chapa returns after completion, so only the URL is persisted.
+  // The real chapa_reference is stored from verification or the webhook.
   await prisma.payment.update({
     where: { id: payment.id },
-    data: { checkoutUrl: parsedUrl.toString() },
+    data: { checkoutUrl: checkoutUrlString },
   });
-  return parsedUrl.toString();
+  return checkoutUrlString;
+}
+
+/** Picks our payment from a GET /v2/payments list response (newest first). */
+export function pickChapaReferenceFromPayments(
+  response: unknown,
+  merchantReference: string,
+): string | null {
+  if (!response || typeof response !== "object") return null;
+  const data = (response as { data?: unknown }).data;
+  if (!data || typeof data !== "object") return null;
+  const items = (data as { items?: unknown }).items;
+  if (!Array.isArray(items)) return null;
+
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    const payment = item as { merchant_reference?: unknown; chapa_reference?: unknown };
+    if (
+      payment.merchant_reference === merchantReference &&
+      typeof payment.chapa_reference === "string" &&
+      payment.chapa_reference
+    ) {
+      return payment.chapa_reference;
+    }
+  }
+  return null;
+}
+
+/**
+ * Resolves the Chapa payment reference when verification by merchant reference
+ * is no longer accepted (Chapa only accepts the Chapa reference after a hosted
+ * checkout completes). The list endpoint is documented as newest-first.
+ */
+export async function findChapaReferenceForPayment(
+  merchantReference: string,
+): Promise<string | null> {
+  const response = await fetch(`${CHAPA_API_BASE}/payments?limit=50`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${getChapaCredentials().secretKey}`,
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) return null;
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return null;
+  }
+  return pickChapaReferenceFromPayments(body, merchantReference);
 }
 
 export async function verifyChapaPayment(chapaReference: string): Promise<unknown> {
@@ -223,7 +331,7 @@ export async function verifyChapaPayment(chapaReference: string): Promise<unknow
     {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${getTestSecretKey()}`,
+        Authorization: `Bearer ${getChapaCredentials().secretKey}`,
         "Content-Type": "application/json",
       },
       cache: "no-store",
@@ -247,7 +355,7 @@ export async function verifyChapaPayment(chapaReference: string): Promise<unknow
 export async function reconcileVerifiedPayment(
   tx: Prisma.TransactionClient,
   paymentId: string,
-  chapaReference: string,
+  chapaReference: string | null,
   verified: VerifiedChapaPayment | null,
 ): Promise<PaymentStatus> {
   const payment = await tx.payment.findUnique({
@@ -256,10 +364,18 @@ export async function reconcileVerifiedPayment(
   });
   if (!payment) throw new Error("PAYMENT_NOT_FOUND");
 
-  const otherPayment = await tx.payment.findUnique({
-    where: { chapaReference },
-    select: { id: true },
-  });
+  // Success is a terminal state: a stale, pending, failed, or unverified
+  // notification must never undo an already verified successful payment.
+  if (payment.status === "SUCCESS" && (!verified || verified.status !== "SUCCESS")) {
+    return "SUCCESS";
+  }
+
+  const otherPayment = chapaReference
+    ? await tx.payment.findUnique({
+        where: { chapaReference },
+        select: { id: true },
+      })
+    : null;
   if (otherPayment && otherPayment.id !== payment.id) {
     await tx.payment.update({
       where: { id: payment.id },
@@ -271,17 +387,21 @@ export async function reconcileVerifiedPayment(
   if (!verified) {
     await tx.payment.update({
       where: { id: payment.id },
-      data: { status: "INVALID", chapaReference, verifiedAt: new Date() },
+      data: {
+        status: "INVALID",
+        ...(chapaReference ? { chapaReference } : {}),
+        verifiedAt: new Date(),
+      },
     });
     return "INVALID";
   }
 
-  if (payment.status === "SUCCESS" && verified.status !== "SUCCESS") return "SUCCESS";
-
   await tx.payment.update({
     where: { id: payment.id },
     data: {
-      chapaReference: verified.chapaReference,
+      // Keep the reference captured at initialization when Chapa has not
+      // assigned one yet (for example while the payment is still PENDING).
+      ...(verified.chapaReference ? { chapaReference: verified.chapaReference } : {}),
       status: verified.status,
       verifiedAt: new Date(),
     },

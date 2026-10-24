@@ -4,8 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { isPrismaError } from "@/lib/http";
 import type { Prisma } from "@prisma/client";
 import {
+  chapaAmountMatches,
   createWebhookDedupKey,
+  getChapaMode,
   normalizeChapaStatus,
+  parseChapaAmount,
   parseVerifiedChapaPayment,
   reconcileVerifiedPayment,
   verifyChapaPayment,
@@ -20,6 +23,7 @@ interface ChapaWebhook {
   status?: unknown;
   mode?: unknown;
   amount?: unknown;
+  service_fee?: unknown;
   currency?: unknown;
   merchant_reference?: unknown;
   chapa_reference?: unknown;
@@ -29,6 +33,14 @@ interface ChapaWebhook {
 export async function POST(request: NextRequest) {
   if (!process.env.CHAPA_WEBHOOK_SECRET) {
     console.error("CHAPA_WEBHOOK_SECRET is not configured");
+    return NextResponse.json({ error: "Webhook is not configured." }, { status: 503 });
+  }
+
+  let expectedMode: ReturnType<typeof getChapaMode>;
+  try {
+    expectedMode = getChapaMode();
+  } catch (error) {
+    console.error("Chapa API key is not configured for webhook reconciliation", error);
     return NextResponse.json({ error: "Webhook is not configured." }, { status: 503 });
   }
 
@@ -52,7 +64,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true, ignored: true });
   }
   if (
-    payload.mode !== "test" ||
+    (payload.mode !== undefined && payload.mode !== expectedMode) ||
     typeof payload.event !== "string" ||
     typeof payload.status !== "string" ||
     typeof payload.merchant_reference !== "string" ||
@@ -64,11 +76,11 @@ export async function POST(request: NextRequest) {
   }
 
   const eventStatus = normalizeChapaStatus(payload.status);
-  const amount = typeof payload.amount === "number" ? payload.amount : Number(payload.amount);
+  const amount = parseChapaAmount(payload.amount);
   if (
     eventStatus === "INVALID" ||
     payload.event !== `payment.${payload.status.toLowerCase()}` ||
-    !Number.isFinite(amount) ||
+    amount === null ||
     !payload.merchant_reference ||
     !payload.chapa_reference
   ) {
@@ -84,18 +96,24 @@ export async function POST(request: NextRequest) {
     }
 
     const response = await verifyChapaPayment(payload.chapa_reference);
+    const serviceFee = parseChapaAmount(payload.service_fee);
     const webhookMatches =
-      amount === payment.amount &&
-      payload.currency.toUpperCase() === payment.currency.toUpperCase() &&
-      (payload.updated_at === undefined || typeof payload.updated_at === "string");
-    const verified = webhookMatches
-      ? parseVerifiedChapaPayment(response, {
-          chapaReference: payload.chapa_reference,
-          merchantReference: payment.merchantReference,
-          amount: payment.amount,
-          currency: payment.currency,
-        })
-      : null;
+      chapaAmountMatches(amount, serviceFee, payment.amount) &&
+      payload.currency.toUpperCase() === payment.currency.toUpperCase();
+    if (!webhookMatches) {
+      // Never mutate a payment from a notification that disagrees with the
+      // stored order. A legitimate payment still reconciles through /verify.
+      console.error("Chapa webhook did not match the stored payment", {
+        merchantReference: payload.merchant_reference,
+      });
+      return NextResponse.json({ received: true, ignored: true });
+    }
+
+    const verified = parseVerifiedChapaPayment(response, {
+      merchantReference: payment.merchantReference,
+      amount: payment.amount,
+      currency: payment.currency,
+    });
     const dedupKey = createWebhookDedupKey({
       event: payload.event,
       chapaReference: payload.chapa_reference,
@@ -112,7 +130,12 @@ export async function POST(request: NextRequest) {
           chapaReference: payload.chapa_reference as string,
         },
       });
-      await reconcileVerifiedPayment(tx, payment.id, payload.chapa_reference as string, verified);
+      await reconcileVerifiedPayment(
+        tx,
+        payment.id,
+        verified?.chapaReference ?? payment.chapaReference ?? (payload.chapa_reference as string),
+        verified,
+      );
     });
 
     return NextResponse.json({ received: true });

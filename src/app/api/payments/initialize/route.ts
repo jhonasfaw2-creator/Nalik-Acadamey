@@ -37,17 +37,15 @@ export async function POST(request: NextRequest) {
           error: "Enter an Ethiopian phone number in international format.",
           status: 400,
         },
-        "CHAPA_SECRET_KEY is not configured": {
-          error: "Online payment is not configured. Please contact the academy.",
-          status: 503,
-        },
-        "CHAPA_SECRET_KEY must be a Chapa TEST-mode secret key": {
-          error: "Online payments are restricted to Chapa TEST mode.",
-          status: 503,
-        },
       };
       const known = knownErrors[error.message];
       if (known) return NextResponse.json({ error: known.error }, { status: known.status });
+      if (error.message.startsWith("CHAPA_SECRET_KEY")) {
+        return NextResponse.json(
+          { error: "Online payment is not configured. Please contact the academy." },
+          { status: 503 },
+        );
+      }
     }
     if (isPrismaError(error, "P2025")) {
       return NextResponse.json({ error: "Payment not found." }, { status: 404 });
