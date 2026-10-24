@@ -319,7 +319,14 @@ const [proofUploadError, setProofUploadError] = useState("");
                       `/api/registrations/${encodeURIComponent(registrationCreated.referenceId)}/payment-proof`,
                       { method: "POST", body: data }
                     );
-                    const result = await response.json();
+                    let result: { error?: string; success?: boolean; status?: string };
+                    const contentType = response.headers.get("content-type") ?? "";
+                    if (contentType.includes("application/json")) {
+                      result = await response.json();
+                    } else {
+                      const text = await response.text();
+                      result = { error: text || "Upload failed." };
+                    }
                     if (!response.ok) throw new Error(result.error || "Upload failed.");
                     setProofUploaded(true);
                   } catch (error) {
