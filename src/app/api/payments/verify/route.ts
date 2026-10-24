@@ -19,8 +19,12 @@ export async function POST(request: NextRequest) {
       ? (body as { payment?: unknown }).payment
       : null;
   const tokenPaymentId = typeof token === "string" ? verifyPaymentReturnToken(token) : null;
-  const paymentId = tokenPaymentId ?? request.cookies.get("nalik_payment")?.value;
+  const cookiePaymentId = request.cookies.get("nalik_payment")?.value;
+  const paymentId = tokenPaymentId ?? cookiePaymentId;
   if (!paymentId) {
+    if (typeof token === "string" && token.length > 0) {
+      return NextResponse.json({ error: "Invalid or expired payment link." }, { status: 401 });
+    }
     return NextResponse.json({ error: "No payment session was found." }, { status: 400 });
   }
 
