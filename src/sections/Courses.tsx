@@ -156,7 +156,7 @@ export default function Courses({
     return (
       <section
         id="courses"
-        className="bg-white px-5 py-20 sm:px-8 lg:px-10 lg:py-28"
+        className="bg-white px-5 py-20 sm:py-28 lg:px-10 lg:py-32"
       >
         <div className="mx-auto max-w-7xl">
           <div className="max-w-3xl">
@@ -200,7 +200,7 @@ export default function Courses({
     return (
       <section
         id="courses"
-        className="bg-white px-5 py-20 sm:px-8 lg:px-10 lg:py-28"
+        className="bg-white px-5 py-20 sm:py-28 lg:px-10 lg:py-32"
       >
         <div className="mx-auto max-w-7xl">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gold">
@@ -231,7 +231,7 @@ export default function Courses({
   return (
     <section
       id="courses"
-      className="bg-white px-5 py-20 sm:px-8 lg:px-10 lg:py-28"
+      className="bg-white px-5 py-20 sm:py-28 lg:px-10 lg:py-32"
     >
       <div className="mx-auto max-w-7xl">
 
@@ -390,7 +390,7 @@ export default function Courses({
 
                   <button
                     onClick={() => onApplyWithCourse(course.title)}
-                    className="mt-6 flex w-full items-center justify-between border border-navy bg-navy px-5 py-3.5 text-sm font-semibold text-white transition-all duration-300 hover:border-gold hover:bg-gold hover:text-navy"
+                    className="mt-6 flex w-full items-center justify-between border border-navy bg-navy px-8 py-4 text-base font-semibold text-white transition-all duration-200 hover:border-gold hover:bg-gold hover:text-navy focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-navy"
                   >
                     <span>Register for this course</span>
 

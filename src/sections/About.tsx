@@ -112,52 +112,52 @@ export default function About() {
   return (
     <section
       id="about"
-      className="relative overflow-hidden bg-warm-white px-5 py-20 sm:px-8 sm:py-24 lg:px-10 lg:py-32"
+      className="relative overflow-hidden bg-warm-white px-5 py-24 sm:px-8 sm:py-32 lg:px-10 lg:py-40"
     >
       <div className="mx-auto max-w-7xl">
 
         {/* Section header */}
-        <div className="mb-12 sm:mb-16">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-gold">
+        <div className="mb-16 sm:mb-20">
+          <p className="text-xs font-semibold uppercase tracking-[0.26em] text-gold">
             {content.badge}
           </p>
         </div>
 
-        <div className="grid items-center gap-14 lg:grid-cols-[1fr_0.75fr] lg:gap-24">
+        <div className="grid items-start gap-20 lg:grid-cols-[1fr_0.85fr] lg:gap-32">
 
           {/* Text */}
           <div ref={textRef} className="max-w-2xl">
 
-            <h2 className="text-4xl font-bold leading-[1.05] tracking-tight text-navy sm:text-5xl lg:text-[3.5rem]">
+            <h2 className="text-5xl font-bold leading-[1.02] tracking-tight text-navy sm:text-6xl lg:text-[4rem]">
               {content.title}
             </h2>
 
-            <div className="mt-8 max-w-xl space-y-5 text-base leading-7 text-gray-600 sm:text-lg sm:leading-8">
+            <div className="mt-10 max-w-xl space-y-7 text-lg leading-8 text-gray-700 sm:text-xl sm:leading-9">
               <p>{content.paragraph1}</p>
 
               <p>{content.paragraph2}</p>
             </div>
 
             {/* Focus line */}
-            <div className="mt-10 border-t border-navy/10 pt-5">
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-navy/50">
+            <div className="mt-14 border-t border-navy/10 pt-8">
+              <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-navy/50">
                   Our Focus
                 </span>
 
-                <span className="text-sm font-medium text-navy">
+                <span className="text-base font-medium text-navy">
                   Video Editing
                 </span>
 
                 <span className="h-1 w-1 rounded-full bg-gold" />
 
-                <span className="text-sm font-medium text-navy">
+                <span className="text-base font-medium text-navy">
                   Visual Storytelling
                 </span>
 
                 <span className="h-1 w-1 rounded-full bg-gold" />
 
-                <span className="text-sm font-medium text-navy">
+                <span className="text-base font-medium text-navy">
                   Real Projects
                 </span>
               </div>
@@ -176,16 +176,18 @@ export default function About() {
 
                 <video
                   ref={videoElRef}
+                  autoPlay
                   muted={isMuted}
                   loop
                   playsInline
-                  preload="metadata"
+                  preload="auto"
                   poster={content.poster}
                   onCanPlay={() => setIsVideoReady(true)}
+                  onError={() => setIsVideoReady(true)}
                   className={`h-full w-full object-cover transition-all duration-1000 ${
                     isVideoReady
                       ? "scale-100 opacity-100"
-                      : "scale-[1.03] opacity-0"
+                      : "scale-[1.03] opacity-100"
                   }`}
                 >
                   <source src={content.video} type="video/mp4" />

@@ -3,12 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
-import { SOCIAL_LINKS } from "@/lib/socials";
-
-const INSTAGRAM_ICON =
-  SOCIAL_LINKS.find((l) => l.label === "Instagram")?.icon ?? "";
-const TIKTOK_ICON =
-  SOCIAL_LINKS.find((l) => l.label === "TikTok")?.icon ?? "";
 
 const CREATORS = [
   { name: "Lofty Haron", role: "Streamer", image: "/assets/Collabritors/Loftyharon.jpeg", tiktok: "", instagram: "" },
@@ -55,7 +49,7 @@ export default function Collaborations() {
     <section
       id="collaborations"
       ref={sectionRef}
-      className="relative overflow-hidden bg-warm-white px-4 py-16 sm:px-6 lg:px-8"
+      className="relative overflow-hidden bg-warm-white px-4 py-20 sm:py-28 lg:px-8 lg:py-32"
     >
       <div className="relative mx-auto max-w-5xl">
         {/* Header */}
@@ -88,10 +82,10 @@ export default function Collaborations() {
                 ?
               </span>
               <p className="mt-3 text-base font-bold text-navy">You next?</p>
-              <a
-                href="#contact"
-                className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-gold hover:text-gold-hover"
-              >
+                <a
+                  href="#contact"
+                  className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-gold hover:text-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-warm-white"
+                >
                 Start a project
                 <ArrowRight size={13} aria-hidden="true" />
               </a>
@@ -178,12 +172,6 @@ function CastCard({
         <span className="absolute left-2.5 top-2.5 rounded bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-navy">
           {creator.role}
         </span>
-
-        {/* Social pills on photo */}
-        <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1.5 bg-navy/70 pb-3 pt-8 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-          <SocialPill href={creator.tiktok} icon={TIKTOK_ICON} label={`${creator.name} on TikTok`} />
-          <SocialPill href={creator.instagram} icon={INSTAGRAM_ICON} label={`${creator.name} on Instagram`} />
-        </div>
       </div>
 
       {/* Name below photo */}
@@ -194,47 +182,5 @@ function CastCard({
         {creator.role}
       </p>
     </article>
-  );
-}
-
-function SocialPill({
-  href,
-  icon,
-  label,
-}: {
-  href: string;
-  icon: string;
-  label: string;
-}) {
-  const classes =
-    "flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-200 " +
-    (href
-      ? "bg-white text-navy hover:bg-gold hover:text-navy"
-      : "border border-white/50 text-white/70");
-
-  if (!href) {
-    // Placeholder: dashed pill until a real URL is added.
-    return (
-      <span className={classes} title="Link coming soon" aria-hidden="true">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-          <path d={icon} />
-        </svg>
-      </span>
-    );
-  }
-
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={classes}
-      aria-label={label}
-      title={label}
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-        <path d={icon} />
-      </svg>
-    </a>
   );
 }

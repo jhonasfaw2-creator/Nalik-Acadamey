@@ -20,7 +20,6 @@ body {
 
 /* ── Performance ─────────────────────────────── */
 video, img {
-  content-visibility: auto;
   contain-intrinsic-size: auto 200px;
 }
 

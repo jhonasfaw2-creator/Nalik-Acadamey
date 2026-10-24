@@ -110,7 +110,7 @@ export default function Contact({ onApplyClick }: ContactProps) {
                   </div>
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Call us</p>
-                    <a href={`tel:${content.phone.replace(/\s/g, "")}`} className="mt-1 inline-block text-base font-semibold text-navy transition-colors hover:text-gold">
+                    <a href={`tel:${content.phone.replace(/\s/g, "")}`} className="mt-1 inline-block text-base font-semibold text-navy transition-colors hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-warm-white">
                       {content.phone}
                     </a>
                   </div>
@@ -129,10 +129,10 @@ export default function Contact({ onApplyClick }: ContactProps) {
               </div>
 
               <div className="mt-8 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={onApplyClick}
-                  className="group inline-flex items-center gap-2 rounded-lg bg-gold px-5 py-3 text-sm font-bold uppercase tracking-[0.12em] text-navy transition-all duration-200 hover:bg-gold-hover"
+                  <button
+                    type="button"
+                    onClick={onApplyClick}
+                    className="group inline-flex items-center gap-2 rounded-lg bg-gold px-5 py-3 text-sm font-bold uppercase tracking-[0.12em] text-navy transition-all duration-200 hover:bg-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-navy"
                 >
                   Register Now
                   <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
@@ -142,7 +142,7 @@ export default function Contact({ onApplyClick }: ContactProps) {
                   href={DIRECTIONS_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-5 py-3 text-sm font-bold uppercase tracking-[0.12em] text-navy transition-colors hover:border-gold hover:text-gold"
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-5 py-3 text-sm font-bold uppercase tracking-[0.12em] text-navy transition-colors hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                 >
                   <Navigation size={15} />
                   Get Directions
@@ -157,7 +157,7 @@ export default function Contact({ onApplyClick }: ContactProps) {
                   href={LOCATION.mapsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs font-semibold uppercase tracking-[0.12em] text-gold hover:text-gold-hover"
+                  className="text-xs font-semibold uppercase tracking-[0.12em] text-gold hover:text-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-warm-white"
                 >
                   Open map
                 </a>
@@ -204,7 +204,7 @@ export default function Contact({ onApplyClick }: ContactProps) {
                   href={link.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-all duration-200 hover:border-gold hover:bg-gold/5 hover:text-gold"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-all duration-200 hover:border-gold hover:bg-gold/5 hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-warm-white"
                   aria-label={link.label}
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

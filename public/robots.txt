@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://nalik-acadamey.vercel.app/sitemap.xml
+Sitemap: https://nalik-academy.vercel.app/sitemap.xml

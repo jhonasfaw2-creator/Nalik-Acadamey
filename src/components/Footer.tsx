@@ -64,7 +64,7 @@ export default function Footer({ onApplyClick }: FooterProps) {
                     e.preventDefault();
                     scrollTo(link.href);
                   }}
-                  className="transition-colors hover:text-gold"
+                  className="transition-colors hover:text-gold focus-visible:underline"
                 >
                   {link.label}
                 </a>
@@ -81,7 +81,7 @@ export default function Footer({ onApplyClick }: FooterProps) {
                   href={link.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-all duration-200 hover:border-gold hover:bg-gold/5 hover:text-gold"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-all duration-200 hover:border-gold hover:bg-gold/5 hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                   aria-label={link.label}
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -95,12 +95,12 @@ export default function Footer({ onApplyClick }: FooterProps) {
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-400">Visit</p>
             <div className="mt-3 space-y-2 text-sm text-gray-600">
-              <a href="tel:+251911223344" className="block transition-colors hover:text-gold">+251 911 223 344</a>
+              <a href="tel:+251911223344" className="block transition-colors hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white">+251 911 223 344</a>
               <a
                 href="https://maps.app.goo.gl/26zbvuqd1VrzoSPE8"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block transition-colors hover:text-gold"
+                className="block transition-colors hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
                 Yeab Building, 5th Floor
               </a>
@@ -115,14 +115,14 @@ export default function Footer({ onApplyClick }: FooterProps) {
               <button
                 type="button"
                 onClick={handleRegister}
-                className="font-semibold uppercase tracking-[0.12em] text-gold transition-colors hover:text-gold-hover"
+                className="font-semibold uppercase tracking-[0.12em] text-gold transition-colors hover:text-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
                 Register Now
               </button>
               <span className="hidden text-gray-300 sm:inline">|</span>
               <a
                 href="/registration"
-                className="font-semibold uppercase tracking-[0.12em] text-gold transition-colors hover:text-gold-hover"
+                className="font-semibold uppercase tracking-[0.12em] text-gold transition-colors hover:text-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
                 Check Registration
               </a>

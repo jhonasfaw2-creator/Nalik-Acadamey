@@ -111,7 +111,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
                   href={link.href}
                   onClick={(e) => { e.preventDefault(); handleNavClick(link.href); }}
                   className={cn(
-                    "px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.16em] transition-all duration-300",
+                    "px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.16em] transition-all duration-300 focus-visible:underline",
                     isActive
                       ? "text-gold"
                       : scrolled
@@ -130,7 +130,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
             <a
               href="tel:+251911223344"
               className={cn(
-                "flex items-center gap-1.5 text-xs font-medium transition-colors duration-300",
+                "flex items-center gap-1.5 text-xs font-medium transition-colors duration-300 focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white",
                 scrolled ? "text-navy/50 hover:text-navy" : "text-white/50 hover:text-white"
               )}
             >
@@ -140,7 +140,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
 
             <button
               onClick={handleApply}
-              className="btn-gold group relative overflow-hidden rounded-lg bg-gold px-5 py-2.5 text-[13px] font-bold uppercase tracking-wider text-navy"
+              className="btn-gold group relative overflow-hidden rounded-lg bg-gold px-5 py-2.5 text-[13px] font-bold uppercase tracking-wider text-navy focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white"
             >
               <span className="relative z-10 flex items-center gap-1.5">
                 Apply Now <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
@@ -152,7 +152,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-300 lg:hidden",
+              "flex h-10 w-10 items-center justify-center rounded-lg transition-all duration-300 lg:hidden focus-visible:ring-2 focus-visible:ring-gold",
               mobileOpen
                 ? "bg-white/10"
                 : scrolled
@@ -219,7 +219,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
                 href={link.href}
                 onClick={(e) => { e.preventDefault(); handleNavClick(link.href); }}
                 className={cn(
-                  "text-3xl font-bold tracking-tight transition-all duration-300",
+                  "text-3xl font-bold tracking-tight transition-all duration-300 focus-visible:underline",
                   isActive ? "text-gold" : "text-white/70 hover:text-white",
                   mobileOpen ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
                 )}
@@ -233,7 +233,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
           <button
             onClick={handleApply}
             className={cn(
-              "mt-6 inline-flex items-center gap-2 rounded-lg bg-gold px-8 py-3.5 text-base font-bold text-navy transition-colors duration-300 hover:bg-gold-hover",
+              "mt-6 inline-flex items-center gap-2 rounded-lg bg-gold px-8 py-3.5 text-base font-bold text-navy transition-colors duration-300 hover:bg-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-navy",
               mobileOpen ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
             )}
             style={{ transitionDelay: mobileOpen ? "500ms" : "0ms" }}
@@ -244,7 +244,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
           <a
             href="tel:+251911223344"
             className={cn(
-              "mt-4 flex items-center gap-2 text-sm text-white/40 transition-all duration-300",
+              "mt-4 flex items-center gap-2 text-sm text-white/40 transition-all duration-300 focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-navy",
               mobileOpen ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
             )}
             style={{ transitionDelay: mobileOpen ? "560ms" : "0ms" }}

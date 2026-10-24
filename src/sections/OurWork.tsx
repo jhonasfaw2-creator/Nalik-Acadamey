@@ -217,7 +217,7 @@ function VideoThumb({
         src={project.thumbnailUrl}
         alt={`${project.title} thumbnail`}
         className="absolute inset-0 h-full w-full object-cover"
-        loading="lazy"
+        loading="eager"
         decoding="async"
       />
 
@@ -367,7 +367,7 @@ function ProjectLink({ project }: { project: PortfolioProject }) {
       href={project.linkUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 text-sm font-medium text-gold transition-colors hover:text-gold-hover"
+      className="inline-flex items-center gap-1.5 text-sm font-medium text-gold transition-colors hover:text-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-warm-white"
     >
       {project.platform === "YouTube" ? "Watch on YouTube" : "Watch video"}
       <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">

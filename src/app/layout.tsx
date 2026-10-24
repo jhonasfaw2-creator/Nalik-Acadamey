@@ -35,6 +35,14 @@ export const metadata: Metadata = {
     siteName: "Nalik Academy",
     locale: "en_US",
     type: "website",
+    images: [
+      {
+        url: "/assets/hero/poster.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Nalik Academy - Master the Art of Visual Storytelling",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
@@ -72,7 +80,8 @@ export default function RootLayout({
             already uses preload="auto", so a <link rel=preload as=video> is
             redundant AND unsupported in Chrome (it logs a console warning
             and is ignored). */}
-        <link rel="preload" href="/assets/hero/poster.jpg" as="image" />
+        <link rel="preload" href="/assets/hero/poster.jpg" as="image" fetchPriority="high" />
+        <link rel="preload" href="/assets/About/poster.jpg" as="image" fetchPriority="high" />
       </head>
       <body className="min-h-screen bg-white text-navy antialiased">
         {children}

@@ -164,7 +164,7 @@ export default function Founders() {
                     src={data.portraitUrl}
                     alt={`${data.name || data.role}, Ethiopian freelance video editor`}
                     className="h-full w-full object-cover object-top"
-                    loading="lazy"
+                    loading="eager"
                     decoding="async"
                   />
                 </div>

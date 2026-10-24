@@ -66,7 +66,7 @@ export default function Hero({ onApplyClick }: HeroProps) {
         muted
         loop
         playsInline
-        preload="metadata"
+        preload="auto"
         poster={content.poster}
         onCanPlay={() => setVideoLoaded(true)}
         className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${
@@ -78,11 +78,15 @@ export default function Hero({ onApplyClick }: HeroProps) {
       </video>
 
       {/* Cinematic background fallback */}
-      <div
-        className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ${
+      <img
+        src={content.poster}
+        alt=""
+        loading="eager"
+        fetchPriority="high"
+        decoding="async"
+        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${
           videoLoaded ? "opacity-0" : "opacity-100"
         }`}
-        style={{ backgroundImage: `url(${content.poster})` }}
       />
 
       {/* Readability overlay */}
@@ -94,33 +98,34 @@ export default function Hero({ onApplyClick }: HeroProps) {
           <div className="max-w-3xl">
 
             {/* Eyebrow */}
-            <div className="hero-eyebrow mb-6">
+            <div className="hero-eyebrow flex items-center gap-2 mb-8">
               <span className="text-xs font-semibold uppercase tracking-[0.24em] text-gold">
                 {content.eyebrow}
               </span>
+              <span className="h-px w-6 bg-gold shrink-0" />
             </div>
 
             {/* Main headline */}
-            <h1 className="hero-title max-w-3xl text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-5xl md:text-6xl lg:text-7xl">
+            <h1 className="hero-title max-w-3xl text-5xl font-bold leading-[1.02] tracking-tight text-white sm:text-6xl md:text-7xl lg:text-[4.5rem]">
               {content.title}
             </h1>
 
             {/* Description */}
-            <p className="hero-desc mt-7 max-w-xl text-base leading-7 text-white/75 sm:text-lg">
+            <p className="hero-desc mt-8 max-w-xl text-lg leading-8 text-white/80">
               {content.description}
             </p>
 
             {/* CTA */}
-            <div className="hero-cta mt-9 flex flex-wrap items-center gap-5">
+            <div className="hero-cta mt-12 flex flex-wrap items-center gap-6">
               <button
                 onClick={onApplyClick}
-                className="group/btn inline-flex items-center gap-3 rounded-md bg-gold px-7 py-3.5 text-sm font-semibold text-navy transition-colors duration-300 hover:bg-gold/90 focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-navy"
+                className="group/btn inline-flex items-center justify-center gap-3 rounded-md bg-gold px-8 py-4 text-base font-semibold text-navy shadow-sm hover:bg-gold-hover transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-navy"
               >
                 Apply Now
 
                 <ArrowRight
-                  size={17}
-                  className="transition-transform duration-300 group-hover/btn:translate-x-1"
+                  size={18}
+                  className="transition-transform duration-200 group-hover/btn:translate-x-1"
                 />
               </button>
 
@@ -130,10 +135,10 @@ export default function Hero({ onApplyClick }: HeroProps) {
                     .getElementById("about")
                     ?.scrollIntoView({ behavior: "smooth" });
                 }}
-                className="group/about inline-flex items-center gap-2 text-sm font-medium text-white/85 transition-colors duration-300 hover:text-white"
+                className="group/about inline-flex items-center gap-2.5 rounded-md bg-white/10 px-7 py-4 text-base font-medium text-white transition-colors duration-200 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-navy"
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 transition-all duration-300 group-hover/about:border-white/70">
-                  <Play size={13} fill="currentColor" />
+                <span className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 transition-all duration-200 group-hover/about:border-white/60">
+                  <Play size={14} fill="currentColor" />
                 </span>
 
                 Discover Nalik
@@ -141,7 +146,7 @@ export default function Hero({ onApplyClick }: HeroProps) {
             </div>
 
             {/* Training highlights */}
-            <div className="hero-meta mt-12 flex flex-wrap items-center gap-x-7 gap-y-3 border-t border-white/15 pt-5">
+            <div className="hero-meta mt-16 flex flex-wrap items-center gap-x-8 gap-y-4 border-t border-white/15 pt-6">
               <span className="text-xs font-medium uppercase tracking-[0.16em] text-white/55">
                 Premiere Pro
               </span>
