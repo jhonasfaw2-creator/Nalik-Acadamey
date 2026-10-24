@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Loader2, Calendar, AlertCircle, ArrowRight } from "lucide-react";
+import { X, Loader2, Calendar, AlertCircle, ArrowRight, Check } from "lucide-react";
 
 interface CourseOption {
   id: string;
@@ -286,9 +286,24 @@ const [proofUploadError, setProofUploadError] = useState("");
               {registrationCreated.referenceId}
             </p>
             {proofUploaded ? (
-              <p className="mx-auto mt-5 max-w-md text-sm font-semibold text-green-700">
-                Payment screenshot submitted! Await admin review.
-              </p>
+              <div className="mx-auto mt-5 max-w-md rounded-xl bg-green-50 border border-green-100 p-4 text-center">
+                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
+                  <Check size={20} className="text-green-600" />
+                </div>
+                <p className="text-sm font-semibold text-green-800">
+                  Payment screenshot submitted! Await admin review.
+                </p>
+                <p className="mt-1 text-xs text-green-600">
+                  You can check your registration status anytime using your Registration ID.
+                </p>
+                <a
+                  href={`/registration?id=${encodeURIComponent(registrationCreated.referenceId)}`}
+                  className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-navy px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-navy/80 focus-visible:ring-2 focus-visible:ring-navy focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                >
+                  <ArrowRight size={15} />
+                  Check Registration Status
+                </a>
+              </div>
             ) : (
               <form
                 className="mx-auto mt-6 max-w-md space-y-3 text-left"

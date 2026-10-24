@@ -17,6 +17,7 @@ interface Registration {
   paymentProofSubmittedAt: string | null;
   paymentProofReviewedAt: string | null;
   paymentProofNote: string | null;
+  paymentProofPath: string | null;
   createdAt: string;
   course: { id: string; title: string } | null;
   schedule: { id: string; group: string; session: string; days: string; startTime: string; endTime: string } | null;
@@ -79,6 +80,10 @@ export default function AdminRegistrations() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [reassignError, setReassignError] = useState("");
+  const [reviewing, setReviewing] = useState<string | null>(null);
+  const [viewingProof, setViewingProof] = useState<{ id: string; name: string; path: string } | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectNote, setRejectNote] = useState("");
 
   // ── Add Student (manual enrollment) state ──
   const [addOpen, setAddOpen] = useState(false);
@@ -222,6 +227,34 @@ export default function AdminRegistrations() {
     }
   };
 
+  const reviewRegistration = async (id: string, decision: "APPROVED" | "REJECTED") => {
+    setReviewing(id);
+    setError("");
+    try {
+      const response = await fetch(`/api/admin/registrations/${id}/payment-proof`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: decision, note: decision === "REJECTED" ? rejectNote : "" }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setError(data.error || `Failed to ${decision.toLowerCase()} registration.`);
+      } else {
+        setRejectingId(null);
+        setRejectNote("");
+        load();
+      }
+    } catch {
+      setError(`Could not reach the server to ${decision.toLowerCase()} this registration.`);
+    } finally {
+      setReviewing(null);
+    }
+  };
+
+  const viewScreenshot = (id: string, name: string, path: string) => {
+    setViewingProof({ id, name, path });
+  };
+
   // ── Manual enrollment submit ──
   const selectedSchedule = schedules.find((s) => s.id === form.scheduleId);
   const scheduleDisabled = (s: ScheduleOption) => !s.active || s.isFull;
@@ -356,6 +389,7 @@ export default function AdminRegistrations() {
                 <th className="px-4 py-3 font-medium text-gray-500">Phone</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Course</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Registration date</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Payment Proof</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Payment</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Registration status</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Action</th>
@@ -376,6 +410,14 @@ export default function AdminRegistrations() {
                     })}
                   </td>
                   <td className="px-4 py-3">
+                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${reg.paymentProofStatus === "PENDING_REVIEW" ? "bg-yellow-100 text-yellow-700" : reg.paymentProofStatus === "APPROVED" ? "bg-green-100 text-green-700" : reg.paymentProofStatus === "REJECTED" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-400"}`}>
+                      {reg.paymentProofStatus === "NOT_SUBMITTED" ? "—" : reg.paymentProofStatus.replace(/_/g, " ")}
+                    </span>
+                    {reg.paymentProofNote && (
+                      <p className="mt-1 text-xs text-gray-500">{reg.paymentProofNote}</p>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
                     {reg.payments[0] ? (
                       <div>
                         <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${PAYMENT_STATUS_COLORS[reg.payments[0].status] || "bg-gray-100 text-gray-600"}`}>
@@ -393,7 +435,32 @@ export default function AdminRegistrations() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {reg.status === "PENDING" && (!reg.payments.length || reg.payments.some((payment) => payment.status === "SUCCESS")) && (
+                    {reg.paymentProofPath && (
+                      <button
+                        onClick={() => viewScreenshot(reg.id, reg.fullName, reg.paymentProofPath!)}
+                        className="mr-2 rounded-lg border border-blue-200 px-2.5 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-50"
+                      >
+                        View Screenshot
+                      </button>
+                    )}
+                    {reg.paymentProofStatus === "PENDING_REVIEW" && (
+                      <>
+                        <button
+                          onClick={() => reviewRegistration(reg.id, "APPROVED")}
+                          disabled={reviewing === reg.id}
+                          className="mr-2 rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-700 transition-colors hover:bg-green-50 disabled:opacity-50"
+                        >
+                          {reviewing === reg.id ? "Approving..." : "Approve"}
+                        </button>
+                        <button
+                          onClick={() => { setRejectingId(reg.id); setRejectNote(""); }}
+                          className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-50"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+                    {(reg.paymentProofStatus === "NOT_SUBMITTED" || reg.paymentProofStatus === "REJECTED") && reg.status === "PENDING" && (!reg.payments.length || reg.payments.some((payment) => payment.status === "SUCCESS")) && (
                       <button
                         onClick={() => void confirmRegistration(reg.id)}
                         disabled={confirming === reg.id}
@@ -422,7 +489,7 @@ export default function AdminRegistrations() {
                 if (!reg) return null;
                 return (
                   <tr className="bg-gold/5">
-                    <td colSpan={8} className="px-4 py-4">
+                    <td colSpan={9} className="px-4 py-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                         <div className="flex-1">
                           <label className="mb-1 block text-xs font-medium text-gray-500">
@@ -692,6 +759,92 @@ export default function AdminRegistrations() {
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
               >
                 {deleting === deleteConfirm ? <Loader2 size={14} className="animate-spin mr-2" /> : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Screenshot dialog */}
+      {viewingProof && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
+          <div className="relative rounded-xl bg-white p-4 shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-start justify-between gap-2 mb-4">
+              <h2 className="text-lg font-bold text-navy">Payment Screenshot</h2>
+              <button
+                onClick={() => setViewingProof(null)}
+                className="text-gray-400 hover:text-white" aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Student: <span className="font-medium text-navy">{viewingProof.name}</span>
+            </p>
+            <div className="flex-1 relative bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center min-h-[300px]">
+              <iframe
+                src={`/api/admin/registrations/${viewingProof.id}/payment-proof`}
+                className="w-full h-full object-cover"
+                title={`Payment screenshot for ${viewingProof.name}`}
+              />
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setViewingProof(null)}
+                className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-navy/80"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject confirmation dialog */}
+      {rejectingId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="rounded-xl bg-white p-6 shadow-xl w-full max-w-md">
+            <div className="flex items-start justify-between gap-2">
+              <h2 className="text-lg font-bold text-navy">Reject Payment Screenshot</h2>
+              <button
+                onClick={() => setRejectingId(null)}
+                className="text-gray-400 hover:text-gray-600" aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mt-2 text-sm text-gray-600">
+              Reject the payment screenshot for{" "}
+              <span className="font-medium text-navy">
+                {registrations.find((r) => r.id === rejectingId)?.fullName || "this student"}
+              </span>
+              ? The student will be able to upload a replacement screenshot.
+            </p>
+            <div className="mt-4">
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-[0.14em] mb-2">
+                Admin note (optional)
+              </label>
+              <textarea
+                value={rejectNote}
+                onChange={(e) => setRejectNote(e.target.value)}
+                rows={3}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-navy focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
+                placeholder="Reason for rejection..."
+              />
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setRejectingId(null)}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void reviewRegistration(rejectingId!, "REJECTED")}
+                disabled={reviewing === rejectingId}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+              >
+                {reviewing === rejectingId ? <Loader2 size={14} className="animate-spin mr-2" /> : "Reject"}
               </button>
             </div>
           </div>
