@@ -127,7 +127,7 @@ export async function PATCH(
             id: schedule.id,
             enrolled: { lt: schedule.maxSeats },
             active: true,
-            availabilityOverride: { not: false },
+            OR: [ { availabilityOverride: null }, { availabilityOverride: true } ],
           },
           data: { enrolled: { increment: 1 } },
         });

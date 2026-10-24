@@ -1,0 +1,175 @@
+[1mdiff --git a/src/app/api/admin/registrations/[id]/payment-proof/route.ts b/src/app/api/admin/registrations/[id]/payment-proof/route.ts[m
+[1mnew file mode 100644[m
+[1mindex 0000000..916a30f[m
+[1m--- /dev/null[m
+[1m+++ b/src/app/api/admin/registrations/[id]/payment-proof/route.ts[m
+[36m@@ -0,0 +1,169 @@[m
+[32m+[m[32mimport { get } from "@vercel/blob";[m
+[32m+[m[32mimport { NextRequest, NextResponse } from "next/server";[m
+[32m+[m[32mimport { prisma } from "@/lib/prisma";[m
+[32m+[m[32mimport type { Prisma } from "@prisma/client";[m
+[32m+[m
+[32m+[m[32mexport const runtime = "nodejs";[m
+[32m+[m[32mexport const dynamic = "force-dynamic";[m
+[32m+[m
+[32m+[m[32mtype Context = { params: Promise<{ id: string }> };[m
+[32m+[m
+[32m+[m[32m// Only authenticated admins should reach this endpoint (middleware protected).[m
+[32m+[m[32mexport async function GET([m
+[32m+[m[32m  _request: NextRequest,[m
+[32m+[m[32m  { params }: Context,[m
+[32m+[m[32m) {[m
+[32m+[m[32m  try {[m
+[32m+[m[32m    const { id } = await params;[m
+[32m+[m[32m    const registration = await prisma.registration.findUnique({[m
+[32m+[m[32m      where: { id },[m
+[32m+[m[32m      select: { paymentProofPath: true },[m
+[32m+[m[32m    });[m
+[32m+[m
+[32m+[m[32m    if (!registration?.paymentProofPath) {[m
+[32m+[m[32m      return NextResponse.json({ error: "Payment screenshot not found." }, { status: 404 });[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    const result = await get(registration.paymentProofPath, {[m
+[32m+[m[32m      access: "private",[m
+[32m+[m[32m      token: process.env.BLOB_READ_WRITE_TOKEN,[m
+[32m+[m[32m    });[m
+[32m+[m[32m    if (!result) {[m
+[32m+[m[32m      return NextResponse.json({ error: "Payment screenshot not found." }, { status: 404 });[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    return new Response(result.stream, {[m
+[32m+[m[32m      headers: {[m
+[32m+[m[32m        "Content-Type": result.headers.get("content-type") || "application/octet-stream",[m
+[32m+[m[32m        "Cache-Control": "private, no-store",[m
+[32m+[m[32m        "X-Content-Type-Options": "nosniff",[m
+[32m+[m[32m      },[m
+[32m+[m[32m    });[m
+[32m+[m[32m  } catch (error) {[m
+[32m+[m[32m    console.error("Payment screenshot retrieval failed:", error);[m
+[32m+[m[32m    return NextResponse.json({ error: "Unable to retrieve payment screenshot." }, { status: 500 });[m
+[32m+[m[32m  }[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport async function PATCH([m
+[32m+[m[32m  request: NextRequest,[m
+[32m+[m[32m  { params }: Context,[m
+[32m+[m[32m) {[m
+[32m+[m[32m  try {[m
+[32m+[m[32m    const { id } = await params;[m
+[32m+[m[32m    const body = await request.json().catch(() => null);[m
+[32m+[m
+[32m+[m[32m    if (!body || !["APPROVED", "REJECTED"].includes(body.status)) {[m
+[32m+[m[32m      return NextResponse.json([m
+[32m+[m[32m        { error: "Status must be APPROVED or REJECTED." },[m
+[32m+[m[32m        { status: 400 },[m
+[32m+[m[32m      );[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) : null;[m
+[32m+[m
+[32m+[m[32m    const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {[m
+[32m+[m[32m      const registration = await tx.registration.findUnique({[m
+[32m+[m[32m        where: { id },[m
+[32m+[m[32m        select: {[m
+[32m+[m[32m          id: true,[m
+[32m+[m[32m          status: true,[m
+[32m+[m[32m          scheduleId: true,[m
+[32m+[m[32m          paymentProofPath: true,[m
+[32m+[m[32m          paymentProofStatus: true,[m
+[32m+[m[32m        },[m
+[32m+[m[32m      });[m
+[32m+[m
+[32m+[m[32m      if (!registration) throw new Error("NOT_FOUND");[m
+[32m+[m[32m      if (!registration.paymentProofPath) throw new Error("NO_PROOF");[m
+[32m+[m[32m      if (registration.paymentProofStatus !== "PENDING_REVIEW") throw new Error("NOT_PENDING");[m
+[32m+[m
+[32m+[m[32m      if (body.status === "REJECTED") {[m
+[32m+[m[32m        return tx.registration.update({[m
+[32m+[m[32m          where: { id },[m
+[32m+[m[32m          data: {[m
+[32m+[m[32m            paymentProofStatus: "REJECTED",[m
+[32m+[m[32m            paymentProofReviewedAt: new Date(),[m
+[32m+[m[32m            paymentProofNote: note,[m
+[32m+[m[32m          },[m
+[32m+[m[32m        });[m
+[32m+[m[32m      }[m
+[32m+[m
+[32m+[m[32m      const alreadyHoldsSeat =[m
+[32m+[m[32m        registration.status === "PAID" || registration.status === "CONFIRMED";[m
+[32m+[m
+[32m+[m[32m      if (!alreadyHoldsSeat) {[m
+[32m+[m[32m        if (!registration.scheduleId) throw new Error("SCHEDULE_REQUIRED");[m
+[32m+[m
+[32m+[m[32m        const schedule = await tx.schedule.findUnique({[m
+[32m+[m[32m          where: { id: registration.scheduleId },[m
+[32m+[m[32m          select: {[m
+[32m+[m[32m            id: true,[m
+[32m+[m[32m            active: true,[m
+[32m+[m[32m            enrolled: true,[m
+[32m+[m[32m            maxSeats: true,[m
+[32m+[m[32m            availabilityOverride: true,[m
+[32m+[m[32m          },[m
+[32m+[m[32m        });[m
+[32m+[m
+[32m+[m[32m        if (!schedule) throw new Error("SCHEDULE_NOT_FOUND");[m
+[32m+[m[32m        if (!schedule.active || schedule.availabilityOverride === false) {[m
+[32m+[m[32m          throw new Error("SCHEDULE_UNAVAILABLE");[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        // Count actual confirmed/PAID registrations for this schedule instead of[m
+[32m+[m[32m        // trusting the manual enrolled counter, which can drift out of sync.[m
+[32m+[m[32m        const actualEnrolled = await tx.registration.count({[m
+[32m+[m[32m          where: {[m
+[32m+[m[32m            scheduleId: schedule.id,[m
+[32m+[m[32m            status: { in: ["PAID", "CONFIRMED"] },[m
+[32m+[m[32m          },[m
+[32m+[m[32m        });[m
+[32m+[m
+[32m+[m[32m        if (actualEnrolled >= schedule.maxSeats) throw new Error("SCHEDULE_FULL");[m
+[32m+[m
+[32m+[m[32m        const seat = await tx.schedule.updateMany({[m
+[32m+[m[32m          where: {[m
+[32m+[m[32m            id: schedule.id,[m
+[32m+[m[32m            enrolled: { lt: schedule.maxSeats },[m
+[32m+[m[32m            active: true,[m
+[32m+[m[32m            availabilityOverride: { not: false },[m
+[32m+[m[32m          },[m
+[32m+[m[32m          data: { enrolled: { increment: 1 } },[m
+[32m+[m[32m        });[m
+[32m+[m[32m        if (seat.count !== 1) throw new Error("SCHEDULE_FULL");[m
+[32m+[m[32m      }[m
+[32m+[m
+[32m+[m[32m      return tx.registration.update({[m
+[32m+[m[32m        where: { id },[m
+[32m+[m[32m        data: {[m
+[32m+[m[32m          status: "CONFIRMED",[m
+[32m+[m[32m          paidAt: new Date(),[m
+[32m+[m[32m          paymentProofStatus: "APPROVED",[m
+[32m+[m[32m          paymentProofReviewedAt: new Date(),[m
+[32m+[m[32m          paymentProofNote: note,[m
+[32m+[m[32m        },[m
+[32m+[m[32m      });[m
+[32m+[m[32m    });[m
+[32m+[m
+[32m+[m[32m    return NextResponse.json({ success: true, registration: updated });[m
+[32m+[m[32m  } catch (error) {[m
+[32m+[m[32m    const messages: Record<string, { error: string; status: number }> = {[m
+[32m+[m[32m      NOT_FOUND: { error: "Registration not found.", status: 404 },[m
+[32m+[m[32m      NO_PROOF: { error: "No payment screenshot was submitted.", status: 409 },[m
+[32m+[m[32m      NOT_PENDING: { error: "This screenshot has already been reviewed or is not pending.", status: 409 },[m
+[32m+[m[32m      SCHEDULE_REQUIRED: { error: "A schedule is required before confirming enrollment.", status: 409 },[m
+[32m+[m[32m      SCHEDULE_NOT_FOUND: { error: "Schedule not found.", status: 404 },[m
+[32m+[m[32m      SCHEDULE_UNAVAILABLE: { error: "The schedule is inactive or unavailable.", status: 409 },[m
+[32m+[m[32m      SCHEDULE_FULL: { error: "The schedule is full.", status: 409 },[m
+[32m+[m[32m    };[m
+[32m+[m
+[32m+[m[32m    if (error instanceof Error && messages[error.message]) {[m
+[32m+[m[32m      const response = messages[error.message];[m
+[32m+[m[32m      return NextResponse.json({ error: response.error }, { status: response.status });[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    console.error("Payment proof review failed:", error);[m
+[32m+[m[32m    return NextResponse.json({ error: "Unable to review payment screenshot." }, { status: 500 });[m
+[32m+[m[32m  }[m
+[32m+[m[32m}[m
