@@ -144,7 +144,7 @@ export default function RegistrationLookupClient() {
               <button
                 type="submit"
                 disabled={state === "loading" || !id.trim()}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-gold px-6 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover disabled:opacity-50 sm:shrink-0"
+                className="action-primary inline-flex items-center justify-center gap-2 disabled:opacity-50 sm:shrink-0"
               >
                 {state === "loading" ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
                 {state === "loading" ? "Checking…" : "Check Registration"}
@@ -153,7 +153,7 @@ export default function RegistrationLookupClient() {
           </form>
 
           {state === "error" && (
-            <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-red-100 bg-red-50 px-4 py-3.5" role="alert">
+            <div className="mt-5 flex items-start gap-2.5 bg-red-50 px-4 py-3.5" role="alert">
               <AlertCircle size={17} className="mt-0.5 shrink-0 text-red-500" />
               <div>
                 <p className="text-sm font-medium text-red-700">{error}</p>
@@ -169,7 +169,7 @@ export default function RegistrationLookupClient() {
               <RegistrationDetails registration={registration} highlightReference />
 
               {pending && (
-                <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 px-4 py-4">
+                <div className="mt-4 bg-amber-50 px-4 py-4">
                   <p className="text-sm text-amber-700">
                     Your registration has been received and is pending confirmation. We&apos;ll contact you with the next steps.
                   </p>
@@ -179,20 +179,20 @@ export default function RegistrationLookupClient() {
               <div className="mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <a
                   href={`/api/registrations/lookup/ics?id=${encodeURIComponent(registration.referenceId)}`}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-navy/15 bg-white px-4 py-3 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
+                  className="action-secondary inline-flex items-center justify-center gap-2"
                 >
                   <CalendarPlus size={15} /> Add Schedule to Calendar
                 </a>
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-navy/15 bg-white px-4 py-3 text-sm font-semibold text-navy transition-colors hover:border-gold hover:bg-gold/5"
+                  className="action-secondary inline-flex items-center justify-center gap-2"
                 >
                   <Printer size={15} /> Print Confirmation
                 </button>
               </div>
               {registration.downloadToken && (
-                <section className="mt-5 rounded-xl border border-gray-200 bg-white p-4">
+                <section className="mt-5 bg-white py-4">
                   <h2 className="text-sm font-semibold text-navy">Course materials</h2>
                   {registration.courseMaterialsError ? (
                     <p className="mt-2 text-xs text-red-600">{registration.courseMaterialsError}</p>

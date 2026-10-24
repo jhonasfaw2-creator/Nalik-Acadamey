@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Loader2, Calendar, AlertCircle, ArrowRight, Check } from "lucide-react";
+import { useState, useRef, useEffect, useCallback, type ChangeEvent } from "react";
+import { X, Loader2, Calendar, AlertCircle, ArrowRight, Check, Upload } from "lucide-react";
+import PaymentInstructions from "@/components/PaymentInstructions";
 
 interface CourseOption {
   id: string;
@@ -79,9 +80,34 @@ const [registrationCreated, setRegistrationCreated] = useState<{
   referenceId: string;
 } | null>(null);
 const [paymentProofFile, setPaymentProofFile] = useState<File | null>(null);
+const [proofPreview, setProofPreview] = useState<string | null>(null);
 const [isUploadingProof, setIsUploadingProof] = useState(false);
 const [proofUploaded, setProofUploaded] = useState(false);
 const [proofUploadError, setProofUploadError] = useState("");
+const [proofNotificationFailed, setProofNotificationFailed] = useState(false);
+
+  useEffect(() => {
+    if (!proofPreview) return;
+    return () => URL.revokeObjectURL(proofPreview);
+  }, [proofPreview]);
+
+  const handlePaymentProofChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0] ?? null;
+    event.currentTarget.value = "";
+    setProofUploadError("");
+    setProofNotificationFailed(false);
+
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setPaymentProofFile(null);
+      setProofPreview(null);
+      setProofUploadError("Choose an image smaller than 5 MB.");
+      return;
+    }
+
+    setPaymentProofFile(file);
+    setProofPreview(URL.createObjectURL(file));
+  };
 
   // Load courses + schedules
   useEffect(() => {
@@ -155,6 +181,11 @@ const [proofUploadError, setProofUploadError] = useState("");
     if (!dialog) return;
     if (open) {
       setRegistrationCreated(null);
+      setPaymentProofFile(null);
+      setProofPreview(null);
+      setProofUploaded(false);
+      setProofNotificationFailed(false);
+      setProofUploadError("");
       dialog.showModal();
     }
     else dialog.close();
@@ -189,13 +220,6 @@ const [proofUploadError, setProofUploadError] = useState("");
 
   const fieldClass =
     "w-full rounded-xl border border-gray-200 bg-[#f9faf8] px-3.5 py-2.75 text-sm text-navy placeholder:text-gray-400 transition-all focus:border-gold focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold/20 disabled:bg-gray-50";
-
-  const steps = [
-    { label: "Course", done: Boolean(selectedCourseId) },
-    { label: "Schedule", done: Boolean(selectedSessionId) },
-    { label: "Details", done: Boolean(fullNameRef.current?.value || phoneRef.current?.value || ageRef.current?.value) },
-    { label: "Review", done: false },
-  ];
 
   useEffect(() => {
     setFormError("");
@@ -258,17 +282,17 @@ const [proofUploadError, setProofUploadError] = useState("");
   }, [isSubmitting, selectedCourseId, selectedSessionId]);
 
   return (
-    <dialog ref={dialogRef} className="backdrop:bg-black/60 rounded-[28px] p-0 max-w-5xl w-[calc(100%-1.5rem)] max-h-[92vh]">
-      <div className="bg-white rounded-[28px] overflow-hidden flex flex-col max-h-[92vh]">
+    <dialog ref={dialogRef} className={`w-[calc(100%-1rem)] ${registrationCreated ? "h-[calc(100dvh-1rem)] max-w-3xl sm:h-[92dvh]" : "max-w-5xl"} max-h-[calc(100dvh-1rem)] overflow-hidden rounded-xl bg-white p-0 backdrop:bg-black/60 sm:w-[calc(100%-2rem)] sm:max-h-[92dvh]`}>
+      <div className={`flex ${registrationCreated ? "h-full" : "max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh]"} flex-col overflow-hidden bg-white`}>
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-4 py-3 sm:px-6">
+        <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">Nalik Academy</p>
+            <p className="text-sm text-gray-500">Nalik Academy</p>
             <h2 className="mt-1 text-xl font-bold text-navy sm:text-2xl">Register for a course</h2>
           </div>
           <button
             onClick={() => dialogRef.current?.close()}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+            className="flex h-11 w-11 shrink-0 items-center justify-center text-gray-500 transition-colors hover:text-navy"
             aria-label="Close"
           >
             <X size={18} />
@@ -276,131 +300,157 @@ const [proofUploadError, setProofUploadError] = useState("");
         </div>
 
         {registrationCreated ? (
-          <div className="overflow-y-auto px-4 py-12 text-center sm:px-6">
-            <h3 className="text-2xl font-bold text-navy">Registration received!</h3>
-            <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-gray-600">
-              Your registration has been saved. Next, submit your payment screenshot for admin review. Your place is not confirmed until your payment is approved.
-              Save your registration ID to check its status.
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4 pt-0 text-center sm:px-6 sm:pb-5 sm:pt-1">
+            <h3 className="text-2xl font-bold tracking-tight text-navy sm:text-3xl">Application saved</h3>
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-gray-600">
+              To complete registration, pay using the details below and submit your receipt. You are not enrolled until your payment is approved. Save your reference ID to check your status.
             </p>
-            <p className="mx-auto mt-5 w-fit rounded-xl bg-warm-white px-5 py-3 font-mono text-lg font-bold tracking-wide text-navy">
+            <p className="mx-auto mt-4 max-w-full break-all font-mono text-base font-semibold text-navy sm:w-fit sm:text-lg">
               {registrationCreated.referenceId}
             </p>
             {proofUploaded ? (
-              <div className="mx-auto mt-5 max-w-md rounded-xl bg-green-50 border border-green-100 p-4 text-center">
-                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
-                  <Check size={20} className="text-green-600" />
-                </div>
-                <p className="text-sm font-semibold text-green-800">
-                  Payment screenshot submitted! Await admin review.
-                </p>
-                <p className="mt-1 text-xs text-green-600">
-                  You can check your registration status anytime using your Registration ID.
-                </p>
+              <div className="mx-auto mt-6 max-w-lg text-center">
+                <Check size={28} className="mx-auto mb-4 text-green-700" />
+                <h4 className="text-xl font-semibold text-green-900">Payment submitted</h4>
+                {proofNotificationFailed ? (
+                  <p className="mt-3 text-sm text-amber-800">
+                    Your proof is saved, but the academy could not be notified automatically. Please <a href="/#contact" className="font-semibold underline underline-offset-2">contact the academy</a> to make sure it is reviewed.
+                  </p>
+                ) : (
+                  <>
+                    <p className="mt-3 text-sm text-green-800">
+                      Your payment proof has been uploaded and is now awaiting admin review.
+                    </p>
+                    <p className="mt-2 text-xs text-green-600">
+                      You will be notified once it is approved.
+                    </p>
+                  </>
+                )}
                 <a
                   href={`/registration?id=${encodeURIComponent(registrationCreated.referenceId)}`}
-                  className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-navy px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-navy/80 focus-visible:ring-2 focus-visible:ring-navy focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                  className="action-primary mt-8 inline-flex w-full items-center justify-center gap-2"
                 >
-                  <ArrowRight size={15} />
-                  Check Registration Status
+                  View registration status
                 </a>
               </div>
             ) : (
-              <form
-                className="mx-auto mt-6 max-w-md space-y-3 text-left"
-                onSubmit={async (event) => {
-                  event.preventDefault();
-                  if (!paymentProofFile || !registrationCreated || isUploadingProof) return;
-                  setIsUploadingProof(true);
-                  setProofUploadError("");
-                  try {
-                    const data = new FormData();
-                    data.append("file", paymentProofFile);
-                    const response = await fetch(
-                      `/api/registrations/${encodeURIComponent(registrationCreated.referenceId)}/payment-proof`,
-                      { method: "POST", body: data }
-                    );
-                    let result: { error?: string; success?: boolean; status?: string };
-                    const contentType = response.headers.get("content-type") ?? "";
-                    if (contentType.includes("application/json")) {
-                      result = await response.json();
-                    } else {
-                      const text = await response.text();
-                      result = { error: text || "Upload failed." };
+              <div className="mx-auto mt-0 max-w-3xl space-y-4 sm:space-y-5">
+                <PaymentInstructions amount={selectedCourse?.discountPrice ?? selectedCourse?.price ?? 0} />
+
+                <form
+                  className="space-y-3 text-left sm:space-y-4"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    if (!paymentProofFile || !registrationCreated || isUploadingProof) return;
+                    setIsUploadingProof(true);
+                    setProofUploadError("");
+                    try {
+                      const data = new FormData();
+                      data.append("file", paymentProofFile);
+                      const response = await fetch(
+                        `/api/registrations/${encodeURIComponent(registrationCreated.referenceId)}/payment-proof`,
+                        { method: "POST", body: data }
+                      );
+                      let result: { error?: string; success?: boolean; status?: string; notificationSent?: boolean };
+                      const contentType = response.headers.get("content-type") ?? "";
+                      if (contentType.includes("application/json")) {
+                        result = await response.json();
+                      } else {
+                        const text = await response.text();
+                        result = { error: text || "Upload failed." };
+                      }
+                      if (!response.ok) throw new Error(result.error || "Upload failed.");
+                      setProofNotificationFailed(result.notificationSent === false);
+                      setProofUploaded(true);
+                    } catch (error) {
+                      setProofUploadError(error instanceof Error ? error.message : "Upload failed. Try again.");
+                    } finally {
+                      setIsUploadingProof(false);
                     }
-                    if (!response.ok) throw new Error(result.error || "Upload failed.");
-                    setProofUploaded(true);
-                  } catch (error) {
-                    setProofUploadError(error instanceof Error ? error.message : "Upload failed. Try again.");
-                  } finally {
-                    setIsUploadingProof(false);
-                  }
-                }}
-              >
-                <label className="block text-sm font-semibold text-navy">
-                  Upload payment screenshot (JPG, PNG or WebP, max 5 MB)
-                  <input
-                    className="mt-2 block w-full rounded-xl border border-gray-200 p-3 text-sm"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    required
-                    onChange={(event) => setPaymentProofFile(event.target.files?.[0] ?? null)}
-                  />
-                </label>
-                {proofUploadError && (
-                  <p className="text-sm text-red-600" role="alert">{proofUploadError}</p>
-                )}
-                <button
-                  type="submit"
-                  disabled={!paymentProofFile || isUploadingProof}
-                  className="w-full rounded-xl bg-navy px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                  }}
                 >
-                  {isUploadingProof ? "Uploading..." : "Submit payment screenshot"}
-                </button>
-              </form>
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="text-base font-semibold text-navy">Upload your payment receipt</h4>
+                      <p id="payment-proof-helper" className="mt-1 text-sm leading-5 text-gray-500">
+                        Use a clear screenshot or photo. JPG, PNG, or WebP up to 5 MB.
+                      </p>
+                    </div>
+
+                    <label
+                      htmlFor="payment-proof-file"
+                      className="group flex min-h-44 cursor-pointer flex-col items-center justify-center gap-2.5 rounded-xl border-2 border-dashed border-gray-300 bg-warm-white px-4 py-5 text-center transition-colors hover:border-gold hover:bg-[#f8f6ef] focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-gold sm:min-h-48 sm:px-8"
+                    >
+                      <input
+                        id="payment-proof-file"
+                        type="file"
+                        className="sr-only"
+                        accept="image/jpeg,image/png,image/webp"
+                        aria-describedby="payment-proof-helper"
+                        disabled={isUploadingProof}
+                        onChange={handlePaymentProofChange}
+                      />
+                      {proofPreview ? (
+                        <>
+                          <img
+                            src={proofPreview}
+                            alt="Selected payment receipt preview"
+                            className="max-h-44 max-w-full rounded-lg object-contain sm:max-h-52"
+                          />
+                          <span className="max-w-full break-all text-sm font-medium text-navy">
+                            {paymentProofFile?.name}
+                          </span>
+                          <span className="text-xs text-gray-500">Tap to choose a different image</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gold/15 text-navy">
+                            <Upload size={20} />
+                          </span>
+                          <span className="inline-flex min-h-10 items-center rounded-md bg-white px-4 text-sm font-semibold text-navy transition-colors group-hover:bg-gold/15">
+                            Choose an image
+                          </span>
+                        </>
+                      )}
+                    </label>
+
+                    {proofUploadError && (
+                      <p className="text-sm text-red-700" role="alert">
+                        {proofUploadError}
+                      </p>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={!paymentProofFile || isUploadingProof}
+                      className="action-primary inline-flex w-full items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {isUploadingProof && <Loader2 size={16} className="animate-spin" />}
+                      {isUploadingProof ? "Uploading receipt…" : "Submit payment proof"}
+                    </button>
+                  </div>
+                </form>
+              </div>
             )}
             {formError && (
-              <p className="mx-auto mt-4 max-w-md text-sm text-red-600" role="alert">
+              <p className="mx-auto mt-6 max-w-md text-sm text-red-600" role="alert">
                 {formError}
               </p>
             )}
-            <a
+            {!proofUploaded && <a
               href={`/registration?id=${encodeURIComponent(registrationCreated.referenceId)}`}
-              className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-5 py-3 text-sm font-semibold text-navy transition-colors hover:bg-gray-50"
+              className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 px-1 py-3.5 text-sm font-medium text-navy underline decoration-gray-300 underline-offset-4 transition-colors hover:text-gold"
             >
               View registration
-            </a>
+            </a>}
           </div>
         ) : (
-        <div className="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 sm:px-6 sm:py-5">
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_360px]">
             <div className="space-y-5">
-              <div className="rounded-2xl border border-[#efe7da] bg-[#fffaf1] p-3 sm:p-4">
-                <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">
-                  <span>Registration steps</span>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] text-gold">Simple and clear</span>
-                </div>
-                <div className="mt-3 grid grid-cols-4 gap-2">
-                  {steps.map((step, index) => (
-                    <div key={step.label} className="flex items-center gap-2">
-                      <div
-                        className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${
-                          step.done ? "bg-gold text-navy" : index === 0 ? "bg-navy text-white" : "bg-white text-gray-400 border border-gray-200"
-                        }`}
-                      >
-                        {index + 1}
-                      </div>
-                      <span className={`hidden text-[11px] font-medium sm:block ${step.done ? "text-navy" : "text-gray-500"}`}>
-                        {step.label}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+              <section>
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Choose a course</h3>
-                  <span className="text-[11px] font-medium text-gray-400">{courses.length} options</span>
+                  <h3 className="text-base font-semibold text-navy">Choose a course</h3>
+                  <span className="text-sm text-gray-500">{courses.length} available</span>
                 </div>
                 {!coursesLoaded ? (
                   <div className="flex items-center gap-2 rounded-xl border border-gray-200 px-3.5 py-3 text-sm text-gray-400">
@@ -411,7 +461,7 @@ const [proofUploadError, setProofUploadError] = useState("");
                     <p className="text-sm font-medium text-amber-800">{loadError}</p>
                     <button
                       onClick={() => setReloadKey((k) => k + 1)}
-                      className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-700"
+                      className="action-secondary mt-3"
                     >
                       Try Again
                     </button>
@@ -424,10 +474,13 @@ const [proofUploadError, setProofUploadError] = useState("");
                       return (
                         <label
                           key={c.id}
-                          className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-3.5 transition-all ${
-                            isSelected ? "border-gold bg-[#fffaf1] shadow-sm" : "border-gray-200 hover:border-gold/50 hover:bg-[#fffaf1]/50"
+                          className={`flex min-h-16 cursor-pointer items-start gap-3 rounded-md p-3 transition-colors focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-gold sm:gap-4 sm:p-4 ${
+                            isSelected ? "bg-[#fffaf1]" : "hover:bg-warm-white"
                           }`}
                         >
+                          <div className={`mt-0.5 h-5 w-5 rounded-full border flex items-center justify-center ${isSelected ? "border-gold bg-gold" : "border-gray-300"}`}>
+                            {isSelected && <div className="h-2 w-2 rounded-full bg-white" />}
+                          </div>
                           <input
                             type="radio"
                             name="course"
@@ -438,20 +491,20 @@ const [proofUploadError, setProofUploadError] = useState("");
                               setSelectedGroupId("");
                               setSelectedSessionId("");
                             }}
-                            className="accent-gold"
+                            className="sr-only"
                           />
-                          <span className="flex-1">
-                            <span className="flex items-start justify-between gap-3">
-                              <span className="block text-sm font-semibold text-navy">{c.title}</span>
-                              <span className="text-right">
-                                <span className="block text-base font-bold text-gold">{formatBirr(coursePrice)}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-start justify-between gap-2 sm:gap-4">
+                              <span className="min-w-0 break-words text-sm font-semibold text-navy sm:text-base">{c.title}</span>
+                              <span className="shrink-0 text-right">
+                                <span className="block text-base font-bold text-navy sm:text-lg">{formatBirr(coursePrice)}</span>
                                 {c.discountPrice && (
-                                  <span className="block text-[10px] text-gray-400 line-through">{formatBirr(c.price)}</span>
+                                  <span className="block text-xs text-gray-400 line-through">{formatBirr(c.price)}</span>
                                 )}
                               </span>
                             </span>
                             {c.discountLabel && (
-                              <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                              <span className="mt-2 inline-flex text-xs font-medium text-emerald-700">
                                 {c.discountLabel}
                               </span>
                             )}
@@ -463,10 +516,9 @@ const [proofUploadError, setProofUploadError] = useState("");
                 )}
               </section>
 
-              <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+              <section>
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Choose a schedule</h3>
-                  <span className="text-[11px] font-medium text-gray-400">Availability</span>
+                  <h3 className="text-base font-semibold text-navy">Choose a schedule</h3>
                 </div>
                 {scheduleGroups.length === 0 ? (
                   scheduleError ? (
@@ -474,7 +526,7 @@ const [proofUploadError, setProofUploadError] = useState("");
                       <p className="text-sm font-medium text-amber-800">{scheduleError}</p>
                       <button
                         onClick={() => setReloadKey((key) => key + 1)}
-                        className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-700"
+                        className="action-secondary mt-3"
                       >
                         Try Again
                       </button>
@@ -491,8 +543,8 @@ const [proofUploadError, setProofUploadError] = useState("");
                       return (
                         <div
                           key={g.group}
-                          className={`rounded-2xl border p-3 transition-all ${
-                            groupSelected ? "border-gold bg-[#fffaf1]" : "border-gray-200 bg-white"
+                          className={`rounded-md p-3 transition-colors ${
+                            groupSelected ? "bg-[#fffaf1]" : "hover:bg-warm-white"
                           }`}
                         >
                           <label className="flex cursor-pointer items-start gap-3">
@@ -507,7 +559,7 @@ const [proofUploadError, setProofUploadError] = useState("");
                               }}
                               className="mt-0.5 accent-gold"
                             />
-                            <span className="flex-1">
+                            <span className="min-w-0 flex-1">
                               <span className="flex items-center justify-between gap-2">
                                 <span className="text-sm font-bold text-navy">Schedule {g.group}</span>
                                 {g.isFull ? (
@@ -523,14 +575,14 @@ const [proofUploadError, setProofUploadError] = useState("");
                           </label>
 
                           {groupSelected && (
-                            <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
+                            <div className="mt-3 space-y-2">
                               {g.sessions.map((s) => {
                                 const isFull = s.isFull;
                                 return (
                                   <label
                                     key={s.id}
-                                    className={`flex items-start gap-3 rounded-xl border p-3 transition-all ${
-                                      selectedSessionId === s.id ? "border-gold bg-white" : "border-gray-200 hover:border-gold/50"
+                                    className={`flex min-h-14 items-start gap-3 rounded-md p-3 transition-colors ${
+                                      selectedSessionId === s.id ? "bg-white" : "hover:bg-white"
                                     }`}
                                   >
                                     <input
@@ -542,7 +594,7 @@ const [proofUploadError, setProofUploadError] = useState("");
                                       disabled={isFull}
                                       className="mt-0.5 accent-gold"
                                     />
-                                    <span className="flex-1">
+                                    <span className="min-w-0 flex-1">
                                       <span className="flex items-center justify-between gap-2">
                                         <span className="text-sm font-semibold text-navy">{s.session}</span>
                                         {isFull ? (
@@ -571,8 +623,8 @@ const [proofUploadError, setProofUploadError] = useState("");
                 )}
               </section>
 
-              <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
-                <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Your details</h3>
+              <section>
+                <h3 className="text-base font-semibold text-navy">Your details</h3>
                 <div className="mt-4 space-y-4">
                   <div>
                     <label htmlFor="reg-name" className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -598,30 +650,30 @@ const [proofUploadError, setProofUploadError] = useState("");
 
             <aside className="lg:pt-2">
               <div className="lg:sticky lg:top-0">
-                <div className="rounded-2xl border border-gray-200 bg-[#fafaf8] p-4 sm:p-5">
+                <div className="p-1 sm:p-2">
                   <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Registration summary</h3>
+                    <h3 className="text-base font-semibold text-navy">Registration summary</h3>
                   </div>
 
-                  <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
-                    <p className="text-sm font-semibold text-navy">{selectedCourse?.title || "Course not selected"}</p>
+                  <div className="mt-4">
+                    <p className="break-words text-sm font-semibold text-navy">{selectedCourse?.title || "Course not selected"}</p>
                     <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
                       <span>Schedule</span>
-                      <span className="font-medium text-navy">{scheduleText || "Not selected"}</span>
+                      <span className="min-w-0 text-right font-medium text-navy">{scheduleText || "Not selected"}</span>
                     </div>
                     <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
                       <span>Days</span>
-                      <span className="font-medium text-navy">{scheduleDays || "—"}</span>
+                      <span className="min-w-0 text-right font-medium text-navy">{scheduleDays || "—"}</span>
                     </div>
                     <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
                       <span>Duration</span>
-                      <span className="font-medium text-navy">{duration || "—"}</span>
+                      <span className="min-w-0 text-right font-medium text-navy">{duration || "—"}</span>
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-2xl bg-navy p-4 text-white">
-                    <p className="text-sm font-semibold text-gold">Next steps</p>
-                    <p className="mt-2 text-xs leading-relaxed text-white/75">
+                  <div className="mt-5 text-sm text-gray-600">
+                    <p className="font-semibold text-navy">Next steps</p>
+                    <p className="mt-1 leading-relaxed">
                       Submit your payment screenshot for admin review. Enrollment is confirmed only after your payment is approved.
                     </p>
                   </div>
@@ -638,10 +690,10 @@ const [proofUploadError, setProofUploadError] = useState("");
                     onClick={handleSubmit}
                     disabled={isSubmitting}
                     aria-busy={isSubmitting}
-                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gold px-5 py-3.5 text-base font-bold tracking-wide text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
+                    className="action-primary mt-4 flex w-full items-center justify-center gap-2 text-base disabled:opacity-60"
                   >
                     {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
-                    {isSubmitting ? "Starting secure checkout..." : "Register and pay"}
+                    {isSubmitting ? "Saving application…" : "Save application"}
                   </button>
                 </div>
               </div>

@@ -39,10 +39,10 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-navy px-4">
+    <div className="flex min-h-[100svh] items-center justify-center bg-navy px-4 py-8">
       <div className="w-full max-w-sm">
         {/* Logo */}
-        <div className="mb-8 text-center">
+        <div className="mb-6 text-center sm:mb-8">
           <img
             src="/assets/logo.jpeg"
             alt="Nalik Academy"
@@ -55,7 +55,7 @@ export default function AdminLogin() {
         </div>
 
         {/* Login Card */}
-        <div className="rounded-2xl bg-white p-8 shadow-xl">
+        <div className="rounded-2xl bg-white p-5 shadow-xl sm:p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
               <div className="rounded-lg bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
@@ -81,14 +81,13 @@ export default function AdminLogin() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter admin password"
-                  autoFocus
-                  className="w-full rounded-lg border border-gray-200 py-2.5 pl-10 pr-10 text-sm text-navy placeholder-gray-400 transition-colors focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
+                  className="min-h-11 w-full rounded-lg border border-gray-200 py-2.5 pl-10 pr-10 text-sm text-navy placeholder-gray-400 transition-colors focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-600"
-                  tabIndex={-1}
+                  className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -98,7 +97,7 @@ export default function AdminLogin() {
             <button
               type="submit"
               disabled={loading || !password}
-              className="w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+              className="action-primary w-full disabled:opacity-50"
             >
               {loading ? (
                 <span className="inline-flex items-center gap-2">

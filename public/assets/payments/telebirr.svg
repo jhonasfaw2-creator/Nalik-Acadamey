@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="teleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E2A033;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d4922e;stop-opacity:1" />
+    </linearGradient>
+    <filter id="teleShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.25" />
+    </filter>
+  </defs>
+  <rect width="128" height="128" rx="24" fill="url(#teleGrad)" filter="url(#teleShadow)" />
+  <circle cx="40" cy="40" r="14" fill="white" opacity="0.15" />
+  <circle cx="88" cy="88" r="10" fill="white" opacity="0.1" />
+  <path d="M32 48c0-4.4 3.6-8 8-8s8 3.6 8 8-3.6 8-8 8-8-3.6-8-8zM72 64c0-4.4 3.6-8 8-8s8 3.6 8 8-3.6 8-8 8-8-3.6-8-8z" fill="white" opacity="0.9" />
+  <text x="64" y="76" text-anchor="middle" fill="white" font-family="system-ui, sans-serif" font-weight="800" font-size="11" letter-spacing="0.5">Telebirr</text>
+</svg>

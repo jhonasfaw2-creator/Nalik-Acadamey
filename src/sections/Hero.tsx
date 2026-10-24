@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { ArrowRight, Play, ChevronDown, Search, Loader2, X, CheckCircle2, Clock3, XCircle, User, School, CalendarDays, GraduationCap, Hash } from "lucide-react";
+import { ArrowRight, Play, Search, Loader2, X, CheckCircle2, Clock3, XCircle } from "lucide-react";
 
 interface HeroProps {
   onApplyClick: () => void;
 }
 
 const DEFAULTS = {
-  eyebrow: "NALIK ACADEMY · CREATIVE MEDIA",
+  eyebrow: "Creative media training",
   title: "Master the Art of Visual Storytelling",
   description:
     "Learn professional video editing and media production through practical training built around real creative work.",
@@ -154,10 +154,10 @@ export default function Hero({ onApplyClick }: HeroProps) {
       };
     }
     return {
-      label: "PENDING",
+      label: "AWAITING PAYMENT",
       tone: "pending" as const,
       Icon: Clock3,
-      message: "Your registration has been received and is pending confirmation. Submit your payment screenshot to proceed.",
+      message: "Your application is saved. Complete payment and submit your receipt to finish registration. You are not enrolled until payment is approved.",
     };
   };
 
@@ -169,7 +169,7 @@ export default function Hero({ onApplyClick }: HeroProps) {
   return (
     <section
       id="home"
-      className="group relative h-screen min-h-[680px] w-full overflow-hidden bg-navy"
+      className="group relative min-h-[44rem] w-full overflow-hidden bg-navy sm:min-h-[680px] md:h-screen"
     >
       {/* Background video */}
       <video
@@ -180,7 +180,7 @@ export default function Hero({ onApplyClick }: HeroProps) {
         playsInline
         preload="auto"
         poster={content.poster}
-        onCanPlay={() => setVideoLoaded(true)}
+        onPlaying={() => setVideoLoaded(true)}
         className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${
           videoLoaded ? "opacity-100" : "opacity-0"
         }`}
@@ -206,32 +206,31 @@ export default function Hero({ onApplyClick }: HeroProps) {
 
       {/* Main content */}
       <div className="relative z-10 flex h-full items-center">
-        <div className="mx-auto w-full max-w-7xl px-6 sm:px-8 lg:px-10">
+        <div className="mx-auto w-full max-w-7xl px-4 py-24 sm:px-8 sm:py-20 lg:px-10">
           <div className="max-w-3xl">
 
             {/* Eyebrow */}
-            <div className="hero-eyebrow flex items-center gap-2 mb-8">
-              <span className="text-xs font-semibold uppercase tracking-[0.24em] text-gold">
+            <div className="hero-eyebrow mb-5 sm:mb-7">
+              <span className="break-words text-sm font-medium text-gold">
                 {content.eyebrow}
               </span>
-              <span className="h-px w-6 bg-gold shrink-0" />
             </div>
 
             {/* Main headline */}
-            <h1 className="hero-title max-w-3xl text-5xl font-bold leading-[1.02] tracking-tight text-white sm:text-6xl md:text-7xl lg:text-[4.5rem]">
+            <h1 className="hero-title max-w-3xl text-[clamp(2.4rem,8vw,4.25rem)] font-semibold leading-[1.06] tracking-tight text-white sm:text-6xl md:text-7xl lg:text-[4.25rem]">
               {content.title}
             </h1>
 
             {/* Description */}
-            <p className="hero-desc mt-8 max-w-xl text-lg leading-8 text-white/80">
+            <p className="hero-desc mt-5 max-w-[58ch] text-base leading-7 text-white/80 sm:mt-6 sm:text-lg sm:leading-8">
               {content.description}
             </p>
 
             {/* CTA */}
-            <div className="hero-cta mt-12 flex flex-wrap items-center gap-6">
+            <div className="hero-cta mt-7 flex flex-col items-stretch gap-3 sm:mt-9 sm:flex-row sm:flex-wrap sm:items-center sm:gap-6">
               <button
                 onClick={onApplyClick}
-                className="group/btn inline-flex items-center justify-center gap-3 rounded-md bg-gold px-8 py-4 text-base font-semibold text-navy shadow-sm hover:bg-gold-hover transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-navy"
+                className="action-primary group/btn inline-flex items-center justify-center gap-3"
               >
                 Apply Now
 
@@ -243,7 +242,7 @@ export default function Hero({ onApplyClick }: HeroProps) {
 
               <button
                 onClick={() => setLookupOpen(true)}
-                className="inline-flex items-center gap-2.5 rounded-md border border-white/30 px-7 py-4 text-base font-medium text-white transition-colors duration-200 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-navy"
+                className="inline-flex min-h-11 items-center justify-center gap-2 px-1 py-2 text-sm font-medium text-white/85 underline decoration-white/35 underline-offset-4 transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-white sm:text-base"
               >
                 <Search size={16} />
                 Check Registration Status
@@ -255,64 +254,26 @@ export default function Hero({ onApplyClick }: HeroProps) {
                     .getElementById("about")
                     ?.scrollIntoView({ behavior: "smooth" });
                 }}
-                className="group/about inline-flex items-center gap-2.5 rounded-md bg-white/10 px-7 py-4 text-base font-medium text-white transition-colors duration-200 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-navy"
+                className="group/about inline-flex min-h-11 items-center justify-center gap-2.5 px-1 py-2 text-sm font-medium text-white/85 underline decoration-white/35 underline-offset-4 transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-white sm:text-base"
               >
-                <span className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 transition-all duration-200 group-hover/about:border-white/60">
-                  <Play size={14} fill="currentColor" />
-                </span>
+                <Play size={14} fill="currentColor" />
 
                 Discover Nalik
               </button>
             </div>
 
             {/* Training highlights */}
-            <div className="hero-meta mt-16 flex flex-wrap items-center gap-x-8 gap-y-4 border-t border-white/15 pt-6">
-              <span className="text-xs font-medium uppercase tracking-[0.16em] text-white/55">
-                Premiere Pro
-              </span>
-
-              <span className="h-1 w-1 rounded-full bg-white/30" />
-
-              <span className="text-xs font-medium uppercase tracking-[0.16em] text-white/55">
-                DaVinci Resolve
-              </span>
-
-              <span className="h-1 w-1 rounded-full bg-white/30" />
-
-              <span className="text-xs font-medium uppercase tracking-[0.16em] text-white/55">
-                Practical Training
-              </span>
+            <div className="hero-meta mt-8 max-w-[58ch] text-sm leading-6 text-white/60 sm:mt-10">
+              Practical training in Premiere Pro, DaVinci Resolve, and visual storytelling.
             </div>
           </div>
         </div>
       </div>
 
-      {/* Scroll indicator */}
-      <div className="absolute bottom-8 right-8 z-10 hidden items-center gap-3 sm:flex">
-        <span className="text-[10px] font-medium uppercase tracking-[0.25em] text-white/45">
-          Scroll
-        </span>
-
-        <div className="flex h-9 w-6 items-start justify-center rounded-full border border-white/25 pt-2">
-          <ChevronDown
-            size={13}
-            className="animate-bounce text-white/60"
-          />
-        </div>
-      </div>
-
-      {/* Mobile scroll indicator */}
-      <div className="absolute bottom-7 left-1/2 z-10 -translate-x-1/2 sm:hidden">
-        <ChevronDown
-          size={20}
-          className="animate-bounce text-white/60"
-        />
-      </div>
-
       {/* Registration lookup modal */}
       {lookupOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 sm:p-6 backdrop-blur-sm">
-          <div className="rounded-2xl bg-white p-6 sm:p-8 shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-2 backdrop-blur-sm sm:items-center sm:p-6">
+          <div className="max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:max-h-[90dvh] sm:p-8">
             <div className="flex items-start justify-between gap-2 mb-6">
               <h2 className="text-lg font-bold text-navy">Check Registration Status</h2>
               <button
@@ -323,7 +284,7 @@ export default function Hero({ onApplyClick }: HeroProps) {
                   setLookupError("");
                   setReferenceId("");
                 }}
-                className="text-gray-400 hover:text-gray-600" aria-label="Close"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700" aria-label="Close"
               >
                 <X size={20} />
               </button>
@@ -353,7 +314,7 @@ export default function Hero({ onApplyClick }: HeroProps) {
               <button
                 type="submit"
                 disabled={lookupState === "loading" || !referenceId.trim()}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-gold px-6 py-3 text-sm font-bold text-navy transition-all duration-200 hover:bg-gold-hover disabled:opacity-50 w-full sm:w-auto"
+                className="action-primary inline-flex w-full items-center justify-center gap-2 sm:w-auto"
               >
                 {lookupState === "loading" ? (
                   <Loader2 size={16} className="animate-spin" />
@@ -377,88 +338,67 @@ export default function Hero({ onApplyClick }: HeroProps) {
             )}
 
             {lookupState === "found" && lookupResult && (
-              <div className="mt-6 divide-y divide-gray-100">
-                <div className="flex items-start justify-between gap-4 px-5 py-3.5">
-                  <span className="flex shrink-0 items-center gap-2 text-sm text-gray-500">
-                    <User size={15} className="text-gold" />
-                    Student
-                  </span>
-                  <span className="text-right text-sm font-semibold text-navy">
+              <div className="mt-6 space-y-3">
+                <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 py-2 sm:flex sm:justify-between sm:gap-4">
+                  <span className="min-w-0 text-xs leading-5 text-gray-500 sm:text-sm">Student</span>
+                  <span className="min-w-0 break-words text-right text-sm font-semibold text-navy">
                     {lookupResult.fullName}
                   </span>
                 </div>
-                <div className="flex items-start justify-between gap-4 px-5 py-3.5">
-                  <span className="flex shrink-0 items-center gap-2 text-sm text-gray-500">
-                    <School size={15} className="text-gold" />
-                    Course
-                  </span>
-                  <span className="text-right text-sm font-medium text-navy">
+                <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 py-2 sm:flex sm:justify-between sm:gap-4">
+                  <span className="min-w-0 text-xs leading-5 text-gray-500 sm:text-sm">Course</span>
+                  <span className="min-w-0 break-words text-right text-sm font-medium text-navy">
                     {lookupResult.course || "To be confirmed"}
                   </span>
                 </div>
                 {lookupResult.schedule && (
                   <>
-                    <div className="flex items-start justify-between gap-4 px-5 py-3.5">
-                      <span className="flex shrink-0 items-center gap-2 text-sm text-gray-500">
-                        <CalendarDays size={15} className="text-gold" />
-                        Schedule days
-                      </span>
-                      <span className="text-right text-sm font-medium text-navy">
+                    <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 py-2 sm:flex sm:justify-between sm:gap-4">
+                      <span className="min-w-0 text-xs leading-5 text-gray-500 sm:text-sm">Schedule days</span>
+                      <span className="min-w-0 break-words text-right text-sm font-medium text-navy">
                         {lookupResult.schedule.days || "To be confirmed"}
                       </span>
                     </div>
-                    <div className="flex items-start justify-between gap-4 px-5 py-3.5">
-                      <span className="flex shrink-0 items-center gap-2 text-sm text-gray-500">
-                        <Clock3 size={15} className="text-gold" />
-                        Class time
-                      </span>
-                      <span className="text-right text-sm font-medium text-navy">
+                    <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 py-2 sm:flex sm:justify-between sm:gap-4">
+                      <span className="min-w-0 text-xs leading-5 text-gray-500 sm:text-sm">Class time</span>
+                      <span className="min-w-0 break-words text-right text-sm font-medium text-navy">
                         {lookupResult.schedule.startTime && lookupResult.schedule.endTime
                           ? `${lookupResult.schedule.startTime} – ${lookupResult.schedule.endTime}`
                           : "To be confirmed"}
                       </span>
                     </div>
                     {lookupResult.schedule.startDate && (
-                      <div className="flex items-start justify-between gap-4 px-5 py-3.5">
-                        <span className="flex shrink-0 items-center gap-2 text-sm text-gray-500">
-                          <GraduationCap size={15} className="text-gold" />
-                          Start date
-                        </span>
-                        <span className="text-right text-sm font-medium text-navy">
+                      <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 py-2 sm:flex sm:justify-between sm:gap-4">
+                        <span className="min-w-0 text-xs leading-5 text-gray-500 sm:text-sm">Start date</span>
+                        <span className="min-w-0 break-words text-right text-sm font-medium text-navy">
                           {lookupResult.schedule.startDate}
                         </span>
                       </div>
                     )}
                   </>
                 )}
-                <div className="flex items-start justify-between gap-4 px-5 py-3.5">
-                  <span className="flex shrink-0 items-center gap-2 text-sm text-gray-500">
-                    <Hash size={15} className="text-gold" />
-                    Registration ID
-                  </span>
+                <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 py-2 sm:flex sm:justify-between sm:gap-4">
+                  <span className="min-w-0 text-xs leading-5 text-gray-500 sm:text-sm">Registration ID</span>
                   <span className="text-right text-sm font-mono font-semibold text-gold">
                     {lookupResult.referenceId}
                   </span>
                 </div>
-                <div className="flex items-start justify-between gap-4 px-5 py-3.5">
-                  <span className="flex shrink-0 items-center gap-2 text-sm text-gray-500">
-                    <GraduationCap size={15} className="text-gold" />
-                    Registration status
-                  </span>
+                <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 py-2 sm:flex sm:justify-between sm:gap-4">
+                  <span className="min-w-0 text-xs leading-5 text-gray-500 sm:text-sm">Registration status</span>
                   <span className="text-right">
-                    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
                       statusInfo!.tone === "success"
-                        ? "bg-green-50 text-green-700 border-green-200"
+                        ? "text-green-700"
                         : statusInfo!.tone === "pending"
-                          ? "bg-amber-50 text-amber-700 border-amber-200"
-                          : "bg-red-50 text-red-700 border-red-200"
+                          ? "text-amber-700"
+                          : "text-red-700"
                     }`}>
                       <StatusIcon size={13} />
                       {statusInfo!.label}
                     </span>
                   </span>
                 </div>
-                <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3.5">
+                <div className="mt-4 bg-amber-50 px-4 py-3.5">
                   <p className="text-sm text-amber-700">
                     {statusInfo!.message}
                   </p>

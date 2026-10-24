@@ -49,16 +49,16 @@ export default function Collaborations() {
     <section
       id="collaborations"
       ref={sectionRef}
-      className="relative overflow-hidden bg-warm-white px-4 py-20 sm:py-28 lg:px-8 lg:py-32"
+      className="relative overflow-hidden bg-warm-white px-4 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-24"
     >
       <div className="relative mx-auto max-w-5xl">
         {/* Header */}
         <div className="reveal-child mx-auto max-w-xl text-center">
-          <p className="text-xs font-semibold uppercase tracking-widest text-gold">
+          <p className="text-sm font-medium text-gold">
             Client Work
           </p>
-          <h2 className="mt-3 text-3xl font-black leading-tight tracking-tight text-navy sm:text-4xl">
-            Some of his works.
+          <h2 className="mt-3 text-3xl font-semibold leading-tight tracking-tight text-navy sm:text-4xl">
+            Selected collaborations
           </h2>
           <p className="mt-3 text-base text-gray-500">
             Freelance video editing for streamers, content creators, and
@@ -67,21 +67,18 @@ export default function Collaborations() {
         </div>
 
         {/* Creators and streamers */}
-        <div className="reveal-child mt-12">
-          <p className="text-center text-xs font-semibold uppercase tracking-widest text-gray-400">
+        <div className="reveal-child mt-10">
+          <p className="text-sm font-medium text-gray-500">
             Creators &amp; Streamers
           </p>
-          <div className="mt-8 grid grid-cols-2 gap-x-5 gap-y-10 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="mt-6 grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
             {CREATORS.map((creator, i) => (
               <CastCard key={creator.name} creator={creator} index={i} />
             ))}
 
             {/* Invitation tile */}
-            <article className="reveal-child group flex flex-col items-center justify-center rounded-lg border border-gold/40 bg-gold/[0.06] p-4 text-center transition-colors duration-300 hover:border-gold">
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-gold text-2xl font-black text-navy">
-                ?
-              </span>
-              <p className="mt-3 text-base font-bold text-navy">You next?</p>
+            <article className="reveal-child flex flex-col items-start justify-center p-2 text-left">
+              <p className="text-base font-semibold text-navy">Have a project in mind?</p>
                 <a
                   href="#contact"
                   className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-gold hover:text-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-warm-white"
@@ -94,54 +91,32 @@ export default function Collaborations() {
         </div>
 
         {/* Brands and businesses */}
-        <div className="reveal-child mt-14">
-          <p className="text-center text-xs font-semibold uppercase tracking-widest text-gray-400">
+        <div className="reveal-child mt-10">
+          <p className="text-sm font-medium text-gray-500">
             Brands &amp; Businesses
           </p>
-          <div className="mx-auto mt-5 flex max-w-2xl flex-wrap items-center justify-center gap-5">
-            {BUSINESSES.map((business, i) => (
+          <div className="mx-auto mt-6 grid max-w-[300px] grid-cols-2 gap-x-5 sm:max-w-[340px]">
+            {BUSINESSES.map((business) => (
               <article
                 key={business.name}
-                className="group text-center"
-                style={{ transitionDelay: `${i * 0.08}s` }}
+                className="text-center"
               >
-                <div className="relative aspect-[16/9] w-[122px] overflow-hidden rounded-lg ring-1 ring-gray-200 transition-colors duration-300 group-hover:ring-gold/60 sm:w-[162px]">
+                <div className="relative aspect-square w-full overflow-hidden rounded-sm">
                   <Image
                     src={business.image}
                     alt={business.name}
                     fill
-                    sizes="(max-width: 640px) 122px, 162px"
+                    sizes="(max-width: 640px) 140px, 160px"
                     className="object-cover"
                   />
-                  <div className="absolute inset-0 bg-navy/45" />
-                  <div className="absolute inset-x-0 bottom-0 p-2.5">
-                    <p className="text-sm font-black text-white drop-shadow-sm">
-                      {business.name}
-                    </p>
-                    <p className="text-[9px] font-medium uppercase tracking-[0.14em] text-white/70">
-                      {business.role}
-                    </p>
-                  </div>
                 </div>
+                <p className="mt-2 text-sm font-semibold text-navy">{business.name}</p>
+                <p className="text-xs text-gray-500">{business.role}</p>
               </article>
             ))}
           </div>
         </div>
 
-        {/* CTA */}
-        <div className="reveal-child mt-12 text-center">
-          <a
-            href="#contact"
-            className="group inline-flex items-center gap-1.5 text-sm font-semibold text-navy transition-colors hover:text-gold"
-          >
-            Want your content professionally edited?
-            <ArrowRight
-              size={14}
-              aria-hidden="true"
-              className="transition-transform duration-200 group-hover:translate-x-0.5"
-            />
-          </a>
-        </div>
       </div>
     </section>
   );
@@ -156,10 +131,10 @@ function CastCard({
 }) {
   return (
     <article
-      className="reveal-child group mx-auto w-full max-w-[126px] text-center sm:max-w-[140px]"
+      className="reveal-child mx-auto w-full max-w-[140px] text-center"
       style={{ transitionDelay: `${(index % 4) * 0.06}s` }}
     >
-      <div className="relative aspect-[4/5] overflow-hidden rounded-lg ring-1 ring-gray-200 transition-all duration-300 group-hover:ring-gold">
+        <div className="relative aspect-square overflow-hidden rounded-sm">
         <Image
           src={creator.image}
           alt={creator.name}
@@ -168,17 +143,13 @@ function CastCard({
           className="object-cover"
         />
 
-        {/* Role sticker */}
-        <span className="absolute left-2.5 top-2.5 rounded bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-navy">
-          {creator.role}
-        </span>
       </div>
 
       {/* Name below photo */}
-      <h3 className="mt-3 text-base font-bold tracking-tight text-navy sm:text-lg">
+      <h3 className="mt-3 text-base font-semibold tracking-tight text-navy sm:text-lg">
         {creator.name}
       </h3>
-      <p className="mt-0.5 text-xs font-medium uppercase tracking-[0.12em] text-gray-400 sm:text-[11px]">
+      <p className="mt-0.5 text-sm text-gray-500">
         {creator.role}
       </p>
     </article>

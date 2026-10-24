@@ -46,16 +46,18 @@ export async function PUT(
           id: true,
           scheduleId: true,
           status: true,
+          paymentProofStatus: true,
           payments: { select: { status: true } },
         },
       });
       if (!existing) throw new Error("REGISTRATION_NOT_FOUND");
-      if (
-        status === "CONFIRMED" &&
-        existing.payments.length > 0 &&
-        !existing.payments.some((payment: { status: string }) => payment.status === "SUCCESS")
-      ) {
-        throw new Error("PAYMENT_NOT_VERIFIED");
+      if (status === "CONFIRMED") {
+        const hasVerifiedPayment = existing.payments.some(
+          (payment: { status: string }) => payment.status === "SUCCESS",
+        );
+        if (!hasVerifiedPayment && existing.paymentProofStatus !== "APPROVED") {
+          throw new Error("PAYMENT_NOT_VERIFIED");
+        }
       }
 
       const nextStatus = typeof status === "string" ? status : existing.status;
@@ -104,7 +106,7 @@ export async function PUT(
     if (error instanceof Error) {
       const responses: Record<string, { error: string; status: number }> = {
         REGISTRATION_NOT_FOUND: { error: "Registration not found", status: 404 },
-        PAYMENT_NOT_VERIFIED: { error: "Registration cannot be confirmed before payment is verified.", status: 409 },
+        PAYMENT_NOT_VERIFIED: { error: "Enrollment requires a verified payment or approved payment proof.", status: 409 },
         SCHEDULE_NOT_FOUND: { error: "Schedule not found", status: 404 },
         SCHEDULE_UNAVAILABLE: { error: "That schedule session is inactive or unavailable.", status: 400 },
         SCHEDULE_FULL: { error: "That schedule session is full.", status: 400 },
@@ -137,8 +139,6 @@ export async function DELETE(
           status: true,
           scheduleId: true,
           paymentProofPath: true,
-          payments: { select: { id: true } },
-          transactions: { select: { id: true } },
         },
       });
 
@@ -165,7 +165,7 @@ export async function DELETE(
         }
       }
 
-      // Cascade deletes related payments and transactions via onDelete: Cascade.
+      // Related payment records cascade with the registration.
       return tx.registration.delete({ where: { id } });
     });
 

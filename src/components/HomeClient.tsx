@@ -42,7 +42,7 @@ export default function HomeClient() {
       <OurWork />
       <Collaborations />
       <Contact onApplyClick={openForm} />
-      <Footer onApplyClick={openForm} />
+      <Footer />
 
       <ApplicationForm
         open={formOpen}

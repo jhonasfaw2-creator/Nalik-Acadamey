@@ -1,10 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Hammer, Film, MessageCircle, Briefcase } from "lucide-react";
-
-const ICONS = [Hammer, Film, MessageCircle, Briefcase];
-
 const DEFAULTS = {
   badge: "How You Learn",
   title: "A learning experience built around practice, not theory.",
@@ -78,20 +74,16 @@ export default function HowYouLearn() {
     <section id="how-you-learn" className="bg-warm-white px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <div ref={headingRef}>
-          <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">{content.badge}</p>
+          <p className="mb-3 text-sm font-medium text-gold">{content.badge}</p>
           <h2 className="max-w-2xl text-3xl font-bold leading-snug text-navy sm:text-4xl">{content.title}</h2>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-gray-600">{content.description}</p>
         </div>
         <div ref={gridRef} className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {content.steps.map((step, i) => {
-            const Icon = ICONS[i] || Hammer;
             return (
               <div key={step.title} className="group flex flex-col">
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl font-bold text-gold/30 transition-colors group-hover:text-gold/50">{String(i + 1).padStart(2, "0")}</span>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gold/10 text-gold transition-colors duration-300 group-hover:bg-gold/20"><Icon size={18} /></div>
-                </div>
-                <h3 className="mt-3 text-lg font-bold text-navy">{step.title}</h3>
+                <span className="text-sm font-medium text-gold">{i + 1}</span>
+                <h3 className="mt-2 text-lg font-semibold text-navy">{step.title}</h3>
                 <p className="mt-2 flex-1 text-sm leading-relaxed text-gray-600">{step.text}</p>
               </div>
             );

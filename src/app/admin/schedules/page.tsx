@@ -82,18 +82,25 @@ export default function AdminSchedules() {
       const data = await res.json().catch(() => ({}));
       if (res.ok) { setEditing(null); load(); }
       else setActionError(data.error || "Failed to save schedule.");
+    } catch {
+      setActionError("Connection error. The schedule was not saved.");
     } finally { setSaving(false); }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this session?")) return;
     setActionError("");
-    const res = await fetch(`/api/admin/schedules?id=${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setActionError(data.error || "Failed to delete session.");
+    try {
+      const res = await fetch(`/api/admin/schedules?id=${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setActionError(data.error || "Failed to delete session.");
+        return;
+      }
+      load();
+    } catch {
+      setActionError("Connection error. The session was not deleted.");
     }
-    load();
   };
 
   if (loading) {
@@ -115,39 +122,41 @@ export default function AdminSchedules() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-navy">Schedules</h1>
+          <h1 className="text-[clamp(1.5rem,4vw,2rem)] font-bold leading-tight text-navy">Schedules</h1>
           <p className="mt-1 text-sm text-gray-500">Two schedule groups, three sessions each, 15 seats per session.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <select value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-navy focus:border-gold focus:outline-none">
+        <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center sm:gap-3">
+          <label className="sr-only" htmlFor="schedule-group-filter">Filter by schedule group</label>
+          <select id="schedule-group-filter" value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)} className="min-h-11 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-navy focus:border-gold focus:outline-none sm:w-auto">
             <option value="">All groups</option>
             <option value="A">SCHEDULE A</option>
             <option value="B">SCHEDULE B</option>
           </select>
-          <button onClick={() => setEditing(emptySchedule(filterGroup || undefined))} className="inline-flex items-center gap-2 rounded-lg bg-gold px-4 py-2.5 text-sm font-semibold text-navy transition-colors hover:bg-gold-hover">
+          <button onClick={() => setEditing(emptySchedule(filterGroup || undefined))} className="action-primary inline-flex items-center justify-center gap-2">
             <Plus size={15} /> Add Session
           </button>
         </div>
       </div>
 
-      {actionError && (
+      {actionError && !editing && (
         <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{actionError}</div>
       )}
 
       {/* Edit modal */}
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-2 sm:items-center sm:p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="schedule-editor-title" className="max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-2xl bg-white p-4 shadow-xl sm:max-h-[90dvh] sm:rounded-xl sm:p-6">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-navy">{editing.id ? "Edit Session" : "New Session"}</h2>
-              <button onClick={() => setEditing(null)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+              <h2 id="schedule-editor-title" className="text-lg font-bold text-navy">{editing.id ? "Edit Session" : "New Session"}</h2>
+              <button onClick={() => setEditing(null)} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Close"><X size={18} /></button>
             </div>
+            {actionError && <p className="mb-4 text-sm text-red-700" role="alert">{actionError}</p>}
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Schedule Group</label>
+                <p className="mb-1 block text-sm font-medium text-gray-700">Schedule group</p>
                 <div className="flex gap-2">
                   {["A", "B"].map((g) => (
-                    <button key={g} type="button" onClick={() => setEditing({ ...editing, group: g })} className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${editing.group === g ? "bg-gold text-navy" : "border border-gray-200 text-gray-600 hover:border-gold/50"}`}>
+                    <button key={g} type="button" aria-pressed={editing.group === g} onClick={() => setEditing({ ...editing, group: g })} className={`min-h-11 px-3 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold ${editing.group === g ? "text-gold" : "text-gray-600 hover:text-navy"}`}>
                       SCHEDULE {g}
                     </button>
                   ))}
@@ -155,24 +164,25 @@ export default function AdminSchedules() {
                 <p className="mt-1 text-xs text-gray-400">{DAYS_BY_GROUP[editing.group || "A"]}</p>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Session</label>
-                <select value={editing.session || ""} onChange={(e) => setEditing({ ...editing, session: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20">
+                <label htmlFor="schedule-session" className="mb-1 block text-sm font-medium text-gray-700">Session</label>
+                <select id="schedule-session" value={editing.session || ""} onChange={(e) => setEditing({ ...editing, session: e.target.value })} className="min-h-11 w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20">
                   {SESSION_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Start Time</label>
-                  <input type="time" value={editing.startTime || ""} onChange={(e) => setEditing({ ...editing, startTime: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20" />
+                  <label htmlFor="schedule-start-time" className="mb-1 block text-sm font-medium text-gray-700">Start Time</label>
+                  <input id="schedule-start-time" type="time" value={editing.startTime || ""} onChange={(e) => setEditing({ ...editing, startTime: e.target.value })} className="min-h-11 w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">End Time</label>
-                  <input type="time" value={editing.endTime || ""} onChange={(e) => setEditing({ ...editing, endTime: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20" />
+                  <label htmlFor="schedule-end-time" className="mb-1 block text-sm font-medium text-gray-700">End Time</label>
+                  <input id="schedule-end-time" type="time" value={editing.endTime || ""} onChange={(e) => setEditing({ ...editing, endTime: e.target.value })} className="min-h-11 w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20" />
                 </div>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Start Date</label>
+                <label htmlFor="schedule-start-date" className="mb-1 block text-sm font-medium text-gray-700">Start Date</label>
                 <input
+                  id="schedule-start-date"
                   type="date"
                   value={editing.startDate ? editing.startDate.slice(0, 10) : ""}
                   onChange={(e) => setEditing({ ...editing, startDate: e.target.value || null })}
@@ -181,8 +191,8 @@ export default function AdminSchedules() {
                 <p className="mt-1 text-xs text-gray-400">First day of class — shown to students on their registration confirmation and lookup.</p>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Max Seats</label>
-                <input type="number" value={editing.maxSeats ?? 15} onChange={(e) => setEditing({ ...editing, maxSeats: Number(e.target.value) })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20" />
+                <label htmlFor="schedule-max-seats" className="mb-1 block text-sm font-medium text-gray-700">Max Seats</label>
+                <input id="schedule-max-seats" type="number" min={1} value={editing.maxSeats ?? 15} onChange={(e) => setEditing({ ...editing, maxSeats: Number(e.target.value) })} className="min-h-11 w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20" />
                 <p className="mt-1 text-xs text-gray-400">Each session holds a maximum of 15 students.</p>
               </div>
               <div>
@@ -203,6 +213,7 @@ export default function AdminSchedules() {
                       <button
                         key={opt.value}
                         type="button"
+                        aria-pressed={current === opt.value}
                         onClick={() =>
                           setEditing({
                             ...editing,
@@ -210,7 +221,7 @@ export default function AdminSchedules() {
                               opt.value === "AVAILABLE" ? true : opt.value === "FULL" ? false : null,
                           })
                         }
-                        className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        className={`min-h-11 flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${
                           current === opt.value
                             ? opt.value === "FULL"
                               ? "bg-red-500 text-white"
@@ -228,15 +239,16 @@ export default function AdminSchedules() {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <label className="text-sm font-medium text-gray-700">Active</label>
-                <button type="button" role="switch" aria-checked={editing.active} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditing({ ...editing, active: !editing.active }); } }} onClick={() => setEditing({ ...editing, active: !editing.active })} className={`relative h-6 w-11 rounded-full transition-colors ${editing.active ? "bg-gold" : "bg-gray-300"}`}>
-                  <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${editing.active ? "left-5.5" : "left-0.5"}`} />
+                <label id="schedule-active-label" className="text-sm font-medium text-gray-700">Active</label>
+                <button type="button" role="switch" aria-labelledby="schedule-active-label" aria-checked={editing.active} onClick={() => setEditing({ ...editing, active: !editing.active })} className={`relative h-7 w-12 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${editing.active ? "bg-gold" : "bg-gray-300"}`}>
+                  <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${editing.active ? "left-5.5" : "left-0.5"}`} />
                 </button>
               </div>
             </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <button onClick={() => setEditing(null)} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
-              <button onClick={handleSave} disabled={saving || !editing.group || !editing.session} className="inline-flex items-center gap-2 rounded-lg bg-gold px-5 py-2 text-sm font-semibold text-navy transition-colors hover:bg-gold-hover disabled:opacity-50">
+            {actionError && <p className="mt-4 text-sm text-red-700" role="alert">{actionError}</p>}
+            <div className="mt-6 grid grid-cols-2 gap-2 sm:flex sm:justify-end sm:gap-3">
+              <button onClick={() => setEditing(null)} className="action-secondary">Cancel</button>
+              <button onClick={handleSave} disabled={saving || !editing.group || !editing.session} className="action-primary inline-flex items-center justify-center gap-2 disabled:opacity-50">
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                 {saving ? "Saving..." : "Save"}
               </button>
@@ -250,44 +262,44 @@ export default function AdminSchedules() {
         {groups.map((g) => {
           const groupSessions = sessions.filter((s) => s.group === g);
           return (
-            <div key={g} className="rounded-xl border border-gray-200 bg-white p-4">
+            <section key={g}>
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="font-bold text-navy">SCHEDULE {g}</h2>
+                  <h2 className="font-semibold text-navy">Group {g}</h2>
                   <p className="text-xs text-gray-500">{DAYS_BY_GROUP[g]}</p>
                 </div>
-                <span className="text-xs text-gray-400">{groupSessions.length} sessions</span>
+                  <span className="text-sm text-gray-500">{groupSessions.length} sessions</span>
               </div>
               <div className="mt-3 space-y-2">
                 {groupSessions.map((s) => (
-                  <div key={s.id} className="flex items-center gap-4 rounded-lg border border-gray-100 bg-warm-white p-3">
+                  <div key={s.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:gap-4">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold text-navy">{s.session}</h3>
-                        {s.isFull && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-600">FULL</span>}
-                        {!s.active && <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">INACTIVE</span>}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <h3 className="text-base font-semibold text-navy">{s.session}</h3>
+                        {s.isFull && <span className="text-xs font-medium text-red-700">Full</span>}
+                        {!s.active && <span className="text-xs text-gray-500">Inactive</span>}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                         <span>{s.startTime} – {s.endTime}</span>
                         {s.startDate && <span>Starts {new Date(s.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                          className={`text-xs font-medium ${
                             s.availabilityOverride === false || s.isFull
-                              ? "bg-red-100 text-red-600"
-                              : "bg-green-100 text-green-700"
+                              ? "text-red-700"
+                              : "text-green-700"
                           }`}
                         >
                           {availabilityLabel(s)}
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-between gap-3 sm:justify-start">
                       <div className="flex items-center gap-1.5 text-xs">
                         <Users size={12} className={s.isFull ? "text-red-400" : "text-gray-400"} />
                         <span className={s.isFull ? "font-medium text-red-500" : "text-gray-500"}>{s.enrolled}/{s.maxSeats}</span>
                       </div>
-                      <button onClick={() => setEditing(s)} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-navy transition-colors hover:bg-gray-50">Edit</button>
-                      <button onClick={() => handleDelete(s.id)} className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"><Trash2 size={14} /></button>
+                      <button onClick={() => setEditing(s)} className="min-h-11 px-2 text-sm font-medium text-navy transition-colors hover:text-gold">Edit</button>
+                      <button onClick={() => handleDelete(s.id)} aria-label={`Delete ${s.session}`} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-red-50 hover:text-red-500"><Trash2 size={16} /></button>
                     </div>
                   </div>
                 ))}
@@ -295,7 +307,7 @@ export default function AdminSchedules() {
                   <p className="py-4 text-center text-xs text-gray-400">No sessions in this group yet.</p>
                 )}
               </div>
-            </div>
+            </section>
           );
         })}
         {sessions.length === 0 && <div className="py-12 text-center text-sm text-gray-400">No sessions yet. Add the Morning, Afternoon, and Evening sessions for each group.</div>}

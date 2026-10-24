@@ -9,7 +9,7 @@ async function verifySchema() {
     SELECT table_name, column_name
     FROM information_schema.columns
     WHERE table_schema = current_schema()
-      AND table_name IN ('Registration', 'Course', 'Schedule', 'CourseMaterial', 'Payment', 'PaymentWebhookEvent')
+      AND table_name IN ('Registration', 'Course', 'Schedule', 'CourseMaterial', 'Payment')
   `;
 
   const availableColumns = new Set(
@@ -34,15 +34,10 @@ async function verifySchema() {
     "Payment.id",
     "Payment.registrationId",
     "Payment.merchantReference",
-    "Payment.chapaReference",
     "Payment.amount",
     "Payment.currency",
     "Payment.status",
-    "Payment.checkoutUrl",
     "Payment.verifiedAt",
-    "PaymentWebhookEvent.id",
-    "PaymentWebhookEvent.dedupKey",
-    "PaymentWebhookEvent.event",
   ];
 
   const missingColumns = requiredColumns.filter((column) => !availableColumns.has(column));

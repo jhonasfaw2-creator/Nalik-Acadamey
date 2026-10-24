@@ -14,7 +14,7 @@
     "db:verify": "node scripts/verify-schema.mjs",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "test:payments": "tsx --test src/lib/payments/chapa.test.ts",
+    "telegram:webhook:set": "node scripts/set-telegram-webhook.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

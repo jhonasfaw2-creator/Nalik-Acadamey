@@ -16,6 +16,7 @@ export default function AdminSettings() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   // ── Change password state ──
   const [currentPassword, setCurrentPassword] = useState("");
@@ -39,13 +40,21 @@ export default function AdminSettings() {
   const handleSave = async () => {
     setSaving(true);
     setSaved(false);
+    setSaveError("");
     try {
       const res = await fetch("/api/admin/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ data }),
       });
-      if (res.ok) setSaved(true);
+      if (!res.ok) {
+        const result = await res.json().catch(() => ({}));
+        setSaveError(result.error || "We couldn't save the settings. Please try again.");
+        return;
+      }
+      setSaved(true);
+    } catch {
+      setSaveError("Connection error. Your settings were not saved.");
     } finally { setSaving(false); }
   };
 
@@ -98,42 +107,48 @@ export default function AdminSettings() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-navy">Settings</h1>
+          <h1 className="text-[clamp(1.5rem,4vw,2rem)] font-bold leading-tight text-navy">Settings</h1>
           <p className="mt-1 text-sm text-gray-500">Academy info and contact settings.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-3 sm:justify-end">
           {saved && <span className="text-sm font-medium text-green-600">Saved</span>}
-          <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-gold px-5 py-2 text-sm font-semibold text-navy transition-colors hover:bg-gold-hover disabled:opacity-50">
+          <button onClick={handleSave} disabled={saving} className="action-primary inline-flex flex-1 items-center justify-center gap-2 disabled:opacity-50 sm:flex-none">
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </div>
+      {saveError && <p className="mt-3 text-sm text-red-700" role="alert">{saveError}</p>}
 
-      <div className="mt-6 space-y-6">
+      <div className="mt-8 space-y-10">
         {/* Academy Info */}
-        <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Academy Information</h2>
+        <section>
+          <h2 className="text-lg font-semibold text-navy mb-4">Academy information</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {SETTING_FIELDS.filter((f) => f.key.startsWith("academy_")).map((field) => (
               <div key={field.key}>
-                <label className="mb-1 block text-sm font-medium text-gray-700">{field.label}</label>
+                <label htmlFor={field.key} className="mb-1 block text-sm font-medium text-gray-700">{field.label}</label>
                 <input
+                  id={field.key}
                   value={data[field.key] || ""}
-                  onChange={(e) => setData({ ...data, [field.key]: e.target.value })}
+                  onChange={(e) => {
+                    setData({ ...data, [field.key]: e.target.value });
+                    setSaved(false);
+                    setSaveError("");
+                  }}
                   placeholder={field.placeholder}
                   className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy placeholder-gray-400 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
                 />
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
         {/* Change Password */}
-        <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
+        <section>
+          <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold text-navy">
             <KeyRound size={14} /> Change Password
           </h2>
           <p className="mb-4 text-xs text-gray-400">
@@ -153,7 +168,7 @@ export default function AdminSettings() {
               <span>{pwMessage.text}</span>
             </div>
           )}
-          <form onSubmit={handleChangePassword} className="grid gap-4 sm:grid-cols-3">
+          <form onSubmit={handleChangePassword} className="grid gap-4 lg:grid-cols-3">
             <div>
               <label htmlFor="pw-current" className="mb-1 block text-sm font-medium text-gray-700">Current password</label>
               <div className="relative">
@@ -181,8 +196,7 @@ export default function AdminSettings() {
                 <button
                   type="button"
                   onClick={() => setShowPw(!showPw)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  tabIndex={-1}
+                  className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
                   aria-label={showPw ? "Hide passwords" : "Show passwords"}
                 >
                   {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -204,18 +218,18 @@ export default function AdminSettings() {
               <button
                 type="submit"
                 disabled={pwSaving || !currentPassword || !newPassword || !confirmPassword}
-                className="inline-flex items-center gap-2 rounded-lg bg-gold px-5 py-2 text-sm font-semibold text-navy transition-colors hover:bg-gold-hover disabled:opacity-50"
+                className="action-primary inline-flex w-full items-center justify-center gap-2 disabled:opacity-50 sm:w-auto"
               >
                 {pwSaving ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
                 {pwSaving ? "Updating..." : "Update Password"}
               </button>
             </div>
           </form>
-        </div>
+        </section>
 
         {/* Enrollment Settings */}
-        <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Enrollment Settings</h2>
+        <section>
+          <h2 className="text-lg font-semibold text-navy mb-4">Enrollment settings</h2>
           <p className="text-sm text-gray-600">
             New student registrations remain pending until an administrator confirms enrollment.
           </p>
@@ -223,7 +237,7 @@ export default function AdminSettings() {
             <li>• <strong>Pending</strong>: registration received, awaiting review</li>
             <li>• <strong>Enrolled</strong>: registration confirmed by an administrator</li>
           </ul>
-        </div>
+        </section>
       </div>
     </div>
   );

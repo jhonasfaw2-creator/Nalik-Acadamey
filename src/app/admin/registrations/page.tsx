@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Search, Filter, ChevronDown, UserPlus, Loader2, Copy, Check, Trash2 } from "lucide-react";
+import { Search, UserPlus, Loader2, Copy, Check, Trash2 } from "lucide-react";
 
 interface Registration {
   id: string;
@@ -32,20 +32,20 @@ const STATUS_OPTIONS = [
 ];
 
 const STATUS_COLORS: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-700",
-  PAID: "bg-green-100 text-green-700",
-  CONFIRMED: "bg-green-100 text-green-700",
+  PENDING: "text-amber-700",
+  PAID: "text-green-700",
+  CONFIRMED: "text-green-700",
 };
 
 const PAYMENT_STATUS_COLORS: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-700",
-  SUCCESS: "bg-green-100 text-green-700",
-  FAILED: "bg-red-100 text-red-700",
-  CANCELLED: "bg-red-100 text-red-700",
-  INCOMPLETE: "bg-gray-100 text-gray-600",
-  BLOCKED: "bg-gray-100 text-gray-600",
-  AUTH_NEEDED: "bg-gray-100 text-gray-600",
-  INVALID: "bg-red-100 text-red-700",
+  PENDING: "text-amber-700",
+  SUCCESS: "text-green-700",
+  FAILED: "text-red-700",
+  CANCELLED: "text-red-700",
+  INCOMPLETE: "text-gray-600",
+  BLOCKED: "text-gray-600",
+  AUTH_NEEDED: "text-gray-600",
+  INVALID: "text-red-700",
 };
 
 interface CourseOption {
@@ -70,6 +70,7 @@ export default function AdminRegistrations() {
   const [skip, setSkip] = useState(0);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [filtersInitialized, setFiltersInitialized] = useState(false);
   const [loading, setLoading] = useState(true);
   const hasLoaded = useRef(false);
   const [error, setError] = useState("");
@@ -126,6 +127,14 @@ export default function AdminRegistrations() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    const requestedStatus = new URLSearchParams(window.location.search).get("status") || "";
+    if (STATUS_OPTIONS.some((option) => option.value === requestedStatus)) {
+      setStatusFilter(requestedStatus);
+    }
+    setFiltersInitialized(true);
+  }, []);
+
   const load = useCallback(() => {
     setLoading(!hasLoaded.current);
     setError("");
@@ -147,11 +156,12 @@ export default function AdminRegistrations() {
       .catch((err) => { setError(err.message); hasLoaded.current = true; setLoading(false); });
   }, [search, statusFilter, skip]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (filtersInitialized) load(); }, [filtersInitialized, load]);
   useEffect(() => {
+    if (!filtersInitialized) return;
     const interval = window.setInterval(load, 5_000);
     return () => window.clearInterval(interval);
-  }, [load]);
+  }, [filtersInitialized, load]);
 
   useEffect(() => {
     setSkip(0);
@@ -313,13 +323,13 @@ export default function AdminRegistrations() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-navy">Registrations</h1>
-          <p className="mt-1 text-sm text-gray-500">View, search, filter, and manage all student registrations.</p>
+          <h1 className="text-[clamp(1.5rem,4vw,2rem)] font-bold leading-tight text-navy">Registrations</h1>
+          <p className="mt-1 max-w-2xl text-sm leading-5 text-gray-500">View, search, filter, and manage student registrations.</p>
         </div>
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
           <button
             onClick={() => { setAddOpen(true); setCreated(null); setAddError(""); }}
-            className="inline-flex items-center gap-2 rounded-lg bg-gold px-4 py-2.5 text-sm font-semibold text-navy transition-colors hover:bg-gold-hover"
+            className="action-primary inline-flex items-center justify-center gap-2"
           >
             <UserPlus size={15} /> Add Student
           </button>
@@ -328,48 +338,34 @@ export default function AdminRegistrations() {
 
       {/* Filters */}
       {error && (
-        <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={load} className="rounded-md bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200">Retry</button>
+        <div className="mt-4 flex flex-col gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 sm:flex-row sm:items-center sm:justify-between">
+          <span className="break-words">{error}</span>
+          <button onClick={load} className="min-h-11 rounded-md bg-red-100 px-4 py-2 text-xs font-medium text-red-700 hover:bg-red-200">Retry</button>
         </div>
       )}
 
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="mt-4">
         <div className="relative flex-1">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search by name, email, reference ID, phone, or tx ref..."
-            className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-4 text-sm text-navy placeholder-gray-400 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
+            placeholder="Search name, email, ID, or phone"
+            className="min-h-11 w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-4 text-sm text-navy placeholder-gray-400 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
           />
-        </div>
-        <div className="relative">
-          <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="appearance-none rounded-lg border border-gray-200 py-2.5 pl-9 pr-8 text-sm text-navy focus:border-gold focus:outline-none"
-          >
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label} {s.value && statusCounts[s.value] ? `(${statusCounts[s.value]})` : ""}
-              </option>
-            ))}
-          </select>
-          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
         </div>
       </div>
 
       {/* Status summary bar */}
-      <div className="mt-4 flex gap-2">
-        {STATUS_OPTIONS.filter((s) => s.value).map((s) => (
+      <div role="group" aria-label="Filter registrations by status" className="-mx-3 mt-3 flex snap-x gap-2 overflow-x-auto px-3 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+        {STATUS_OPTIONS.map((s) => (
           <button
             key={s.value}
             onClick={() => setStatusFilter(statusFilter === s.value ? "" : s.value)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${statusFilter === s.value ? "bg-navy text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+            aria-pressed={statusFilter === s.value || (!statusFilter && !s.value)}
+            className={`min-h-11 shrink-0 snap-start whitespace-nowrap px-3 py-2 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${statusFilter === s.value || (!statusFilter && !s.value) ? "font-semibold text-navy" : "text-gray-600 hover:text-navy"}`}
           >
-            {s.label} ({statusCounts[s.value] || 0})
+            {s.label}{s.value ? ` (${statusCounts[s.value] || 0})` : ""}
           </button>
         ))}
       </div>
@@ -380,9 +376,64 @@ export default function AdminRegistrations() {
           <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gold border-t-transparent" />
         </div>
       ) : (
-        <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50">
+        <>
+        <div className="mt-4 space-y-3 xl:hidden">
+          {registrations.map((reg) => (
+            <article key={reg.id} className="min-w-0 py-3">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="break-words text-sm font-semibold leading-5 text-navy">{reg.fullName}</h2>
+                  <p className="mt-1 break-all font-mono text-[11px] text-gray-500">{reg.referenceId}</p>
+                </div>
+                <span className={`shrink-0 text-xs font-semibold ${STATUS_COLORS[reg.status] || "text-gray-600"}`}>
+                  {reg.status === "PAID" ? "ENROLLED" : reg.status}
+                </span>
+              </div>
+              <div className="mt-3 space-y-1.5 text-xs">
+                <p className="break-words font-medium text-navy">{reg.course?.title || "No course"}</p>
+                <p className="break-all text-gray-500">{reg.phone}{reg.email ? ` · ${reg.email}` : ""}</p>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className={`font-medium ${reg.paymentProofStatus === "PENDING_REVIEW" ? "text-amber-700" : reg.paymentProofStatus === "APPROVED" ? "text-green-700" : reg.paymentProofStatus === "REJECTED" ? "text-red-700" : "text-gray-500"}`}>
+                    {reg.paymentProofStatus === "NOT_SUBMITTED" ? "No proof" : reg.paymentProofStatus.replace(/_/g, " ")}
+                  </span>
+                  {reg.payments[0] && <span className={`font-medium ${PAYMENT_STATUS_COLORS[reg.payments[0].status] || "text-gray-600"}`}>{reg.payments[0].status}</span>}
+                  <span className="ml-auto text-[11px] text-gray-400">{new Date(reg.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+                </div>
+                {reg.paymentProofNote && <p className="break-words text-xs text-gray-500">Note: {reg.paymentProofNote}</p>}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1">
+                {reg.paymentProofPath && <button onClick={() => viewScreenshot(reg.id, reg.fullName, reg.paymentProofPath!)} className="action-quiet text-sm text-blue-700">View proof</button>}
+                {reg.paymentProofStatus === "PENDING_REVIEW" && <button onClick={() => reviewRegistration(reg.id, "APPROVED")} disabled={reviewing === reg.id} className="action-quiet text-sm text-green-700 disabled:opacity-50">{reviewing === reg.id ? "Approving…" : "Approve"}</button>}
+                {reg.paymentProofStatus === "PENDING_REVIEW" && <button onClick={() => { setRejectingId(reg.id); setRejectNote(""); }} className="action-quiet text-sm text-red-700">Reject</button>}
+                {(reg.paymentProofStatus === "NOT_SUBMITTED" || reg.paymentProofStatus === "REJECTED") && reg.status === "PENDING" && reg.payments.some((payment) => payment.status === "SUCCESS") && <button onClick={() => void confirmRegistration(reg.id)} disabled={confirming === reg.id} className="action-quiet text-sm text-green-700 disabled:opacity-50">{confirming === reg.id ? "Confirming…" : "Confirm"}</button>}
+                <button onClick={() => setReassigning(reassigning === reg.id ? null : reg.id)} className="action-quiet text-sm text-navy">Move</button>
+                <button onClick={() => setDeleteConfirm(reg.id)} className="action-quiet text-sm text-red-700">Delete</button>
+              </div>
+              {reassigning === reg.id && (
+                <div className="mt-3 space-y-3 rounded-lg bg-warm-white p-3">
+                  <label className="block text-xs font-medium text-gray-600" htmlFor={`mobile-course-${reg.id}`}>Course</label>
+                  <select id={`mobile-course-${reg.id}`} defaultValue={reg.course?.id || ""} className="min-h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-navy">
+                    {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
+                  </select>
+                  <label className="block text-xs font-medium text-gray-600" htmlFor={`mobile-schedule-${reg.id}`}>Schedule</label>
+                  <select id={`mobile-schedule-${reg.id}`} defaultValue={reg.schedule?.id || ""} className="min-h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-navy">
+                    {schedules.map((schedule) => <option key={schedule.id} value={schedule.id} disabled={scheduleDisabled(schedule) && schedule.id !== reg.schedule?.id}>Schedule {schedule.group}: {schedule.session} ({schedule.startTime}–{schedule.endTime})</option>)}
+                  </select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => { const courseEl = document.getElementById(`mobile-course-${reg.id}`) as HTMLSelectElement | null; const scheduleEl = document.getElementById(`mobile-schedule-${reg.id}`) as HTMLSelectElement | null; if (courseEl && scheduleEl) reassign(reg.id, courseEl.value, scheduleEl.value); }} disabled={reassigning === reg.id} className="action-primary disabled:opacity-50">Save move</button>
+                    <button onClick={() => setReassigning(null)} className="action-secondary">Cancel</button>
+                  </div>
+                  {reassignError && <p className="break-words text-xs text-red-600">{reassignError}</p>}
+                </div>
+              )}
+            </article>
+          ))}
+          {registrations.length === 0 && <div className="py-10 text-center text-sm text-gray-500">No registrations found.</div>}
+          {totalCount > 100 && <div className="flex items-center justify-between gap-2 py-3"><p className="text-xs text-gray-500">{skip + 1}–{Math.min(skip + registrations.length, totalCount)} of {totalCount}</p><div className="flex gap-4"><button onClick={() => setSkip((value) => Math.max(0, value - 100))} disabled={skip === 0} className="min-h-11 px-1 text-xs font-medium text-navy underline underline-offset-4 disabled:opacity-40">Previous</button><button onClick={() => setSkip((value) => value + 100)} disabled={skip + registrations.length >= totalCount} className="min-h-11 px-1 text-xs font-medium text-navy underline underline-offset-4 disabled:opacity-40">Next</button></div></div>}
+        </div>
+        <div className="mt-4 hidden overflow-x-auto xl:block">
+          <table className="w-full min-w-[1080px] text-left text-sm">
+            <thead>
               <tr>
                 <th className="px-4 py-3 font-medium text-gray-500">Student name</th>
                 <th className="px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Email</th>
@@ -395,7 +446,7 @@ export default function AdminRegistrations() {
                 <th className="px-4 py-3 font-medium text-gray-500">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {registrations.map((reg) => (
                 <tr key={reg.id} className="hover:bg-gray-50/50">
                   <td className="px-4 py-3">
@@ -410,7 +461,7 @@ export default function AdminRegistrations() {
                     })}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${reg.paymentProofStatus === "PENDING_REVIEW" ? "bg-yellow-100 text-yellow-700" : reg.paymentProofStatus === "APPROVED" ? "bg-green-100 text-green-700" : reg.paymentProofStatus === "REJECTED" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-400"}`}>
+                    <span className={`text-xs font-medium ${reg.paymentProofStatus === "PENDING_REVIEW" ? "text-amber-700" : reg.paymentProofStatus === "APPROVED" ? "text-green-700" : reg.paymentProofStatus === "REJECTED" ? "text-red-700" : "text-gray-500"}`}>
                       {reg.paymentProofStatus === "NOT_SUBMITTED" ? "—" : reg.paymentProofStatus.replace(/_/g, " ")}
                     </span>
                     {reg.paymentProofNote && (
@@ -420,7 +471,7 @@ export default function AdminRegistrations() {
                   <td className="px-4 py-3 hidden sm:table-cell">
                     {reg.payments[0] ? (
                       <div>
-                        <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${PAYMENT_STATUS_COLORS[reg.payments[0].status] || "bg-gray-100 text-gray-600"}`}>
+                        <span className={`text-xs font-medium ${PAYMENT_STATUS_COLORS[reg.payments[0].status] || "text-gray-600"}`}>
                           {reg.payments[0].status}
                         </span>
                         <p className="mt-1 text-xs text-gray-500">
@@ -430,7 +481,7 @@ export default function AdminRegistrations() {
                     ) : <span className="text-xs text-gray-400">No payment</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_COLORS[reg.status] || "bg-gray-100 text-gray-600"}`}>
+                    <span className={`text-xs font-medium ${STATUS_COLORS[reg.status] || "text-gray-600"}`}>
                       {reg.status === "PAID" ? "ENROLLED" : reg.status}
                     </span>
                   </td>
@@ -439,7 +490,7 @@ export default function AdminRegistrations() {
                       {reg.paymentProofPath && (
                         <button
                           onClick={() => viewScreenshot(reg.id, reg.fullName, reg.paymentProofPath!)}
-                          className="rounded-lg border border-blue-200 px-2.5 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-50 sm:mr-2 sm:px-3 sm:py-1.5 sm:text-sm"
+                          className="min-h-10 px-1 text-xs font-medium text-blue-700 transition-colors hover:text-blue-900 sm:mr-2 sm:text-sm"
                         >
                           View Screenshot
                         </button>
@@ -449,36 +500,36 @@ export default function AdminRegistrations() {
                           <button
                             onClick={() => reviewRegistration(reg.id, "APPROVED")}
                             disabled={reviewing === reg.id}
-                            className="rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-700 transition-colors hover:bg-green-50 disabled:opacity-50 sm:mr-2 sm:px-3 sm:py-1.5 sm:text-sm"
+                            className="min-h-10 px-1 text-xs font-medium text-green-700 transition-colors hover:text-green-900 disabled:opacity-50 sm:mr-2 sm:text-sm"
                           >
                             {reviewing === reg.id ? "Approving..." : "Approve"}
                           </button>
                           <button
                             onClick={() => { setRejectingId(reg.id); setRejectNote(""); }}
-                            className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 sm:px-3 sm:py-1.5 sm:text-sm"
+                            className="min-h-10 px-1 text-xs font-medium text-red-700 transition-colors hover:text-red-900 sm:text-sm"
                           >
                             Reject
                           </button>
                         </>
                       )}
-                      {(reg.paymentProofStatus === "NOT_SUBMITTED" || reg.paymentProofStatus === "REJECTED") && reg.status === "PENDING" && (!reg.payments.length || reg.payments.some((payment) => payment.status === "SUCCESS")) && (
+                      {(reg.paymentProofStatus === "NOT_SUBMITTED" || reg.paymentProofStatus === "REJECTED") && reg.status === "PENDING" && reg.payments.some((payment) => payment.status === "SUCCESS") && (
                         <button
                           onClick={() => void confirmRegistration(reg.id)}
                           disabled={confirming === reg.id}
-                          className="rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-700 transition-colors hover:bg-green-50 sm:mr-2 sm:px-3 sm:py-1.5 sm:text-sm"
+                          className="min-h-10 px-1 text-xs font-medium text-green-700 transition-colors hover:text-green-900 sm:mr-2 sm:text-sm"
                         >
                           {confirming === reg.id ? "Confirming..." : "Confirm"}
                         </button>
                       )}
                       <button
                         onClick={() => setReassigning(reassigning === reg.id ? null : reg.id)}
-                        className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-navy transition-colors hover:bg-gray-50 sm:mr-2 sm:px-3 sm:py-1.5 sm:text-sm"
+                        className="min-h-10 px-1 text-xs font-medium text-navy transition-colors hover:text-gold sm:mr-2 sm:text-sm"
                       >
                         Move
                       </button>
                       <button
                         onClick={() => setDeleteConfirm(reg.id)}
-                        className="rounded-lg border border-red-100 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 sm:px-3 sm:py-1.5 sm:text-sm"
+                        className="min-h-10 px-1 text-xs font-medium text-red-700 transition-colors hover:text-red-900 sm:text-sm"
                       >
                         Delete
                       </button>
@@ -529,13 +580,13 @@ export default function AdminRegistrations() {
                               if (courseEl && scheduleEl) reassign(reg.id, courseEl.value, scheduleEl.value);
                             }}
                             disabled={reassigning === reg.id}
-                            className="rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-gold-hover disabled:opacity-50"
+                            className="action-primary disabled:opacity-50"
                           >
                             Save
                           </button>
                           <button
                             onClick={() => setReassigning(null)}
-                            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                            className="action-secondary"
                           >
                             Cancel
                           </button>
@@ -552,7 +603,7 @@ export default function AdminRegistrations() {
             <div className="py-12 text-center text-sm text-gray-400">No registrations found.</div>
           )}
           {totalCount > 100 && (
-            <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3">
+            <div className="flex items-center justify-between px-1 py-3">
               <p className="text-xs text-gray-500">
                 Showing {skip + 1}–{Math.min(skip + registrations.length, totalCount)} of {totalCount}
               </p>
@@ -577,12 +628,13 @@ export default function AdminRegistrations() {
             </div>
           )}
         </div>
+        </>
       )}
 
       {/* Add Student modal */}
       {addOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-2 sm:items-center sm:p-4">
+          <div className="max-h-[calc(100dvh-1rem)] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-4 shadow-xl sm:max-h-[92dvh] sm:rounded-xl sm:p-6">
             {created ? (
               /* Success view */
               <div className="text-center">
@@ -611,7 +663,7 @@ export default function AdminRegistrations() {
                 </div>
                 <button
                   onClick={closeAddModal}
-                  className="mt-5 w-full rounded-lg bg-gold px-5 py-3 text-sm font-bold text-navy transition-colors hover:bg-gold-hover"
+                  className="action-primary mt-5 w-full"
                 >
                   Done
                 </button>
@@ -624,7 +676,7 @@ export default function AdminRegistrations() {
                     <h2 className="text-lg font-bold text-navy">Add Student</h2>
                     <p className="text-xs text-gray-400">Manually enroll a student who registered outside the website.</p>
                   </div>
-                  <button onClick={closeAddModal} className="text-gray-400 hover:text-gray-600" aria-label="Close">✕</button>
+                  <button onClick={closeAddModal} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100" aria-label="Close">✕</button>
                 </div>
                 {addError && (
                   <div className="mb-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">{addError}</div>
@@ -708,14 +760,14 @@ export default function AdminRegistrations() {
                   <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
                     Confirmed registrations are enrolled and count toward the selected schedule capacity.
                   </p>
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button type="button" onClick={closeAddModal} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">
+                  <div className="grid grid-cols-2 gap-2 pt-2 sm:flex sm:justify-end sm:gap-3">
+                    <button type="button" onClick={closeAddModal} className="action-secondary">
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={addSaving}
-                      className="inline-flex items-center gap-2 rounded-lg bg-gold px-5 py-2 text-sm font-semibold text-navy transition-colors hover:bg-gold-hover disabled:opacity-50"
+                      className="action-primary inline-flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       {addSaving && <Loader2 size={14} className="animate-spin" />}
                       {addSaving ? "Adding..." : "Add Student"}
@@ -730,13 +782,13 @@ export default function AdminRegistrations() {
 
       {/* Delete confirmation dialog */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="rounded-xl bg-white p-6 shadow-xl w-full max-w-md">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-2 sm:items-center sm:p-4">
+          <div className="max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-xl sm:rounded-xl sm:p-6">
             <div className="flex items-start justify-between gap-2">
               <h2 className="text-lg font-bold text-navy">Delete student?</h2>
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="text-gray-400 hover:text-gray-600" aria-label="Close"
+                className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100" aria-label="Close"
               >
                 ✕
               </button>
@@ -748,17 +800,17 @@ export default function AdminRegistrations() {
               </span>
               ? This will remove their registration, payment proof, and all related records. This action cannot be undone.
             </p>
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="mt-6 grid grid-cols-2 gap-2 sm:flex sm:justify-end sm:gap-3">
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                className="action-secondary"
               >
                 Cancel
               </button>
               <button
                 onClick={() => void deleteRegistration(deleteConfirm!)}
                 disabled={deleting === deleteConfirm}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                className="action-destructive disabled:opacity-50"
               >
                 {deleting === deleteConfirm ? <Loader2 size={14} className="animate-spin mr-2" /> : "Delete"}
               </button>
@@ -769,13 +821,13 @@ export default function AdminRegistrations() {
 
       {/* View Screenshot dialog */}
       {viewingProof && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 sm:p-6">
-          <div className="relative rounded-xl bg-white p-4 sm:p-6 shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col sm:flex-row">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-2 sm:p-6">
+          <div className="relative flex max-h-[96dvh] w-full max-w-2xl flex-col overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:max-h-[90dvh] sm:rounded-xl sm:p-6">
             <div className="flex items-start justify-between gap-2 mb-4 sm:mb-6">
               <h2 className="text-lg font-bold text-navy">Payment Screenshot</h2>
               <button
                 onClick={() => setViewingProof(null)}
-                className="text-gray-400 hover:text-white" aria-label="Close"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100" aria-label="Close"
               >
                 ✕
               </button>
@@ -783,18 +835,18 @@ export default function AdminRegistrations() {
             <p className="text-sm text-gray-600 mb-3 sm:mb-4">
               Student: <span className="font-medium text-navy">{viewingProof.name}</span>
             </p>
-            <div className="flex-1 relative bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center min-h-[300px] max-h-[60vh] sm:max-h-none sm:w-[60%]">
+            <div className="relative flex h-[48dvh] min-h-48 max-h-[68dvh] items-center justify-center overflow-hidden rounded-lg bg-gray-100">
               <img
                 src={`/api/admin/registrations/${viewingProof.id}/payment-proof`}
                 alt={`Payment screenshot for ${viewingProof.name}`}
-                className="max-w-full max-h-full object-contain block"
+                className="block max-h-full max-w-full object-contain"
                 loading="lazy"
               />
             </div>
-            <div className="mt-4 sm:mt-6 flex justify-end sm:ml-auto">
+            <div className="mt-4 flex justify-end sm:mt-6">
               <button
                 onClick={() => setViewingProof(null)}
-                className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-navy/80 sm:px-5 sm:py-2.5"
+                className="action-secondary"
               >
                 Close
               </button>
@@ -805,13 +857,13 @@ export default function AdminRegistrations() {
 
       {/* Reject confirmation dialog */}
       {rejectingId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="rounded-xl bg-white p-6 shadow-xl w-full max-w-md">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-2 sm:items-center sm:p-4">
+          <div className="max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-xl sm:rounded-xl sm:p-6">
             <div className="flex items-start justify-between gap-2">
               <h2 className="text-lg font-bold text-navy">Reject Payment Screenshot</h2>
               <button
                 onClick={() => setRejectingId(null)}
-                className="text-gray-400 hover:text-gray-600" aria-label="Close"
+                className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100" aria-label="Close"
               >
                 ✕
               </button>
@@ -835,17 +887,17 @@ export default function AdminRegistrations() {
                 placeholder="Reason for rejection..."
               />
             </div>
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="mt-6 grid grid-cols-2 gap-2 sm:flex sm:justify-end sm:gap-3">
               <button
                 onClick={() => setRejectingId(null)}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                className="action-secondary"
               >
                 Cancel
               </button>
               <button
                 onClick={() => void reviewRegistration(rejectingId!, "REJECTED")}
                 disabled={reviewing === rejectingId}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                className="action-destructive disabled:opacity-50"
               >
                 {reviewing === rejectingId ? <Loader2 size={14} className="animate-spin mr-2" /> : "Reject"}
               </button>

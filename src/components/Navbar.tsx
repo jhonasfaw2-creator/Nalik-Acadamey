@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/cn";
-import { ArrowRight, Phone } from "lucide-react";
+import { ArrowRight, Phone, Search, X } from "lucide-react";
 
 interface NavbarProps {
   onApplyClick: () => void;
@@ -20,6 +21,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("#home");
+  const [logoZoomOpen, setLogoZoomOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -71,7 +73,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
         className={cn(
           "fixed top-0 left-0 right-0 z-50 transition-colors duration-500",
           scrolled
-            ? "bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
+            ? "bg-white"
             : "bg-transparent"
         )}
       >
@@ -82,14 +84,18 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
             onClick={(e) => { e.preventDefault(); handleNavClick("#home"); }}
             className="flex items-center gap-3 group"
           >
-            <div className="relative">
-              <img
-                src="/assets/logo.jpeg"
-                alt="Nalik Academy"
-                className="h-10 w-10 rounded-lg object-cover"
-              />
-            </div>
-            <div className="hidden sm:block">
+              <div className="relative h-10 w-10">
+                <Image
+                  src="/assets/logo.jpeg"
+                  alt="Nalik Academy"
+                  className="rounded-lg object-cover"
+                  fill
+                  sizes="40px"
+                  priority
+                />
+              </div>
+
+            <div>
               <span
                 className={cn(
                   "block text-[15px] font-bold tracking-tight leading-tight transition-colors duration-300",
@@ -111,7 +117,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
                   href={link.href}
                   onClick={(e) => { e.preventDefault(); handleNavClick(link.href); }}
                   className={cn(
-                    "px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.16em] transition-all duration-300 focus-visible:underline",
+                    "min-h-11 px-3 py-2 text-sm font-medium transition-colors focus-visible:underline",
                     isActive
                       ? "text-gold"
                       : scrolled
@@ -140,7 +146,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
 
             <button
               onClick={handleApply}
-              className="btn-gold group relative overflow-hidden rounded-lg bg-gold px-5 py-2.5 text-[13px] font-bold uppercase tracking-wider text-navy focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+              className="action-primary btn-gold group relative overflow-hidden inline-flex items-center justify-center"
             >
               <span className="relative z-10 flex items-center gap-1.5">
                 Apply Now <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
@@ -160,6 +166,8 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
                   : "text-white hover:bg-white/10"
             )}
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-site-menu"
           >
             <div className="relative h-5 w-5">
               <span
@@ -205,8 +213,9 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
 
         {/* Menu content */}
         <div
+          id="mobile-site-menu"
           className={cn(
-            "relative flex h-full flex-col items-center justify-center gap-2",
+            "relative flex h-full flex-col items-center justify-center gap-1 px-6 pb-[env(safe-area-inset-bottom)] pt-16",
             "transition-all duration-500",
             mobileOpen ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"
           )}
@@ -219,7 +228,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
                 href={link.href}
                 onClick={(e) => { e.preventDefault(); handleNavClick(link.href); }}
                 className={cn(
-                  "text-3xl font-bold tracking-tight transition-all duration-300 focus-visible:underline",
+                  "flex min-h-12 items-center text-2xl font-bold tracking-tight transition-all duration-300 focus-visible:underline sm:text-3xl",
                   isActive ? "text-gold" : "text-white/70 hover:text-white",
                   mobileOpen ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
                 )}
@@ -233,7 +242,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
           <button
             onClick={handleApply}
             className={cn(
-              "mt-6 inline-flex items-center gap-2 rounded-lg bg-gold px-8 py-3.5 text-base font-bold text-navy transition-colors duration-300 hover:bg-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-navy",
+              "action-primary mt-4 inline-flex items-center justify-center gap-2",
               mobileOpen ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
             )}
             style={{ transitionDelay: mobileOpen ? "500ms" : "0ms" }}
@@ -244,7 +253,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
           <a
             href="tel:+251911223344"
             className={cn(
-              "mt-4 flex items-center gap-2 text-sm text-white/40 transition-all duration-300 focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-navy",
+              "mt-2 flex min-h-11 items-center gap-2 text-sm text-white/60 transition-all duration-300 focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-navy",
               mobileOpen ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
             )}
             style={{ transitionDelay: mobileOpen ? "560ms" : "0ms" }}

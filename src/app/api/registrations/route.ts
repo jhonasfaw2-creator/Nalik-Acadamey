@@ -5,16 +5,12 @@ import type { Prisma } from "@prisma/client";
 import { registrationSchema } from "@/lib/validators";
 import { generateUniqueReferenceId } from "@/lib/reference";
 import { checkAndIncrement } from "@/lib/rateLimit";
-import {
-  generateMerchantReference,
-  normalizeEthiopianPhone,
-  toChapaMinorUnits,
-} from "@/lib/payments/chapa";
+import { normalizeEthiopianPhone } from "@/lib/payments/phone";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// POST /api/registrations — create a pending registration and payment together.
+// POST /api/registrations — create a pending registration and bank-payment record together.
 export async function POST(request: NextRequest) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   if (!checkAndIncrement(`registration:${ip}`, 10, 60 * 1000)) {
@@ -56,8 +52,6 @@ export async function POST(request: NextRequest) {
     const referenceId = await generateUniqueReferenceId(async (id) =>
       Boolean(await prisma.registration.findUnique({ where: { referenceId: id }, select: { id: true } })),
     );
-    const merchantReference = generateMerchantReference();
-
     const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const existing = await tx.registration.findFirst({
         where: {
@@ -93,8 +87,10 @@ export async function POST(request: NextRequest) {
         (!course.discountStartAt || course.discountStartAt <= now) &&
         (!course.discountEndAt || course.discountEndAt >= now);
       const amountInBirr = discountActive ? (course.discountPrice ?? course.price) : course.price;
-      const amount = toChapaMinorUnits(amountInBirr);
-      if (amount === null) throw new Error("COURSE_NOT_PAYABLE");
+      const amount = amountInBirr * 100;
+      if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 2_147_483_647) {
+        throw new Error("COURSE_NOT_PAYABLE");
+      }
 
       const registration = await tx.registration.create({
         data: {
@@ -111,25 +107,23 @@ export async function POST(request: NextRequest) {
         },
         select: { id: true, referenceId: true },
       });
-      const payment = await tx.payment.create({
+      await tx.payment.create({
         data: {
           registrationId: registration.id,
-          merchantReference,
+          merchantReference: `BANK-${referenceId}`,
           amount,
           currency: "ETB",
           status: "PENDING",
         },
-        select: { id: true },
       });
 
-      return { registration, payment };
+      return registration;
     });
 
     return NextResponse.json(
       {
         success: true,
-        referenceId: result.registration.referenceId,
-        paymentId: result.payment.id,
+        referenceId: result.referenceId,
       },
       { status: 201 },
     );
@@ -143,7 +137,7 @@ export async function POST(request: NextRequest) {
         COURSE_NOT_FOUND: { error: "Course not found", status: 404 },
         COURSE_UNAVAILABLE: { error: "This course is not available", status: 400 },
         COURSE_NOT_PAYABLE: {
-          error: "This course price is outside Chapa's supported payment range. Please contact the academy.",
+          error: "This course payment amount is invalid. Please contact the academy.",
           status: 400,
         },
         SCHEDULE_REQUIRED: {
@@ -165,7 +159,7 @@ export async function POST(request: NextRequest) {
         { status: 409 },
       );
     }
-    console.error("Registration and pending payment creation failed:", error);
+    console.error("Registration and pending payment record creation failed:", error);
     return NextResponse.json(
       { error: "Registration failed. Please try again." },
       { status: 500 },

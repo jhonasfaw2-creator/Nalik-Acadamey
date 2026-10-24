@@ -8,12 +8,6 @@ import {
   CheckCircle2,
   Clock3,
   XCircle,
-  AlertCircle,
-  CalendarDays,
-  GraduationCap,
-  User,
-  Hash,
-  School,
   Copy,
   Check,
 } from "lucide-react";
@@ -50,15 +44,13 @@ export default function RegistrationDetails({ registration, highlightReference =
     }
   };
 
-  const rows: { icon: React.ReactNode; label: string; value: React.ReactNode; strong?: boolean }[] = [
+  const rows: { label: string; value: React.ReactNode; strong?: boolean }[] = [
     {
-      icon: <User size={15} className="text-gold" />,
       label: "Student",
       value: registration.fullName,
       strong: true,
     },
     {
-      icon: <School size={15} className="text-gold" />,
       label: "Course",
       value: registration.course || "To be confirmed",
     },
@@ -66,12 +58,10 @@ export default function RegistrationDetails({ registration, highlightReference =
 
   if (registration.scheduleDays || registration.startTime) {
     rows.push({
-      icon: <CalendarDays size={15} className="text-gold" />,
       label: "Schedule days",
       value: registration.scheduleDays ? formatDays(registration.scheduleDays) : "To be confirmed",
     });
     rows.push({
-      icon: <Clock3 size={15} className="text-gold" />,
       label: "Class time",
       value:
         registration.startTime && registration.endTime
@@ -84,7 +74,6 @@ export default function RegistrationDetails({ registration, highlightReference =
 
   if (registration.startDate) {
     rows.push({
-      icon: <GraduationCap size={15} className="text-gold" />,
       label: "Start date",
       value: formatDate(registration.startDate),
     });
@@ -92,13 +81,12 @@ export default function RegistrationDetails({ registration, highlightReference =
 
   rows.push(
     {
-      icon: <Hash size={15} className="text-gold" />,
       label: "Registration ID",
       value: (
         <button
           type="button"
           onClick={copyReference}
-          className="group inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 -mx-1.5 font-mono text-sm font-semibold text-gold transition-colors hover:bg-gold/10"
+          className="group inline-flex min-h-11 max-w-full items-center gap-1.5 break-all rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold text-gold transition-colors hover:bg-gold/10 sm:text-sm"
           title="Copy registration ID"
         >
           {registration.referenceId}
@@ -108,7 +96,6 @@ export default function RegistrationDetails({ registration, highlightReference =
       strong: highlightReference,
     },
     {
-      icon: <GraduationCap size={15} className="text-gold" />,
       label: "Registration status",
       value: <StatusPill label={state.label} tone={state.tone} />,
     }
@@ -122,13 +109,11 @@ export default function RegistrationDetails({ registration, highlightReference =
           ? "failed"
           : "pending";
     rows.push({
-      icon: <CheckCircle2 size={15} className="text-gold" />,
       label: "Payment proof",
       value: <StatusPill label={registration.paymentProofStatus.replace(/_/g, " ")} tone={proofTone} />,
     });
     if (registration.paymentProofNote && registration.paymentProofStatus === "REJECTED") {
       rows.push({
-        icon: <AlertCircle size={15} className="text-gold" />,
         label: "Admin note",
         value: registration.paymentProofNote,
       });
@@ -136,14 +121,11 @@ export default function RegistrationDetails({ registration, highlightReference =
   }
 
   return (
-    <div className="divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 bg-white text-left">
+    <div className="space-y-2 bg-white text-left">
       {rows.map((row) => (
-        <div key={row.label} className="flex items-start justify-between gap-4 px-5 py-3.5">
-          <span className="flex shrink-0 items-center gap-2 text-sm text-gray-500">
-            {row.icon}
-            {row.label}
-          </span>
-          <span className={`text-right text-sm ${row.strong ? "font-semibold text-navy" : "font-medium text-navy"}`}>
+        <div key={row.label} className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] items-start gap-2 px-3 py-3 sm:flex sm:justify-between sm:gap-4 sm:px-5 sm:py-3.5">
+          <span className="min-w-0 text-xs leading-5 text-gray-500 sm:text-sm">{row.label}</span>
+          <span className={`min-w-0 break-words text-right text-sm ${row.strong ? "font-semibold text-navy" : "font-medium text-navy"}`}>
             {row.value}
           </span>
         </div>
@@ -161,13 +143,13 @@ function sessionLabel(session: RegistrationSummary["scheduleSession"]): string {
 export function StatusPill({ label, tone }: { label: string; tone: "success" | "pending" | "failed" }) {
   const styles =
     tone === "success"
-      ? "bg-green-50 text-green-700 border-green-200"
+      ? "text-green-700"
       : tone === "pending"
-        ? "bg-amber-50 text-amber-700 border-amber-200"
-        : "bg-red-50 text-red-700 border-red-200";
+        ? "text-amber-700"
+        : "text-red-700";
   const Icon = tone === "success" ? CheckCircle2 : tone === "pending" ? Clock3 : XCircle;
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${styles}`}>
+    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${styles}`}>
       <Icon size={13} />
       {label}
     </span>

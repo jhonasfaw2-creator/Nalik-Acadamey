@@ -1,10 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Film, Palette, SlidersHorizontal, Award } from "lucide-react";
-
-const ICONS = [Film, Palette, SlidersHorizontal, Award];
-
 const DEFAULTS = {
   badge: "Our Programs",
   title: "What you get when you join Nalik Academy.",
@@ -78,25 +74,17 @@ export default function OurPrograms() {
     <section id="our-programs" className="bg-warm-white px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <div ref={headingRef}>
-          <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">{content.badge}</p>
+          <p className="mb-3 text-sm font-medium text-gold">{content.badge}</p>
           <h2 className="max-w-2xl text-3xl font-bold leading-snug text-navy sm:text-4xl">{content.title}</h2>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-gray-600">{content.description}</p>
         </div>
-        <div ref={gridRef} className="mt-12 grid gap-6 sm:grid-cols-2">
-          {content.programs.map((item, i) => {
-            const Icon = ICONS[i] || Film;
-            return (
-              <div key={item.title} className="group rounded-lg border border-gray-200 bg-white p-6">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gold/10 text-gold transition-colors duration-300 group-hover:bg-gold/20"><Icon size={20} /></div>
-                  <div>
-                    <h3 className="text-lg font-bold text-navy">{item.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-gray-600">{item.text}</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        <div ref={gridRef} className="mt-12 grid gap-x-12 gap-y-9 sm:grid-cols-2">
+          {content.programs.map((item) => (
+            <article key={item.title} className="max-w-xl">
+              <h3 className="text-lg font-semibold text-navy">{item.title}</h3>
+              <p className="mt-2 text-base leading-7 text-gray-600">{item.text}</p>
+            </article>
+          ))}
         </div>
       </div>
     </section>

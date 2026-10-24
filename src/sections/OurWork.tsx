@@ -3,9 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Play } from "lucide-react";
 
-const YOUTUBE_ICON =
-  "M23.498 6.186a3.016 3.016 0 0 0-4.242-1.506A3.016 3.016 0 0 0 15.75 6.186a3.016 3.016 0 0 0-4.242 1.506 3.016 3.016 0 0 0 1.506 4.242 3.016 3.016 0 0 0 4.242 1.506 3.016 3.016 0 0 0 1.506-4.242 3.016 3.016 0 0 0-1.506-4.242zM9.75 14.25a2.25 2.25 0 0 0 0 4.5 2.25 2.25 0 0 0 0-4.5zM21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z";
-
 const ARROW_ICON =
   "M13.72 13.42a1.43 1.43 0 0 1-1.84 0l-5.8-5.8a1.43 1.43 0 0 1 0-2.04l5.8-5.8a1.43 1.43 0 0 1 2.04 2.04L7.08 8.72a1.43 1.43 0 0 1 0 2.04l5.8 5.8a1.43 1.43 0 0 1-1.84 1.84l-2.46-2.46a1.43 1.43 0 0 1 0-2.04l2.46-2.46a1.43 1.43 0 0 1 2.04 0l5.8 5.8a1.43 1.43 0 0 1 0 2.04l-5.8 5.8a1.43 1.43 0 0 1-1.84-1.84l2.46-2.46a1.43 1.43 0 0 1 0-2.04z";
 
@@ -14,7 +11,6 @@ interface PortfolioProject {
   title: string;
   platform: "YouTube" | "Reel";
   description?: string;
-  skills?: string[];
   thumbnailUrl: string;
   videoUrl?: string;
   youtubeId?: string;
@@ -27,8 +23,7 @@ const LONG_FORM_PROJECTS: PortfolioProject[] = [
     title: "በ 17 አመቴ የራሴን ብራንድ መሰረትኩ 🤩 / Clothing Brand",
     platform: "YouTube",
     description:
-      "A founder-story vlog following a 17-year-old launching his own clothing brand: interview beats, b-roll, and music cuts timed to carry the story from first idea to first drop.",
-    skills: ["Storytelling", "Pacing", "Sound Design", "Colour Grading"],
+      "A founder story following a 17-year-old from the first idea to the launch of his clothing brand.",
     thumbnailUrl: "https://i.ytimg.com/vi/sncn1ALnzW8/hqdefault.jpg",
     youtubeId: "sncn1ALnzW8",
     linkUrl: "https://youtu.be/sncn1ALnzW8",
@@ -38,8 +33,7 @@ const LONG_FORM_PROJECTS: PortfolioProject[] = [
     title: "48 Hours in Arba Minch 🐊",
     platform: "YouTube",
     description:
-      "A 48-hour travel vlog from Arba Minch, with fast location cuts, music-synced transitions, and pacing that turns raw trip footage into a story viewers finish to the end.",
-    skills: ["Storytelling", "Transitions", "Music Sync", "Pacing"],
+      "A two-day trip through Arba Minch, shaped into a fast-moving travel story.",
     thumbnailUrl: "https://i.ytimg.com/vi/5LEJMiHsOAs/hqdefault.jpg",
     youtubeId: "5LEJMiHsOAs",
     linkUrl: "https://youtu.be/5LEJMiHsOAs",
@@ -49,8 +43,7 @@ const LONG_FORM_PROJECTS: PortfolioProject[] = [
     title: "ልብስ ሸመታ ከጀማው ጋር ft. Nahom Astu",
     platform: "YouTube",
     description:
-      "A community give-back edit with Nahom Astu: multi-cam interview and street footage cut around the moment clothes change hands, with captions and sound design carrying the emotion.",
-    skills: ["Multi-cam", "Captions", "Sound Design", "Storytelling"],
+      "A community give-back with Nahom Astu, captured through interviews and street footage.",
     thumbnailUrl: "https://i.ytimg.com/vi/OJpFNPgr06Q/hqdefault.jpg",
     youtubeId: "OJpFNPgr06Q",
     linkUrl: "https://youtu.be/OJpFNPgr06Q",
@@ -97,43 +90,23 @@ export default function SelectedWork() {
     >
       <div className="mx-auto max-w-7xl">
         <div ref={headingRef} className="max-w-2xl">
-          <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">
+          <p className="mb-3 text-sm font-medium text-gold">
             Selected Work
           </p>
           <h2 className="hero-title text-3xl font-bold leading-snug text-navy sm:text-4xl">
-            Editing, by format.
+            Selected video projects
           </h2>
           <p className="mt-4 hero-desc text-base leading-relaxed text-gray-600">
-            A curated selection of long-form work. Each piece is a full cut, not a highlight
-            reel. Thumbnails only; the player loads on demand.
+            A few stories brought to life through editing. Select a video to watch.
           </p>
         </div>
 
-        {/* Featured: first cut leads, two more follow */}
+        {/* Equal project cards keep the portfolio easy to scan. */}
         <div className="mt-12">
-          <SectionLabel
-            title="Some of his work"
-            subtitle="YouTube · Story, pacing, and retention."
-            color="navy"
-          />
-          <div className="mt-6 grid gap-6 lg:grid-cols-3">
-            <WorkCard
-              project={LONG_FORM_PROJECTS[0]}
-              index={0}
-              total={LONG_FORM_PROJECTS.length}
-              featured
-              className="lg:col-span-2"
-            />
-            <div className="flex flex-col gap-6">
-              {LONG_FORM_PROJECTS.slice(1).map((project, i) => (
-                <WorkCard
-                  key={project.id}
-                  project={project}
-                  index={i + 1}
-                  total={LONG_FORM_PROJECTS.length}
-                />
-              ))}
-            </div>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-6">
+            {LONG_FORM_PROJECTS.map((project) => (
+              <WorkCard key={project.id} project={project} />
+            ))}
           </div>
         </div>
 
@@ -142,45 +115,17 @@ export default function SelectedWork() {
   );
 }
 
-function SectionLabel({
-  title,
-  subtitle,
-  color,
-}: {
-  title: string;
-  subtitle: string;
-  color: "navy" | "gold";
-}) {
-  return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-3">
-        <h3 className="text-xl font-semibold tracking-tight text-navy sm:text-2xl">{title}</h3>
-      </div>
-      {subtitle && <p className="text-sm text-gray-500 sm:text-right">{subtitle}</p>}
-    </div>
-  );
-}
-
 function WorkCard({
   project,
-  index,
-  total,
-  featured = false,
   className = "",
 }: {
   project: PortfolioProject;
-  index: number;
-  total: number;
-  featured?: boolean;
   className?: string;
 }) {
   const [showPlayer, setShowPlayer] = useState(false);
-  const delay = `${(index % total) * 0.08}s`;
-
   return (
     <article
       className={`group reveal-child relative flex flex-col overflow-hidden rounded-lg bg-white transition-colors duration-300 ${className}`}
-      style={{ transitionDelay: delay }}
     >
       <div className="relative aspect-video overflow-hidden bg-navy">
         {showPlayer ? (
@@ -189,11 +134,10 @@ function WorkCard({
           <VideoThumb
             project={project}
             onPlay={() => setShowPlayer(true)}
-            featured={featured}
           />
         )}
       </div>
-      <WorkMeta project={project} index={index} total={total} featured={featured} />
+      <WorkMeta project={project} />
     </article>
   );
 }
@@ -201,15 +145,12 @@ function WorkCard({
 function VideoThumb({
   project,
   onPlay,
-  featured,
 }: {
   project: PortfolioProject;
   onPlay: () => void;
-  featured: boolean;
 }) {
-  const isYouTube = project.platform === "YouTube";
-  const playSize = featured ? "h-14 w-14" : "h-12 w-12";
-  const iconSize = featured ? 22 : 18;
+  const playSize = "h-12 w-12";
+  const iconSize = 18;
 
   return (
     <>
@@ -232,25 +173,7 @@ function VideoThumb({
         </button>
       </div>
 
-      {/* Platform pill */}
-      <div className="absolute left-4 top-4 flex items-center gap-1.5 rounded bg-white px-2.5 py-1 text-xs font-semibold text-navy">
-        <span
-          className={`inline-flex h-2 w-2 rounded-full ${isYouTube ? "bg-red-600" : "bg-gold"}`}
-          aria-hidden="true"
-        />
-        {isYouTube && (
-          <svg
-            className="h-[11px] w-[11px] shrink-0 text-navy"
-            aria-hidden="true"
-            focusable="false"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-          >
-            <path d={YOUTUBE_ICON} />
-          </svg>
-        )}
-        <span className="text-[11px] uppercase tracking-wide">{project.platform}</span>
-      </div>
+      <span className="absolute left-4 top-4 text-xs font-medium text-white drop-shadow">{project.platform}</span>
     </>
   );
 }
@@ -295,64 +218,19 @@ function VideoPlayer({
 
 function WorkMeta({
   project,
-  index,
-  total,
-  featured,
 }: {
   project: PortfolioProject;
-  index: number;
-  total: number;
-  featured: boolean;
 }) {
-  if (featured) {
-    return (
-      <div className="flex flex-1 flex-col px-6 pb-6 pt-5 sm:px-7 sm:pb-7 sm:pt-6">
-        <div className="flex items-baseline justify-between gap-3">
-          <h4 className="text-xl font-bold leading-snug text-navy sm:text-2xl">
-            {project.title}
-          </h4>
-          <span className="shrink-0 text-xs font-medium tracking-wide text-gray-400 tabular-nums">
-            {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
-          </span>
-        </div>
-
-        <p className="mt-2.5 text-sm leading-relaxed text-gray-600 sm:text-[15px]">
-          {project.description}
-        </p>
-
-        <div className="mt-4 flex flex-wrap gap-1.5">
-          {(project.skills ?? []).slice(0, 4).map((skill) => (
-            <span
-              key={skill}
-              className="rounded border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700"
-            >
-              {skill}
-            </span>
-          ))}
-        </div>
-
-        <div className="mt-auto pt-5">
-          <ProjectLink project={project} />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-1 flex-col px-5 pb-5 pt-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <h4 className="text-base font-semibold leading-snug text-navy">{project.title}</h4>
-        <span className="shrink-0 text-[11px] font-medium tracking-wide text-gray-400 tabular-nums">
-          {String(index + 1).padStart(2, "0")}
-        </span>
-      </div>
+    <div className="flex flex-1 flex-col px-4 pb-5 pt-4 sm:px-5">
+      <h4 className="text-base font-semibold leading-snug text-navy">{project.title}</h4>
       {project.description && (
-        <p className="mt-1.5 text-[13px] leading-relaxed text-gray-600 line-clamp-2">
+        <p className="mt-2 text-sm leading-relaxed text-gray-600">
           {project.description}
         </p>
       )}
       {project.linkUrl && (
-        <div className="mt-auto pt-3">
+        <div className="mt-auto pt-4">
           <ProjectLink project={project} />
         </div>
       )}

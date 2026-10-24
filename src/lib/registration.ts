@@ -69,7 +69,7 @@ export function getRegistrationState(registrationStatus: string): {
   }
   if (registrationStatus === "PENDING") {
     return {
-      label: "PENDING",
+      label: "AWAITING PAYMENT",
       tone: "pending",
     };
   }

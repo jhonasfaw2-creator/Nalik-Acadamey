@@ -118,7 +118,7 @@ export default function About() {
 
         {/* Section header */}
         <div className="mb-16 sm:mb-20">
-          <p className="text-xs font-semibold uppercase tracking-[0.26em] text-gold">
+          <p className="text-sm font-medium text-gold">
             {content.badge}
           </p>
         </div>
@@ -128,7 +128,7 @@ export default function About() {
           {/* Text */}
           <div ref={textRef} className="max-w-2xl">
 
-            <h2 className="text-5xl font-bold leading-[1.02] tracking-tight text-navy sm:text-6xl lg:text-[4rem]">
+            <h2 className="text-[clamp(2.5rem,6vw,3.75rem)] font-semibold leading-[1.08] tracking-tight text-navy">
               {content.title}
             </h2>
 
@@ -139,28 +139,8 @@ export default function About() {
             </div>
 
             {/* Focus line */}
-            <div className="mt-14 border-t border-navy/10 pt-8">
-              <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-navy/50">
-                  Our Focus
-                </span>
-
-                <span className="text-base font-medium text-navy">
-                  Video Editing
-                </span>
-
-                <span className="h-1 w-1 rounded-full bg-gold" />
-
-                <span className="text-base font-medium text-navy">
-                  Visual Storytelling
-                </span>
-
-                <span className="h-1 w-1 rounded-full bg-gold" />
-
-                <span className="text-base font-medium text-navy">
-                  Real Projects
-                </span>
-              </div>
+            <div className="mt-10 max-w-xl text-sm leading-6 text-gray-600 sm:mt-12">
+              <p><span className="font-semibold text-navy">Our focus</span> · Video editing, visual storytelling, and real projects.</p>
             </div>
           </div>
 
@@ -194,13 +174,6 @@ export default function About() {
                 </video>
 
                 <div className="pointer-events-none absolute inset-0 bg-navy/20" />
-
-                {/* Video label */}
-                <div className="absolute left-5 top-5">
-                  <span className="border border-white/30 bg-navy/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
-                    Inside Nalik
-                  </span>
-                </div>
 
                 {/* Sound */}
                 <button

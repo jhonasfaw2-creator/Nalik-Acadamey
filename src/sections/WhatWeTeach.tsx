@@ -1,10 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Film, Image, PenTool, Palette } from "lucide-react";
-
-const ICONS = [Film, Image, PenTool, Palette];
-
 const DEFAULTS = {
   badge: "What We Teach",
   title: "Practical skills. Professional tools. Real projects.",
@@ -82,28 +78,18 @@ export default function WhatWeTeach() {
     <section id="what-we-teach" ref={sectionRef} className="bg-navy px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <div ref={headingRef}>
-          <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-gold">{content.badge}</p>
+          <p className="mb-3 text-sm font-medium text-gold">{content.badge}</p>
           <h2 className="max-w-2xl text-3xl font-bold leading-snug text-white sm:text-4xl">{content.title}</h2>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-white/60">{content.description}</p>
         </div>
 
-        <div ref={gridRef} className="mt-12 grid gap-6 sm:grid-cols-2">
-          {content.tools.map((tool, i) => {
-            const Icon = ICONS[i] || Film;
-            return (
-              <div key={tool.name} className="group rounded-lg border border-white/10 bg-navy-light p-6">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gold/10 text-gold transition-colors duration-300 group-hover:bg-gold/20">
-                    <Icon size={20} />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-white">{tool.name}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-white/60">{tool.description}</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        <div ref={gridRef} className="mt-12 grid gap-x-12 gap-y-9 sm:grid-cols-2">
+          {content.tools.map((tool) => (
+            <article key={tool.name} className="max-w-xl">
+              <h3 className="text-lg font-semibold text-white">{tool.name}</h3>
+              <p className="mt-2 text-base leading-7 text-white/65">{tool.description}</p>
+            </article>
+          ))}
         </div>
       </div>
     </section>

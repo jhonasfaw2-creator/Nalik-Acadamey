@@ -144,13 +144,18 @@ export default function AdminCourses() {
 
   const deleteCourse = async (id: string) => {
     if (!window.confirm("Delete this course?")) return;
-    const res = await fetch(`/api/admin/courses?id=${id}`, { method: "DELETE" });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setActionError(data.error || "Failed to delete course.");
-      return;
+    setActionError("");
+    try {
+      const res = await fetch(`/api/admin/courses?id=${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionError(data.error || "Failed to delete course.");
+        return;
+      }
+      loadCourses();
+    } catch {
+      setActionError("Connection error. The course was not deleted.");
     }
-    loadCourses();
   };
 
   const coursesBySort = useMemo(() => [...courses].sort((a, b) => a.sortOrder - b.sortOrder), [courses]);
@@ -167,58 +172,64 @@ export default function AdminCourses() {
     <div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-navy">Courses</h1>
+          <h1 className="text-[clamp(1.5rem,4vw,2rem)] font-bold leading-tight text-navy">Courses</h1>
           <p className="mt-1 text-sm text-gray-500">Edit pricing, discounts, and availability.</p>
         </div>
         <button
           onClick={() => setEditing(emptyCourse())}
-          className="inline-flex items-center gap-2 rounded-lg bg-gold px-4 py-2.5 text-sm font-semibold text-navy transition-colors hover:bg-gold-hover"
+          className="action-primary inline-flex items-center justify-center gap-2"
         >
           <Plus size={15} /> Add Course
         </button>
       </div>
 
       {error && (
-        <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
+        <div className="mt-4 flex flex-col gap-3 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 sm:flex-row sm:items-center sm:justify-between" role="alert">
+          <span>{error}</span>
+          <button onClick={loadCourses} className="min-h-11 rounded-md bg-red-100 px-4 py-2 text-xs font-medium text-red-700 hover:bg-red-200">Retry</button>
+        </div>
       )}
-      {actionError && (
+      {actionError && !editing && (
         <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{actionError}</div>
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-navy">{editing.id ? "Edit Course" : "New Course"}</h2>
-              <button onClick={() => setEditing(null)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-2 sm:items-center sm:p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="course-editor-title" className="max-h-[calc(100dvh-1rem)] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-2xl bg-white p-4 shadow-xl sm:max-h-[90dvh] sm:rounded-xl sm:p-6">
+          <div className="mb-5 flex items-center justify-between">
+              <h2 id="course-editor-title" className="text-lg font-bold text-navy">{editing.id ? "Edit Course" : "New Course"}</h2>
+              <button onClick={() => setEditing(null)} className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Close course editor"><X size={18} /></button>
             </div>
+
+            {actionError && <p className="mb-4 text-sm text-red-700" role="alert">{actionError}</p>}
 
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Title</label>
-                <input value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none" />
+                <label htmlFor="course-title" className="mb-1 block text-sm font-medium text-gray-700">Title</label>
+                <input id="course-title" value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none" />
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Description</label>
-                <textarea value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value })} rows={4} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none" />
+                <label htmlFor="course-description" className="mb-1 block text-sm font-medium text-gray-700">Description</label>
+                <textarea id="course-description" value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value })} rows={4} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none" />
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Base Price (ETB)</label>
-                  <input type="number" min={0} value={editing.price} onChange={(e) => setEditing({ ...editing, price: Number(e.target.value || 0) })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none" />
+                  <label htmlFor="course-price" className="mb-1 block text-sm font-medium text-gray-700">Base Price (ETB)</label>
+                  <input id="course-price" type="number" min={0} value={editing.price} onChange={(e) => setEditing({ ...editing, price: Number(e.target.value || 0) })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Sort Order</label>
-                  <input type="number" min={0} value={editing.sortOrder} onChange={(e) => setEditing({ ...editing, sortOrder: Number(e.target.value || 0) })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none" />
+                  <label htmlFor="course-sort-order" className="mb-1 block text-sm font-medium text-gray-700">Sort Order</label>
+                  <input id="course-sort-order" type="number" min={0} value={editing.sortOrder} onChange={(e) => setEditing({ ...editing, sortOrder: Number(e.target.value || 0) })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none" />
                 </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Discount Price (ETB)</label>
+                  <label htmlFor="course-discount-price" className="mb-1 block text-sm font-medium text-gray-700">Discount Price (ETB)</label>
                   <input
+                    id="course-discount-price"
                     type="number"
                     min={0}
                     value={editing.discountPrice ?? ""}
@@ -227,19 +238,19 @@ export default function AdminCourses() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Discount Label</label>
-                  <input value={editing.discountLabel || ""} onChange={(e) => setEditing({ ...editing, discountLabel: e.target.value || null })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none" placeholder="Opening Offer" />
+                  <label htmlFor="course-discount-label" className="mb-1 block text-sm font-medium text-gray-700">Discount Label</label>
+                  <input id="course-discount-label" value={editing.discountLabel || ""} onChange={(e) => setEditing({ ...editing, discountLabel: e.target.value || null })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none" placeholder="Opening Offer" />
                 </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700"><CalendarRange size={14} /> Start Date</label>
-                  <input type="datetime-local" value={formatDateTimeLocal(editing.discountStartAt || null)} onChange={(e) => setEditing({ ...editing, discountStartAt: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none" />
+                  <label htmlFor="course-discount-start" className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700"><CalendarRange size={14} /> Start Date</label>
+                  <input id="course-discount-start" type="datetime-local" value={formatDateTimeLocal(editing.discountStartAt || null)} onChange={(e) => setEditing({ ...editing, discountStartAt: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none" />
                 </div>
                 <div>
-                  <label className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700"><CalendarRange size={14} /> End Date</label>
-                  <input type="datetime-local" value={formatDateTimeLocal(editing.discountEndAt || null)} onChange={(e) => setEditing({ ...editing, discountEndAt: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none" />
+                  <label htmlFor="course-discount-end" className="mb-1 flex items-center gap-2 text-sm font-medium text-gray-700"><CalendarRange size={14} /> End Date</label>
+                  <input id="course-discount-end" type="datetime-local" value={formatDateTimeLocal(editing.discountEndAt || null)} onChange={(e) => setEditing({ ...editing, discountEndAt: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy focus:border-gold focus:outline-none" />
                 </div>
               </div>
 
@@ -251,17 +262,19 @@ export default function AdminCourses() {
                 <button
                   type="button"
                   onClick={() => setEditing({ ...editing, active: !editing.active })}
-                  className={`relative h-7 w-12 rounded-full transition-colors ${editing.active ? "bg-gold" : "bg-gray-300"}`}
                   aria-label="Toggle course active status"
+                  role="switch"
+                  aria-checked={editing.active}
+                  className={`relative h-7 w-12 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${editing.active ? "bg-gold" : "bg-gray-300"}`}
                 >
                   <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-transform ${editing.active ? "translate-x-6" : "translate-x-1"}`} />
                 </button>
               </div>
             </div>
 
-            <div className="mt-6 flex justify-end gap-3">
-              <button onClick={() => setEditing(null)} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
-              <button onClick={saveCourse} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-gold px-5 py-2 text-sm font-semibold text-navy hover:bg-gold-hover disabled:opacity-50">
+            <div className="mt-6 grid grid-cols-2 gap-2 sm:flex sm:justify-end sm:gap-3">
+              <button onClick={() => setEditing(null)} className="action-secondary">Cancel</button>
+              <button onClick={saveCourse} disabled={saving} className="action-primary inline-flex items-center justify-center gap-2 disabled:opacity-50">
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                 {saving ? "Saving..." : "Save Course"}
               </button>
@@ -270,24 +283,24 @@ export default function AdminCourses() {
         </div>
       )}
 
-      <div className="mt-6 space-y-4">
+      <div className="mt-8 space-y-9">
         {coursesBySort.map((course) => {
           const discountActive = isDiscountActive(course);
           return (
-            <div key={course.id} className="rounded-xl border border-gray-200 bg-white p-4">
+            <article key={course.id} className="py-1">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg font-bold text-navy">{course.title}</h3>
-                    {!course.active && <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">Inactive</span>}
-                    {discountActive && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">Discount active</span>}
+                    <h3 className="text-lg font-semibold text-navy">{course.title}</h3>
+                    {!course.active && <span className="text-xs text-gray-500">Inactive</span>}
+                    {discountActive && <span className="text-xs text-green-700">Discount active</span>}
                   </div>
                   <p className="mt-2 text-sm leading-relaxed text-gray-600">{course.description}</p>
                   <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-gray-600">
                     <span className="font-semibold text-navy">{course.price.toLocaleString("en-ET")} ETB</span>
                     {course.discountPrice !== null && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
-                        <Tag size={12} /> {course.discountPrice.toLocaleString("en-ET")} ETB
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700">
+                        <Tag size={12} /> Offer: {course.discountPrice.toLocaleString("en-ET")} ETB
                       </span>
                     )}
                     {course.discountLabel && <span className="text-xs text-gold">{course.discountLabel}</span>}
@@ -311,20 +324,20 @@ export default function AdminCourses() {
                     discountEndAt: course.discountEndAt ? formatDateTimeLocal(course.discountEndAt) : "",
                     active: course.active,
                     sortOrder: course.sortOrder,
-                  })} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-navy hover:bg-gray-50">
+                  })} className="inline-flex min-h-11 items-center gap-2 px-2 text-sm font-medium text-navy hover:text-gold">
                     <Pencil size={14} /> Edit
                   </button>
-                  <button onClick={() => deleteCourse(course.id)} className="rounded-lg border border-red-200 p-2 text-red-500 hover:bg-red-50">
+                  <button onClick={() => deleteCourse(course.id)} aria-label={`Delete ${course.title}`} className="flex h-11 w-11 items-center justify-center text-red-700 hover:bg-red-50">
                     <Trash2 size={14} />
                   </button>
                 </div>
               </div>
-            </div>
+            </article>
           );
         })}
 
         {courses.length === 0 && (
-          <div className="rounded-xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
+          <div className="py-8 text-center text-sm text-gray-500">
             No courses yet. Add your first offering.
           </div>
         )}

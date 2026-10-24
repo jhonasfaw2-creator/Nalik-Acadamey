@@ -10,11 +10,7 @@ const NAV_LINKS = [
   { label: "Contact", href: "#contact" },
 ];
 
-interface FooterProps {
-  onApplyClick?: () => void;
-}
-
-export default function Footer({ onApplyClick }: FooterProps) {
+export default function Footer() {
   const scrollTo = (href: string) => {
     const id = href.replace("#", "");
     const el = document.getElementById(id);
@@ -24,16 +20,8 @@ export default function Footer({ onApplyClick }: FooterProps) {
     }
   };
 
-  const handleRegister = () => {
-    if (onApplyClick) {
-      onApplyClick();
-    } else {
-      scrollTo("#contact");
-    }
-  };
-
   return (
-    <footer className="border-t border-gray-200 bg-white">
+    <footer className="bg-white">
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
           <div className="max-w-xs">
@@ -54,7 +42,7 @@ export default function Footer({ onApplyClick }: FooterProps) {
           </div>
 
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-400">Quick links</p>
+            <p className="text-sm font-semibold text-navy">Explore</p>
             <nav className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-gray-600">
               {NAV_LINKS.map((link) => (
                 <a
@@ -73,7 +61,7 @@ export default function Footer({ onApplyClick }: FooterProps) {
           </div>
 
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-400">Follow</p>
+            <p className="text-sm font-semibold text-navy">Follow</p>
             <div className="mt-3 flex items-center gap-2">
               {SOCIAL_LINKS.map((link) => (
                 <a
@@ -81,7 +69,7 @@ export default function Footer({ onApplyClick }: FooterProps) {
                   href={link.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-all duration-200 hover:border-gold hover:bg-gold/5 hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                  className="flex h-11 w-11 items-center justify-center text-gray-500 transition-colors hover:text-gold focus-visible:ring-2 focus-visible:ring-gold"
                   aria-label={link.label}
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -93,7 +81,7 @@ export default function Footer({ onApplyClick }: FooterProps) {
           </div>
 
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-400">Visit</p>
+            <p className="text-sm font-semibold text-navy">Visit</p>
             <div className="mt-3 space-y-2 text-sm text-gray-600">
               <a href="tel:+251911223344" className="block transition-colors hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white">+251 911 223 344</a>
               <a
@@ -104,25 +92,15 @@ export default function Footer({ onApplyClick }: FooterProps) {
               >
                 Yeab Building, 5th Floor
               </a>
+              <p>Addis Ababa, Ethiopia</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-8 border-t border-gray-200 pt-4">
-          <div className="flex flex-col gap-2 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between">
-            <p>&copy; {new Date().getFullYear()} Nalik Academy. All rights reserved.</p>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleRegister}
-                className="font-semibold uppercase tracking-[0.12em] text-gold transition-colors hover:text-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-              >
-                Register Now
-              </button>
-              <span className="hidden text-gray-300 sm:inline">|</span>
-              <span>Addis Ababa, Ethiopia</span>
-            </div>
-          </div>
+        <div className="mt-8 pt-4">
+          <p className="text-xs text-gray-500">
+            &copy; {new Date().getFullYear()} Nalik Academy. All rights reserved.
+          </p>
         </div>
       </div>
     </footer>

@@ -1,13 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  ArrowRight,
-  CalendarDays,
-  Clock,
-  Users,
-  Wrench,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 interface Course {
   id: string;
@@ -31,7 +25,9 @@ const PROGRAMME = {
     { label: "Result", value: "Real editing projects" },
   ],
   description:
-    "The programme is built around hands-on projects and real production workflows. Students develop practical editing skills by working through actual editorial problems including pacing, sound selection, caption timing, colour, and finishing.",
+    "Students learn through real editing projects, practicing pacing, sound, captions, colour, and finishing.",
+  opportunityNote:
+    "Ready students may also be introduced to client work when suitable projects are available.",
 };
 
 const COURSE_ICONS: Record<string, string> = {
@@ -41,13 +37,6 @@ const COURSE_ICONS: Record<string, string> = {
 };
 
 const FALLBACK_ICON = "/assets/courses/_pen_noun.svg";
-
-const PROGRAMME_DETAILS = [
-  { icon: Clock, text: "2 hours per day" },
-  { icon: CalendarDays, text: "3 days per week" },
-  { icon: Wrench, text: "Practical training" },
-  { icon: Users, text: "Production projects" },
-];
 
 function formatBirr(amount: number) {
   return amount.toLocaleString("en-ET") + " ETB";
@@ -156,7 +145,7 @@ export default function Courses({
     return (
       <section
         id="courses"
-        className="bg-white px-5 py-20 sm:py-28 lg:px-10 lg:py-32"
+        className="bg-white px-5 py-16 sm:py-20 lg:px-10 lg:py-24"
       >
         <div className="mx-auto max-w-7xl">
           <div className="max-w-3xl">
@@ -167,8 +156,8 @@ export default function Courses({
             <div className="mt-5 h-5 w-full max-w-xl animate-pulse bg-gray-100" />
           </div>
 
-          <div className="mt-16 border-y border-gray-200 py-8">
-            <div className="grid gap-8 sm:grid-cols-4">
+          <div className="mt-12 py-6">
+            <div className="grid gap-6 sm:grid-cols-4">
               {Array.from({ length: 4 }).map((_, index) => (
                 <div key={index}>
                   <div className="h-3 w-20 animate-pulse bg-gray-100" />
@@ -178,11 +167,11 @@ export default function Courses({
             </div>
           </div>
 
-          <div className="mt-16 grid gap-px bg-gray-200 md:grid-cols-3">
+          <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 3 }).map((_, index) => (
               <div
                 key={index}
-                className="min-h-[420px] animate-pulse bg-white p-8"
+                className="min-h-[320px] animate-pulse bg-white py-8"
               >
                 <div className="h-16 w-16 bg-gray-100" />
                 <div className="mt-8 h-7 w-40 bg-gray-100" />
@@ -200,10 +189,10 @@ export default function Courses({
     return (
       <section
         id="courses"
-        className="bg-white px-5 py-20 sm:py-28 lg:px-10 lg:py-32"
+        className="bg-white px-5 py-16 sm:py-20 lg:px-10 lg:py-24"
       >
         <div className="mx-auto max-w-7xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gold">
+          <p className="text-sm font-medium text-gold">
             Our Courses
           </p>
 
@@ -211,14 +200,14 @@ export default function Courses({
             Learn the skills behind professional editing.
           </h2>
 
-          <div className="mt-12 border border-gray-200 bg-warm-white p-8 text-center">
+          <div className="mt-12 bg-warm-white px-5 py-8 text-center">
             <p className="text-sm text-gray-600">
               We could not load the course list right now.
             </p>
 
             <button
               onClick={() => setReloadKey((key) => key + 1)}
-              className="mt-5 bg-navy px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-gold hover:text-navy"
+              className="action-primary mt-5 inline-flex items-center justify-center"
             >
               Try Again
             </button>
@@ -231,21 +220,21 @@ export default function Courses({
   return (
     <section
       id="courses"
-      className="bg-white px-5 py-20 sm:py-28 lg:px-10 lg:py-32"
+        className="bg-white px-5 py-16 sm:py-20 lg:px-10 lg:py-24"
     >
       <div className="mx-auto max-w-7xl">
 
         {/* Header */}
         <div ref={headingRef} className="max-w-3xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gold">
+          <p className="text-sm font-medium text-gold">
             Our Courses
           </p>
 
-          <h2 className="mt-6 text-4xl font-bold leading-[1.05] tracking-tight text-navy sm:text-5xl lg:text-6xl">
+          <h2 className="mt-4 text-4xl font-bold leading-[1.05] tracking-tight text-navy sm:text-5xl lg:text-6xl">
             Learn the skills behind professional editing.
           </h2>
 
-          <p className="mt-6 max-w-2xl text-base leading-7 text-gray-600 sm:text-lg">
+          <p className="mt-3 max-w-2xl text-base leading-7 text-gray-600 sm:text-lg">
             Practical training built around the tools, decisions, and
             workflows used to create finished visual content.
           </p>
@@ -254,12 +243,12 @@ export default function Courses({
         {/* Programme information */}
         <div
           ref={programmeRef}
-          className="mt-16 border-y border-gray-200 py-8 lg:mt-20"
+          className="mt-10 py-2 lg:mt-12"
         >
-          <div className="grid gap-10 lg:grid-cols-[1.1fr_1.9fr] lg:gap-16">
+          <div className="grid gap-7 lg:grid-cols-[1.1fr_1.9fr] lg:gap-12">
 
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">
+              <p className="text-sm font-medium text-gold">
                 Programme
               </p>
 
@@ -269,10 +258,10 @@ export default function Courses({
             </div>
 
             <div>
-              <dl className="grid grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-4">
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
                 {PROGRAMME.facts.map((fact) => (
                   <div key={fact.label}>
-                    <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400">
+                      <dt className="text-xs font-medium text-gray-500">
                       {fact.label}
                     </dt>
 
@@ -283,15 +272,13 @@ export default function Courses({
                 ))}
               </dl>
 
-              <p className="mt-8 max-w-3xl text-sm leading-6 text-gray-600">
+              <p className="mt-5 max-w-3xl text-sm leading-6 text-gray-600">
                 {PROGRAMME.description}
               </p>
 
-              <div className="mt-6 border-l-2 border-gold pl-4">
+              <div className="mt-3 max-w-3xl">
                 <p className="text-sm leading-6 text-gray-600">
-                  Strong students may be introduced to real client and
-                  production opportunities through the academy, depending
-                  on readiness and project requirements.
+                  {PROGRAMME.opportunityNote}
                 </p>
               </div>
             </div>
@@ -301,23 +288,19 @@ export default function Courses({
         {/* Courses */}
         <div
           ref={gridRef}
-          className="mt-16 grid gap-px bg-gray-200 md:grid-cols-3 lg:mt-20"
+          className="mt-10 grid gap-x-8 gap-y-10 md:grid-cols-2 lg:mt-12 lg:grid-cols-3 lg:gap-x-10"
         >
-          {courses.map((course, index) => {
+          {courses.map((course) => {
             const price = course.discountPrice ?? course.price;
 
             return (
               <article
                 key={course.id}
-                className="group flex min-h-[500px] flex-col bg-white p-7 transition-colors duration-300 hover:bg-warm-white sm:p-8 lg:p-9"
+                className="group flex h-full min-w-0 flex-col py-2"
               >
                 {/* Number */}
                 <div className="flex items-start justify-between">
-                  <span className="text-xs font-semibold tracking-[0.18em] text-gray-300">
-                    0{index + 1}
-                  </span>
-
-                  <div className="flex h-14 w-14 items-center justify-center border border-gray-200 bg-white p-3 transition-colors duration-300 group-hover:border-gold">
+                  <div className="flex h-12 w-12 items-center justify-center">
                     <CourseIcon
                       src={COURSE_ICONS[course.id] ?? FALLBACK_ICON}
                       alt={course.title}
@@ -326,45 +309,21 @@ export default function Courses({
                 </div>
 
                 {/* Course */}
-                <div className="mt-10">
+                <div className="mt-5 flex-1">
                   <h3 className="max-w-xs text-2xl font-bold leading-tight text-navy">
                     {course.title}
                   </h3>
 
-                  <p className="mt-5 text-sm leading-6 text-gray-600">
+                  <p className="mt-3 text-base leading-7 text-gray-600">
                     {course.description}
                   </p>
                 </div>
 
-                {/* Details */}
-                <div className="mt-8 border-t border-gray-200 pt-6">
-                  <ul className="space-y-3">
-                    {PROGRAMME_DETAILS.map((detail) => {
-                      const Icon = detail.icon;
-
-                      return (
-                        <li
-                          key={detail.text}
-                          className="flex items-center gap-3 text-sm text-gray-600"
-                        >
-                          <Icon
-                            size={15}
-                            strokeWidth={1.7}
-                            className="shrink-0 text-gold"
-                          />
-
-                          <span>{detail.text}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-
                 {/* Price + action */}
-                <div className="mt-auto pt-10">
+                <div className="mt-6">
                   <div className="flex items-end justify-between gap-4">
                     <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400">
+                      <p className="text-sm text-gray-500">
                         Tuition
                       </p>
 
@@ -390,14 +349,11 @@ export default function Courses({
 
                   <button
                     onClick={() => onApplyWithCourse(course.title)}
-                    className="mt-6 flex w-full items-center justify-between border border-navy bg-navy px-8 py-4 text-base font-semibold text-white transition-all duration-200 hover:border-gold hover:bg-gold hover:text-navy focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-navy"
+                    className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-navy transition-colors hover:text-gold focus-visible:ring-2 focus-visible:ring-gold"
                   >
                     <span>Register for this course</span>
 
-                    <ArrowRight
-                      size={16}
-                      className="transition-transform duration-300 group-hover:translate-x-1"
-                    />
+                    <ArrowRight size={16} />
                   </button>
                 </div>
               </article>
@@ -407,7 +363,7 @@ export default function Courses({
 
         {/* Empty state */}
         {!loading && !error && courses.length === 0 && (
-          <div className="mt-16 border-t border-gray-200 pt-10 text-center">
+          <div className="mt-16 py-10 text-center">
             <p className="text-sm text-gray-500">
               No courses are available right now.
             </p>

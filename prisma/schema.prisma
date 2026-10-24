@@ -119,7 +119,7 @@ model Transaction {
   amount         Int
   currency       String       @default("ETB")
   txRef          String       @unique
-  chapaReference String?      @unique
+  chapaReference String?      @unique // Legacy hosted-checkout reference; retained for existing records.
   status         String       @default("PENDING")
   paymentMethod  String?
   serviceFee     Int?
@@ -149,11 +149,11 @@ model Payment {
   registrationId    String
   registration      Registration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   merchantReference String        @unique
-  chapaReference    String?       @unique
-  amount            Int // Chapa amount in minor currency units
+  chapaReference    String?       @unique // Legacy hosted-checkout reference; retained for existing records.
+  amount            Int // ETB minor units (100 per Birr).
   currency          String        @default("ETB")
   status            PaymentStatus @default(PENDING)
-  checkoutUrl       String?
+  checkoutUrl       String? // Legacy hosted-checkout URL; no longer used by the application.
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   verifiedAt        DateTime?

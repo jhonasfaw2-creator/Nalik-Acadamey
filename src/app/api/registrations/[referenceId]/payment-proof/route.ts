@@ -4,6 +4,7 @@ import { put } from "@vercel/blob";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkAndIncrement } from "@/lib/rateLimit";
+import { sendTelegramMessage } from "@/lib/telegram";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +15,34 @@ const ALLOWED_TYPES = new Set([
   "image/png",
   "image/webp",
 ]);
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character] ?? character);
+}
+
+function formatPaymentAmount(amount: number, currency: string) {
+  const birrAmount = amount / 100;
+  const formatted = new Intl.NumberFormat("en-ET", { maximumFractionDigits: 2 }).format(birrAmount);
+  return `${escapeHtml(currency.toUpperCase())} ${formatted}`;
+}
+
+function getAdminRegistrationsUrl() {
+  const configuredUrl = process.env.APP_URL?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (!configuredUrl) return null;
+  try {
+    const appUrl = new URL(configuredUrl);
+    if (appUrl.protocol !== "https:") return null;
+    return new URL("/admin/registrations", appUrl).toString();
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -36,7 +65,23 @@ export async function POST(
       where: { referenceId },
       select: {
         id: true,
+        fullName: true,
+        referenceId: true,
         paymentProofStatus: true,
+        course: {
+          select: {
+            title: true,
+            price: true,
+            discountPrice: true,
+            discountStartAt: true,
+            discountEndAt: true,
+          },
+        },
+        payments: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { amount: true, currency: true },
+        },
       },
     });
 
@@ -141,6 +186,7 @@ export async function POST(
           { status: 409 },
         );
       }
+
     } catch (error) {
       console.error("Failed to save payment proof metadata:", error);
       return NextResponse.json(
@@ -149,8 +195,43 @@ export async function POST(
       );
     }
 
+    const payment = registration.payments[0];
+    const now = new Date();
+    const discountIsActive = registration.course.discountPrice !== null &&
+      (!registration.course.discountStartAt || registration.course.discountStartAt <= now) &&
+      (!registration.course.discountEndAt || registration.course.discountEndAt >= now);
+    const expectedAmountMinor = payment?.amount ??
+      (discountIsActive ? registration.course.discountPrice! : registration.course.price) * 100;
+    const currency = payment?.currency ?? "ETB";
+    const appUrl = getAdminRegistrationsUrl();
+    const details = [
+      "<b>Payment proof submitted</b>",
+      "",
+      `<b>Name:</b> ${escapeHtml(registration.fullName)}`,
+      `<b>Course:</b> ${escapeHtml(registration.course.title)}`,
+      `<b>Amount:</b> ${formatPaymentAmount(expectedAmountMinor, currency)}`,
+      `<b>Reference:</b> <code>${escapeHtml(registration.referenceId)}</code>`,
+    ];
+    const inlineKeyboard = [
+      [
+        { text: "Approve payment", callback_data: `APPROVED:${registration.id}` },
+        { text: "Reject payment", callback_data: `REJECTED:${registration.id}` },
+      ],
+      ...(appUrl ? [[{ text: "Open admin registrations", url: appUrl }]] : []),
+    ];
+
+    let notificationSent = false;
+    try {
+      await sendTelegramMessage(details.join("\n"), inlineKeyboard);
+      notificationSent = true;
+    } catch (error) {
+      // The proof is already saved as pending review; a Telegram outage must
+      // not make the student upload it again or lose the submitted proof.
+      console.error("Payment proof saved, but Telegram notification failed:", error);
+    }
+
     return NextResponse.json(
-      { success: true, status: "PENDING_REVIEW" },
+      { success: true, status: "PENDING_REVIEW", notificationSent },
       { status: 201 },
     );
   } catch (error) {
