@@ -110,7 +110,17 @@ export async function PATCH(
         if (!schedule.active || schedule.availabilityOverride === false) {
           throw new Error("SCHEDULE_UNAVAILABLE");
         }
-        if (schedule.enrolled >= schedule.maxSeats) throw new Error("SCHEDULE_FULL");
+
+        // Count actual confirmed/PAID registrations for this schedule instead of
+        // trusting the manual enrolled counter, which can drift out of sync.
+        const actualEnrolled = await tx.registration.count({
+          where: {
+            scheduleId: schedule.id,
+            status: { in: ["PAID", "CONFIRMED"] },
+          },
+        });
+
+        if (actualEnrolled >= schedule.maxSeats) throw new Error("SCHEDULE_FULL");
 
         const seat = await tx.schedule.updateMany({
           where: {
