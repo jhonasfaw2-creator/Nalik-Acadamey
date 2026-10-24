@@ -2,11 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { generateMerchantReference } from "@/lib/payments/chapa";
+import { verifyPaymentReturnToken } from "@/lib/payments/returnToken";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const currentPaymentId = request.cookies.get("nalik_payment")?.value;
+  const body: unknown = await request.json().catch(() => null);
+  const token =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body as { payment?: unknown }).payment
+      : null;
+  const tokenPaymentId = typeof token === "string" ? verifyPaymentReturnToken(token) : null;
+  const currentPaymentId = tokenPaymentId ?? request.cookies.get("nalik_payment")?.value;
   if (!currentPaymentId) {
     return NextResponse.json({ error: "No payment session was found." }, { status: 400 });
   }

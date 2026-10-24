@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { createPaymentReturnToken } from "@/lib/payments/returnToken";
 
 const CHAPA_API_BASE = "https://api.chapa.global/v2";
 const CHAPA_CHECKOUT_HOST = "checkout.chapa.global";
@@ -170,13 +171,17 @@ export function generateMerchantReference(): string {
   return `NA${randomBytes(9).toString("hex")}`;
 }
 
-function getReturnUrl(): string | null {
+function getReturnUrl(paymentId: string): string | null {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (!appUrl) return null;
   try {
     const parsed = new URL(appUrl);
     if (parsed.protocol !== "https:") return null;
-    return new URL("/checkout/return", parsed.origin).toString();
+    const token = createPaymentReturnToken(paymentId);
+    const path = token
+      ? `/checkout/return?payment=${encodeURIComponent(token)}`
+      : "/checkout/return";
+    return new URL(path, parsed.origin).toString();
   } catch {
     return null;
   }
@@ -206,7 +211,7 @@ export async function initializeHostedPayment(paymentId: string): Promise<string
   };
   if (payment.registration.email) customer.email = payment.registration.email;
 
-  const returnUrl = getReturnUrl();
+  const returnUrl = getReturnUrl(payment.id);
   const response = await fetch(`${CHAPA_API_BASE}/payments/hosted`, {
     method: "POST",
     headers: {

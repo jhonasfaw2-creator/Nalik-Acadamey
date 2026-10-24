@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
 import type { Prisma } from "@prisma/client";
+import { createPaymentReturnToken, verifyPaymentReturnToken } from "./returnToken";
 import {
   chapaAmountMatches,
   createWebhookDedupKey,
@@ -232,6 +233,29 @@ test("derives the Chapa environment from the documented key prefixes", () => {
   } finally {
     if (original === undefined) delete process.env.CHAPA_SECRET_KEY;
     else process.env.CHAPA_SECRET_KEY = original;
+  }
+});
+
+test("signs expiring return tokens so a checkout return does not need a cookie", () => {
+  const original = process.env.SESSION_SECRET;
+  process.env.SESSION_SECRET = "test-session-secret";
+  try {
+    const now = Date.now();
+    const paymentId = "cmvm4qwo70003jp07771ijurz";
+    const token = createPaymentReturnToken(paymentId, now);
+    assert.ok(token);
+    assert.equal(verifyPaymentReturnToken(token, now), paymentId);
+    assert.equal(verifyPaymentReturnToken(`${token}x`, now), null);
+    assert.equal(verifyPaymentReturnToken(token, now + 25 * 60 * 60 * 1000), null);
+
+    process.env.SESSION_SECRET = "different-secret";
+    assert.equal(verifyPaymentReturnToken(token, now), null);
+
+    delete process.env.SESSION_SECRET;
+    assert.equal(createPaymentReturnToken(paymentId, now), null);
+  } finally {
+    if (original === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = original;
   }
 });
 

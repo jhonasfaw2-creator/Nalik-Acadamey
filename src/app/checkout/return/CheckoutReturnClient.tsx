@@ -9,6 +9,11 @@ interface PaymentResult {
   referenceId: string;
 }
 
+function getReturnPaymentToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("payment");
+}
+
 export default function CheckoutReturnClient() {
   const [result, setResult] = useState<PaymentResult | null>(null);
   const [error, setError] = useState("");
@@ -20,9 +25,12 @@ export default function CheckoutReturnClient() {
     setError("");
     for (let attempt = 0; attempt < 5; attempt += 1) {
       try {
+        const paymentToken = getReturnPaymentToken();
         const response = await fetch("/api/payments/verify", {
           method: "POST",
           cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(paymentToken ? { payment: paymentToken } : {}),
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || "Payment verification is unavailable.");
@@ -66,7 +74,12 @@ export default function CheckoutReturnClient() {
     setRetrying(true);
     setError("");
     try {
-      const retryResponse = await fetch("/api/payments/retry", { method: "POST" });
+      const paymentToken = getReturnPaymentToken();
+      const retryResponse = await fetch("/api/payments/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(paymentToken ? { payment: paymentToken } : {}),
+      });
       const retryData = await retryResponse.json().catch(() => ({}));
       if (!retryResponse.ok || typeof retryData.paymentId !== "string") {
         throw new Error(retryData.error || "A new payment attempt could not be prepared.");

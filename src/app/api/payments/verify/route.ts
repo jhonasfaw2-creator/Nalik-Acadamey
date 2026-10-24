@@ -8,11 +8,18 @@ import {
   reconcileVerifiedPayment,
   verifyChapaPayment,
 } from "@/lib/payments/chapa";
+import { verifyPaymentReturnToken } from "@/lib/payments/returnToken";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const paymentId = request.cookies.get("nalik_payment")?.value;
+  const body: unknown = await request.json().catch(() => null);
+  const token =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body as { payment?: unknown }).payment
+      : null;
+  const tokenPaymentId = typeof token === "string" ? verifyPaymentReturnToken(token) : null;
+  const paymentId = tokenPaymentId ?? request.cookies.get("nalik_payment")?.value;
   if (!paymentId) {
     return NextResponse.json({ error: "No payment session was found." }, { status: 400 });
   }
