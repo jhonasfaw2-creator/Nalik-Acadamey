@@ -26,8 +26,10 @@ npm run telegram:webhook:set
 1. The application creates a pending registration and its payment record.
 2. The student transfers the displayed amount and uploads a JPG, PNG, or WebP
    receipt.
-3. The receipt is stored privately and the admin receives the student's name,
-   course, amount, reference, and Approve/Reject buttons in Telegram.
+3. The receipt is stored privately and sent as a Telegram photo with the
+   student's name, course, amount, reference, and Approve/Reject buttons. If
+   Telegram cannot accept the image, a text notification is sent instead and
+   the original remains available in the admin dashboard.
 4. Approval marks the payment successful, confirms enrollment, and reserves the
    schedule seat in one database transaction. Rejection leaves enrollment
    pending so the student can submit a replacement receipt.

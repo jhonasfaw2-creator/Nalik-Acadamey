@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleProofDecision } from "@/lib/services/registrationService";
-import { answerCallbackQuery, editMessageText } from "@/lib/telegram";
+import {
+  answerCallbackQuery,
+  editMessageCaption,
+  editMessageText,
+} from "@/lib/telegram";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +27,7 @@ type TelegramCallbackPayload = {
       chat?: { id?: unknown };
       message_id?: unknown;
       text?: unknown;
+      caption?: unknown;
     };
   };
 };
@@ -32,6 +37,26 @@ async function answerCallback(queryId: string, text: string) {
     await answerCallbackQuery(queryId, text);
   } catch (error) {
     console.error("Unable to acknowledge Telegram payment review:", error);
+  }
+}
+
+async function updateReviewMessage(
+  message: NonNullable<NonNullable<TelegramCallbackPayload["callback_query"]>["message"]>,
+  chatId: number,
+  messageId: number,
+  statusText: string,
+) {
+  const original = typeof message.caption === "string"
+    ? message.caption
+    : typeof message.text === "string"
+      ? message.text
+      : "<b>Payment proof review</b>";
+  const updated = `${original}\n\n${statusText}`;
+
+  if (typeof message.caption === "string") {
+    await editMessageCaption(chatId, messageId, updated);
+  } else {
+    await editMessageText(chatId, messageId, updated);
   }
 }
 
@@ -89,9 +114,8 @@ export async function POST(request: NextRequest) {
       : "<b>Payment proof rejected. A replacement can be submitted.</b>";
     await answerCallback(queryId, action === "APPROVED" ? "Payment approved. Student enrolled." : "Payment proof rejected.");
 
-    const originalText = typeof message.text === "string" ? message.text : "<b>Payment proof review</b>";
     try {
-      await editMessageText(Number(chatId), messageId, `${originalText}\n\n${decisionMessage}`);
+      await updateReviewMessage(message, Number(chatId), messageId, decisionMessage);
     } catch (error) {
       // The database decision is already committed; a message-edit failure
       // must not make Telegram retry and re-run an already completed review.
@@ -105,9 +129,8 @@ export async function POST(request: NextRequest) {
     if (messageText) {
       await answerCallback(queryId, messageText);
       if (errorKey === "NOT_PENDING") {
-        const originalText = typeof message.text === "string" ? message.text : "<b>Payment proof review</b>";
         try {
-          await editMessageText(Number(chatId), messageId, `${originalText}\n\n<b>Already reviewed.</b>`);
+          await updateReviewMessage(message, Number(chatId), messageId, "<b>Already reviewed.</b>");
         } catch (editError) {
           console.error("Unable to remove completed Telegram review buttons:", editError);
         }

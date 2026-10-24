@@ -4,7 +4,7 @@ import { put } from "@vercel/blob";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkAndIncrement } from "@/lib/rateLimit";
-import { sendTelegramMessage } from "@/lib/telegram";
+import { sendTelegramMessage, sendTelegramPhoto } from "@/lib/telegram";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +24,10 @@ function escapeHtml(value: string) {
     '"': "&quot;",
     "'": "&#39;",
   })[character] ?? character);
+}
+
+function shortHtml(value: string) {
+  return escapeHtml(Array.from(value).slice(0, 80).join(""));
 }
 
 function formatPaymentAmount(amount: number, currency: string) {
@@ -154,9 +158,10 @@ export async function POST(
           ? "png"
           : "webp";
 
+    const receiptImage = new Blob([bytes], { type: file.type });
     const blob = await put(
       `payment-proofs/${registration.id}/${randomUUID()}.${extension}`,
-      new Blob([bytes], { type: file.type }),
+      receiptImage,
       {
         access: "private",
         contentType: file.type,
@@ -207,8 +212,8 @@ export async function POST(
     const details = [
       "<b>Payment proof submitted</b>",
       "",
-      `<b>Name:</b> ${escapeHtml(registration.fullName)}`,
-      `<b>Course:</b> ${escapeHtml(registration.course.title)}`,
+      `<b>Name:</b> ${shortHtml(registration.fullName)}`,
+      `<b>Course:</b> ${shortHtml(registration.course.title)}`,
       `<b>Amount:</b> ${formatPaymentAmount(expectedAmountMinor, currency)}`,
       `<b>Reference:</b> <code>${escapeHtml(registration.referenceId)}</code>`,
     ];
@@ -221,17 +226,30 @@ export async function POST(
     ];
 
     let notificationSent = false;
+    let proofSent = false;
     try {
-      await sendTelegramMessage(details.join("\n"), inlineKeyboard);
+      await sendTelegramPhoto(
+        receiptImage,
+        `payment-proof.${extension}`,
+        details.join("\n"),
+        inlineKeyboard,
+      );
       notificationSent = true;
+      proofSent = true;
     } catch (error) {
-      // The proof is already saved as pending review; a Telegram outage must
-      // not make the student upload it again or lose the submitted proof.
-      console.error("Payment proof saved, but Telegram notification failed:", error);
+      console.error("Payment proof image could not be sent to Telegram:", error);
+      try {
+        await sendTelegramMessage(details.join("\n"), inlineKeyboard);
+        notificationSent = true;
+      } catch (notificationError) {
+        // The proof is already saved as pending review; a Telegram outage must
+        // not make the student upload it again or lose the submitted proof.
+        console.error("Payment proof saved, but Telegram notification failed:", notificationError);
+      }
     }
 
     return NextResponse.json(
-      { success: true, status: "PENDING_REVIEW", notificationSent },
+      { success: true, status: "PENDING_REVIEW", notificationSent, proofSent },
       { status: 201 },
     );
   } catch (error) {

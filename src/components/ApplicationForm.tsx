@@ -85,6 +85,9 @@ const [isUploadingProof, setIsUploadingProof] = useState(false);
 const [proofUploaded, setProofUploaded] = useState(false);
 const [proofUploadError, setProofUploadError] = useState("");
 const [proofNotificationFailed, setProofNotificationFailed] = useState(false);
+const [proofImageDeliveryFailed, setProofImageDeliveryFailed] = useState(false);
+const [proofReviewStatus, setProofReviewStatus] = useState<"PENDING_REVIEW" | "APPROVED" | "REJECTED" | null>(null);
+const [proofReviewNote, setProofReviewNote] = useState<string | null>(null);
 
   useEffect(() => {
     if (!proofPreview) return;
@@ -185,11 +188,66 @@ const [proofNotificationFailed, setProofNotificationFailed] = useState(false);
       setProofPreview(null);
       setProofUploaded(false);
       setProofNotificationFailed(false);
+      setProofImageDeliveryFailed(false);
+      setProofReviewStatus(null);
+      setProofReviewNote(null);
       setProofUploadError("");
       dialog.showModal();
     }
     else dialog.close();
   }, [open]);
+
+  useEffect(() => {
+    const referenceId = registrationCreated?.referenceId;
+    if (!open || !proofUploaded || !referenceId) return;
+
+    let stopped = false;
+    let timer: number | undefined;
+    let delay = 3_000;
+
+    const checkReviewStatus = async () => {
+      try {
+        const response = await fetch(
+          `/api/registrations/lookup?id=${encodeURIComponent(referenceId)}`,
+          { cache: "no-store" },
+        );
+        if (!response.ok) throw new Error("Registration status is unavailable.");
+        const data = await response.json();
+        const registration = data?.registration;
+        const status = registration?.paymentProofStatus;
+
+        if (status === "APPROVED" || registration?.registrationStatus === "CONFIRMED") {
+          stopped = true;
+          setProofReviewStatus("APPROVED");
+          return;
+        }
+        if (status === "REJECTED") {
+          stopped = true;
+          setProofReviewStatus("REJECTED");
+          setProofReviewNote(typeof registration.paymentProofNote === "string" ? registration.paymentProofNote : null);
+          setProofUploaded(false);
+          setPaymentProofFile(null);
+          setProofPreview(null);
+          return;
+        }
+        if (status === "PENDING_REVIEW") setProofReviewStatus("PENDING_REVIEW");
+      } catch {
+        // Keep the pending state visible and retry; lookup errors should not
+        // imply a failed payment or force the student to upload again.
+      } finally {
+        if (!stopped) {
+          timer = window.setTimeout(checkReviewStatus, delay);
+          delay = Math.min(15_000, Math.round(delay * 1.5));
+        }
+      }
+    };
+
+    void checkReviewStatus();
+    return () => {
+      stopped = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [open, proofUploaded, registrationCreated?.referenceId]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -310,31 +368,48 @@ const [proofNotificationFailed, setProofNotificationFailed] = useState(false);
             </p>
             {proofUploaded ? (
               <div className="mx-auto mt-6 max-w-lg text-center">
-                <Check size={28} className="mx-auto mb-4 text-green-700" />
-                <h4 className="text-xl font-semibold text-green-900">Payment submitted</h4>
-                {proofNotificationFailed ? (
-                  <p className="mt-3 text-sm text-amber-800">
-                    Your proof is saved, but the academy could not be notified automatically. Please <a href="/#contact" className="font-semibold underline underline-offset-2">contact the academy</a> to make sure it is reviewed.
-                  </p>
+                {proofReviewStatus === "APPROVED" ? (
+                  <>
+                    <Check size={30} className="mx-auto mb-4 text-green-700" />
+                    <h4 className="text-xl font-semibold text-green-900">Registration confirmed</h4>
+                    <p className="mt-3 text-sm text-green-800">
+                      Your payment was approved and your enrollment is complete.
+                    </p>
+                  </>
                 ) : (
                   <>
-                    <p className="mt-3 text-sm text-green-800">
-                      Your payment proof has been uploaded and is now awaiting admin review.
-                    </p>
-                    <p className="mt-2 text-xs text-green-600">
-                      You will be notified once it is approved.
-                    </p>
+                    <Check size={28} className="mx-auto mb-4 text-green-700" />
+                    <h4 className="text-xl font-semibold text-green-900">Payment submitted</h4>
+                    {proofNotificationFailed ? (
+                      <p className="mt-3 text-sm text-amber-800">
+                        Your proof is saved, but the academy could not be notified automatically. Please <a href="/#contact" className="font-semibold underline underline-offset-2">contact the academy</a> to make sure it is reviewed.
+                      </p>
+                    ) : proofImageDeliveryFailed ? (
+                      <p className="mt-3 text-sm text-amber-800">
+                        The academy was notified, but Telegram could not display the receipt image. The proof is saved in the admin dashboard for review.
+                      </p>
+                    ) : (
+                      <p className="mt-3 text-sm text-green-800">
+                        Your proof is awaiting review. This page will update automatically if your payment is approved while you&apos;re here.
+                      </p>
+                    )}
                   </>
                 )}
                 <a
                   href={`/registration?id=${encodeURIComponent(registrationCreated.referenceId)}`}
                   className="action-primary mt-8 inline-flex w-full items-center justify-center gap-2"
                 >
-                  View registration status
+                  {proofReviewStatus === "APPROVED" ? "View enrollment confirmation" : "View registration status"}
                 </a>
               </div>
             ) : (
               <div className="mx-auto mt-0 max-w-3xl space-y-4 sm:space-y-5">
+                {proofReviewStatus === "REJECTED" && (
+                  <div className="text-left text-sm text-red-800" role="alert">
+                    <p className="font-semibold">The receipt was rejected. Upload a corrected image to request another review.</p>
+                    {proofReviewNote && <p className="mt-1">Admin note: {proofReviewNote}</p>}
+                  </div>
+                )}
                 <PaymentInstructions amount={selectedCourse?.discountPrice ?? selectedCourse?.price ?? 0} />
 
                 <form
@@ -351,7 +426,7 @@ const [proofNotificationFailed, setProofNotificationFailed] = useState(false);
                         `/api/registrations/${encodeURIComponent(registrationCreated.referenceId)}/payment-proof`,
                         { method: "POST", body: data }
                       );
-                      let result: { error?: string; success?: boolean; status?: string; notificationSent?: boolean };
+                      let result: { error?: string; success?: boolean; status?: string; notificationSent?: boolean; proofSent?: boolean };
                       const contentType = response.headers.get("content-type") ?? "";
                       if (contentType.includes("application/json")) {
                         result = await response.json();
@@ -361,6 +436,9 @@ const [proofNotificationFailed, setProofNotificationFailed] = useState(false);
                       }
                       if (!response.ok) throw new Error(result.error || "Upload failed.");
                       setProofNotificationFailed(result.notificationSent === false);
+                      setProofImageDeliveryFailed(result.notificationSent !== false && result.proofSent === false);
+                      setProofReviewStatus("PENDING_REVIEW");
+                      setProofReviewNote(null);
                       setProofUploaded(true);
                     } catch (error) {
                       setProofUploadError(error instanceof Error ? error.message : "Upload failed. Try again.");
