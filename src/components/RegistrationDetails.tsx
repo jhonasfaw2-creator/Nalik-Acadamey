@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Clock3,
   XCircle,
+  AlertCircle,
   CalendarDays,
   GraduationCap,
   User,
@@ -112,6 +113,27 @@ export default function RegistrationDetails({ registration, highlightReference =
       value: <StatusPill label={state.label} tone={state.tone} />,
     }
   );
+
+  if (registration.paymentProofStatus) {
+    const proofTone =
+      registration.paymentProofStatus === "APPROVED"
+        ? "success"
+        : registration.paymentProofStatus === "REJECTED"
+          ? "failed"
+          : "pending";
+    rows.push({
+      icon: <CheckCircle2 size={15} className="text-gold" />,
+      label: "Payment proof",
+      value: <StatusPill label={registration.paymentProofStatus.replace(/_/g, " ")} tone={proofTone} />,
+    });
+    if (registration.paymentProofNote && registration.paymentProofStatus === "REJECTED") {
+      rows.push({
+        icon: <AlertCircle size={15} className="text-gold" />,
+        label: "Admin note",
+        value: registration.paymentProofNote,
+      });
+    }
+  }
 
   return (
     <div className="divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-200 bg-white text-left">

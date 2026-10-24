@@ -78,6 +78,8 @@ export default function RegistrationLookupClient() {
           endTime: reg.schedule?.endTime ?? null,
           startDate: reg.schedule?.startDate ?? null,
           registrationStatus: reg.registrationStatus,
+          paymentProofStatus: reg.paymentProofStatus ?? null,
+          paymentProofNote: reg.paymentProofNote ?? null,
         });
         setState("found");
         return true;

@@ -31,6 +31,8 @@ export async function GET(request: NextRequest) {
         referenceId: true,
         fullName: true,
         status: true,
+        paymentProofStatus: true,
+        paymentProofNote: true,
         course: {
           select: {
             id: true,
@@ -74,6 +76,8 @@ export async function GET(request: NextRequest) {
             }
           : null,
         registrationStatus: registration.status,
+        paymentProofStatus: registration.paymentProofStatus ?? null,
+        paymentProofNote: registration.paymentProofNote ?? null,
       },
     });
   } catch (error) {

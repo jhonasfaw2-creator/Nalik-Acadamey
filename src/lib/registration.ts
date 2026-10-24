@@ -15,6 +15,8 @@ export interface RegistrationSummary {
   endTime: string | null;
   startDate: string | null;
   registrationStatus: string;
+  paymentProofStatus: string | null;
+  paymentProofNote: string | null;
 }
 
 interface RegistrationSummaryScheduleSession {

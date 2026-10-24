@@ -385,12 +385,12 @@ export default function AdminRegistrations() {
             <thead className="border-b border-gray-200 bg-gray-50">
               <tr>
                 <th className="px-4 py-3 font-medium text-gray-500">Student name</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Email</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Phone</th>
+                <th className="px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Email</th>
+                <th className="px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Phone</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Course</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Registration date</th>
+                <th className="px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Registration date</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Payment Proof</th>
-                <th className="px-4 py-3 font-medium text-gray-500">Payment</th>
+                <th className="px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Payment</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Registration status</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Action</th>
               </tr>
@@ -401,10 +401,10 @@ export default function AdminRegistrations() {
                   <td className="px-4 py-3">
                     <p className="font-medium text-navy">{reg.fullName}</p>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{reg.email || "—"}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{reg.phone}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 hidden sm:table-cell">{reg.email || "—"}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 hidden sm:table-cell">{reg.phone}</td>
                   <td className="px-4 py-3 text-sm text-navy">{reg.course?.title || "No course"}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">
+                  <td className="px-4 py-3 text-xs text-gray-500 hidden sm:table-cell">
                     {new Date(reg.createdAt).toLocaleString("en-GB", {
                       day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
                     })}
@@ -417,7 +417,7 @@ export default function AdminRegistrations() {
                       <p className="mt-1 text-xs text-gray-500">{reg.paymentProofNote}</p>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 hidden sm:table-cell">
                     {reg.payments[0] ? (
                       <div>
                         <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${PAYMENT_STATUS_COLORS[reg.payments[0].status] || "bg-gray-100 text-gray-600"}`}>
@@ -435,52 +435,54 @@ export default function AdminRegistrations() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {reg.paymentProofPath && (
-                      <button
-                        onClick={() => viewScreenshot(reg.id, reg.fullName, reg.paymentProofPath!)}
-                        className="mr-2 rounded-lg border border-blue-200 px-2.5 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-50"
-                      >
-                        View Screenshot
-                      </button>
-                    )}
-                    {reg.paymentProofStatus === "PENDING_REVIEW" && (
-                      <>
+                    <div className="flex flex-wrap gap-1.5 sm:flex-nowrap sm:gap-2">
+                      {reg.paymentProofPath && (
                         <button
-                          onClick={() => reviewRegistration(reg.id, "APPROVED")}
-                          disabled={reviewing === reg.id}
-                          className="mr-2 rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-700 transition-colors hover:bg-green-50 disabled:opacity-50"
+                          onClick={() => viewScreenshot(reg.id, reg.fullName, reg.paymentProofPath!)}
+                          className="rounded-lg border border-blue-200 px-2.5 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-50 sm:mr-2 sm:px-3 sm:py-1.5 sm:text-sm"
                         >
-                          {reviewing === reg.id ? "Approving..." : "Approve"}
+                          View Screenshot
                         </button>
+                      )}
+                      {reg.paymentProofStatus === "PENDING_REVIEW" && (
+                        <>
+                          <button
+                            onClick={() => reviewRegistration(reg.id, "APPROVED")}
+                            disabled={reviewing === reg.id}
+                            className="rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-700 transition-colors hover:bg-green-50 disabled:opacity-50 sm:mr-2 sm:px-3 sm:py-1.5 sm:text-sm"
+                          >
+                            {reviewing === reg.id ? "Approving..." : "Approve"}
+                          </button>
+                          <button
+                            onClick={() => { setRejectingId(reg.id); setRejectNote(""); }}
+                            className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 sm:px-3 sm:py-1.5 sm:text-sm"
+                          >
+                            Reject
+                          </button>
+                        </>
+                      )}
+                      {(reg.paymentProofStatus === "NOT_SUBMITTED" || reg.paymentProofStatus === "REJECTED") && reg.status === "PENDING" && (!reg.payments.length || reg.payments.some((payment) => payment.status === "SUCCESS")) && (
                         <button
-                          onClick={() => { setRejectingId(reg.id); setRejectNote(""); }}
-                          className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-50"
+                          onClick={() => void confirmRegistration(reg.id)}
+                          disabled={confirming === reg.id}
+                          className="rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-700 transition-colors hover:bg-green-50 sm:mr-2 sm:px-3 sm:py-1.5 sm:text-sm"
                         >
-                          Reject
+                          {confirming === reg.id ? "Confirming..." : "Confirm"}
                         </button>
-                      </>
-                    )}
-                    {(reg.paymentProofStatus === "NOT_SUBMITTED" || reg.paymentProofStatus === "REJECTED") && reg.status === "PENDING" && (!reg.payments.length || reg.payments.some((payment) => payment.status === "SUCCESS")) && (
+                      )}
                       <button
-                        onClick={() => void confirmRegistration(reg.id)}
-                        disabled={confirming === reg.id}
-                        className="mr-2 rounded-lg border border-green-200 px-2.5 py-1 text-xs font-medium text-green-700 transition-colors hover:bg-green-50"
+                        onClick={() => setReassigning(reassigning === reg.id ? null : reg.id)}
+                        className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-navy transition-colors hover:bg-gray-50 sm:mr-2 sm:px-3 sm:py-1.5 sm:text-sm"
                       >
-                        {confirming === reg.id ? "Confirming..." : "Confirm"}
+                        Move
                       </button>
-                    )}
-                    <button
-                      onClick={() => setReassigning(reassigning === reg.id ? null : reg.id)}
-                      className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-navy transition-colors hover:bg-gray-50"
-                    >
-                      Move
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirm(reg.id)}
-                      className="rounded-lg border border-red-100 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
+                      <button
+                        onClick={() => setDeleteConfirm(reg.id)}
+                        className="rounded-lg border border-red-100 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 sm:px-3 sm:py-1.5 sm:text-sm"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -767,9 +769,9 @@ export default function AdminRegistrations() {
 
       {/* View Screenshot dialog */}
       {viewingProof && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
-          <div className="relative rounded-xl bg-white p-4 shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-            <div className="flex items-start justify-between gap-2 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 sm:p-6">
+          <div className="relative rounded-xl bg-white p-4 sm:p-6 shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col sm:flex-row">
+            <div className="flex items-start justify-between gap-2 mb-4 sm:mb-6">
               <h2 className="text-lg font-bold text-navy">Payment Screenshot</h2>
               <button
                 onClick={() => setViewingProof(null)}
@@ -778,20 +780,21 @@ export default function AdminRegistrations() {
                 ✕
               </button>
             </div>
-            <p className="text-sm text-gray-600 mb-3">
+            <p className="text-sm text-gray-600 mb-3 sm:mb-4">
               Student: <span className="font-medium text-navy">{viewingProof.name}</span>
             </p>
-            <div className="flex-1 relative bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center min-h-[300px]">
-              <iframe
+            <div className="flex-1 relative bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center min-h-[300px] max-h-[60vh] sm:max-h-none sm:w-[60%]">
+              <img
                 src={`/api/admin/registrations/${viewingProof.id}/payment-proof`}
-                className="w-full h-full object-cover"
-                title={`Payment screenshot for ${viewingProof.name}`}
+                alt={`Payment screenshot for ${viewingProof.name}`}
+                className="max-w-full max-h-full object-contain block"
+                loading="lazy"
               />
             </div>
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 sm:mt-6 flex justify-end sm:ml-auto">
               <button
                 onClick={() => setViewingProof(null)}
-                className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-navy/80"
+                className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-navy/80 sm:px-5 sm:py-2.5"
               >
                 Close
               </button>
