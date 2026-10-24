@@ -45,7 +45,9 @@ export function getChapaMode(): ChapaMode {
 }
 
 export function verifyChapaWebhookSignature(rawBody: Buffer, signature: string | null): boolean {
-  const secret = process.env.CHAPA_WEBHOOK_SECRET;
+  // Trim so a trailing newline/space pasted into the hosting env does not
+  // silently invalidate every HMAC (the signature covers the body only).
+  const secret = process.env.CHAPA_WEBHOOK_SECRET?.trim();
   if (!secret || !signature || !/^[a-f0-9]{64}$/i.test(signature)) return false;
 
   const expected = createHmac("sha256", secret).update(rawBody).digest();

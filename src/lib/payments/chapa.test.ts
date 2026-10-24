@@ -26,6 +26,10 @@ test("verifies the documented raw-body HMAC-SHA256 webhook signature", () => {
 
   assert.equal(verifyChapaWebhookSignature(rawBody, signature), true);
   assert.equal(verifyChapaWebhookSignature(rawBody, signature.toUpperCase()), true);
+  // A newline pasted into the hosting environment must not break HMAC.
+  process.env.CHAPA_WEBHOOK_SECRET = "test-webhook-secret\n";
+  assert.equal(verifyChapaWebhookSignature(rawBody, signature), true);
+  process.env.CHAPA_WEBHOOK_SECRET = "test-webhook-secret";
   assert.equal(verifyChapaWebhookSignature(Buffer.from(`${rawBody.toString()} `), signature), false);
   assert.equal(verifyChapaWebhookSignature(rawBody, null), false);
 });
