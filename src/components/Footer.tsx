@@ -120,13 +120,6 @@ export default function Footer({ onApplyClick }: FooterProps) {
                 Register Now
               </button>
               <span className="hidden text-gray-300 sm:inline">|</span>
-              <a
-                href="/registration"
-                className="font-semibold uppercase tracking-[0.12em] text-gold transition-colors hover:text-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white"
-              >
-                Check Registration
-              </a>
-              <span className="hidden text-gray-300 sm:inline">|</span>
               <span>Addis Ababa, Ethiopia</span>
             </div>
           </div>

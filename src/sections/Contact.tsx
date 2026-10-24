@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, MapPin, Navigation, Phone } from "lucide-react";
+import { ArrowRight, MapPin, Navigation, Phone, Search } from "lucide-react";
 import { SOCIAL_LINKS } from "@/lib/socials";
 
 interface ContactProps {
@@ -129,14 +129,22 @@ export default function Contact({ onApplyClick }: ContactProps) {
               </div>
 
               <div className="mt-8 flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={onApplyClick}
-                    className="group inline-flex items-center gap-2 rounded-lg bg-gold px-5 py-3 text-sm font-bold uppercase tracking-[0.12em] text-navy transition-all duration-200 hover:bg-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-navy"
+                <button
+                  type="button"
+                  onClick={onApplyClick}
+                  className="group inline-flex items-center gap-2 rounded-lg bg-gold px-5 py-3 text-sm font-bold uppercase tracking-[0.12em] text-navy transition-all duration-200 hover:bg-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-navy"
                 >
                   Register Now
                   <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
                 </button>
+
+                <a
+                  href="/registration"
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-5 py-3 text-sm font-bold uppercase tracking-[0.12em] text-navy transition-colors hover:border-gold hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                >
+                  <Search size={15} />
+                  Check Registration
+                </a>
 
                 <a
                   href={DIRECTIONS_URL}

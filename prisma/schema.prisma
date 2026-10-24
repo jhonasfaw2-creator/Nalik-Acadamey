@@ -26,18 +26,18 @@ model Content {
 
 // ── Courses ───────────────────────────────────────────
 model Course {
-  id              String        @id @default(cuid())
+  id              String           @id @default(cuid())
   title           String
   description     String
-  price           Int           @default(0) // price in Birr
+  price           Int              @default(0) // price in Birr
   discountPrice   Int?
   discountLabel   String?
   discountStartAt DateTime?
   discountEndAt   DateTime?
-  active          Boolean       @default(true)
-  sortOrder       Int           @default(0)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  active          Boolean          @default(true)
+  sortOrder       Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
   registrations   Registration[]
   materials       CourseMaterial[]
 
@@ -46,19 +46,19 @@ model Course {
 
 // ── Schedules (shared schedule groups + sessions) ─────
 model Schedule {
-  id                   String        @id @default(cuid())
-  group                String        // "A" or "B"
-  days                 String        // "Monday, Wednesday, Friday" or "Tuesday, Thursday, Saturday"
-  session              String        // "Morning Session", "Afternoon Session", "Evening Session"
-  startTime            String        // e.g. "08:00"
-  endTime              String        // e.g. "10:00"
+  id                   String         @id @default(cuid())
+  group                String // "A" or "B"
+  days                 String // "Monday, Wednesday, Friday" or "Tuesday, Thursday, Saturday"
+  session              String // "Morning Session", "Afternoon Session", "Evening Session"
+  startTime            String // e.g. "08:00"
+  endTime              String // e.g. "10:00"
   startDate            DateTime?
-  maxSeats             Int           @default(15)
+  maxSeats             Int            @default(15)
   availabilityOverride Boolean?
-  enrolled             Int           @default(0)
-  active               Boolean       @default(true)
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  enrolled             Int            @default(0)
+  active               Boolean        @default(true)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
   registrations        Registration[]
 
   @@unique([group, session])
@@ -83,24 +83,29 @@ model CourseMaterial {
 // ── Registrations (student applications) ──────────────
 // One registration per student per course.
 model Registration {
-  id                 String        @id @default(cuid())
-  referenceId        String        @unique // e.g. NA-2026-A1B2C3
-  fullName           String
-  email              String?
-  phone              String
-  age                Int
-  courseId           String
-  course             Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  scheduleId         String?
-  schedule           Schedule?     @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
-  previousExperience String        @default("")
-  motivation         String        @default("")
-  status             String        @default("PENDING") // PENDING, CONFIRMED; PAID is retained for legacy enrollments
-  paidAt             DateTime?
-  transactions       Transaction[]
-  payments           Payment[]
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  id                      String        @id @default(cuid())
+  referenceId             String        @unique // e.g. NA-2026-A1B2C3
+  fullName                String
+  email                   String?
+  phone                   String
+  age                     Int
+  courseId                String
+  course                  Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  scheduleId              String?
+  schedule                Schedule?     @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  previousExperience      String        @default("")
+  motivation              String        @default("")
+  status                  String        @default("PENDING") // PENDING, CONFIRMED; PAID is retained for legacy enrollments
+  paidAt                  DateTime?
+  paymentProofPath        String?
+  paymentProofStatus      String        @default("NOT_SUBMITTED")
+  paymentProofSubmittedAt DateTime?
+  paymentProofReviewedAt  DateTime?
+  paymentProofNote        String?
+  transactions            Transaction[]
+  payments                Payment[]
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
 
   @@unique([email, courseId])
   @@index([status])
@@ -145,7 +150,7 @@ model Payment {
   registration      Registration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   merchantReference String        @unique
   chapaReference    String?       @unique
-  amount            Int           // Chapa amount in minor currency units
+  amount            Int // Chapa amount in minor currency units
   currency          String        @default("ETB")
   status            PaymentStatus @default(PENDING)
   checkoutUrl       String?

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { del } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { readJson, isNotFoundError } from "@/lib/http";
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -117,5 +118,68 @@ export async function PUT(
     }
     console.error("Admin registration update error:", error);
     return NextResponse.json({ error: "Failed to update registration" }, { status: 500 });
+  }
+}
+
+// DELETE /api/admin/registrations/[id] — delete a student registration and related records.
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+
+    const deleted = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const existing = await tx.registration.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          status: true,
+          scheduleId: true,
+          paymentProofPath: true,
+          payments: { select: { id: true } },
+          transactions: { select: { id: true } },
+        },
+      });
+
+      if (!existing) throw new Error("REGISTRATION_NOT_FOUND");
+
+      // Release the seat if this registration held one.
+      const holdsSeat =
+        (existing.status === "PAID" || existing.status === "CONFIRMED") &&
+        !!existing.scheduleId;
+
+      if (holdsSeat && existing.scheduleId) {
+        await tx.schedule.update({
+          where: { id: existing.scheduleId },
+          data: { enrolled: { decrement: 1 } },
+        });
+      }
+
+      // Delete the payment proof blob from storage (private access).
+      if (existing.paymentProofPath) {
+        try {
+          await del(existing.paymentProofPath, { token: process.env.BLOB_READ_WRITE_TOKEN });
+        } catch {
+          // Best-effort: do not block deletion if blob storage is unreachable.
+        }
+      }
+
+      // Cascade deletes related payments and transactions via onDelete: Cascade.
+      return tx.registration.delete({ where: { id } });
+    });
+
+    return NextResponse.json({ success: true, referenceId: deleted.referenceId });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "REGISTRATION_NOT_FOUND") {
+        return NextResponse.json({ error: "Registration not found" }, { status: 404 });
+      }
+      if (isNotFoundError(error)) {
+        return NextResponse.json({ error: "Registration not found" }, { status: 404 });
+      }
+    }
+    console.error("Admin registration delete error:", error);
+    return NextResponse.json({ error: "Failed to delete registration" }, { status: 500 });
   }
 }

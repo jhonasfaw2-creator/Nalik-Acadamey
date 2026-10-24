@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Search, Filter, ChevronDown, UserPlus, Loader2, Copy, Check } from "lucide-react";
+import { Search, Filter, ChevronDown, UserPlus, Loader2, Copy, Check, Trash2 } from "lucide-react";
 
 interface Registration {
   id: string;
@@ -13,6 +13,10 @@ interface Registration {
   previousExperience: string;
   motivation: string;
   status: string;
+  paymentProofStatus: string;
+  paymentProofSubmittedAt: string | null;
+  paymentProofReviewedAt: string | null;
+  paymentProofNote: string | null;
   createdAt: string;
   course: { id: string; title: string } | null;
   schedule: { id: string; group: string; session: string; days: string; startTime: string; endTime: string } | null;
@@ -72,6 +76,8 @@ export default function AdminRegistrations() {
   const [schedules, setSchedules] = useState<ScheduleOption[]>([]);
   const [reassigning, setReassigning] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [reassignError, setReassignError] = useState("");
 
   // ── Add Student (manual enrollment) state ──
@@ -192,6 +198,27 @@ export default function AdminRegistrations() {
       setError("Could not reach the server to confirm this registration.");
     } finally {
       setConfirming(null);
+    }
+  };
+
+  const deleteRegistration = async (id: string) => {
+    setDeleteConfirm(null);
+    setDeleting(id);
+    setError("");
+    try {
+      const response = await fetch(`/api/admin/registrations/${id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setError(data.error || "Failed to delete registration.");
+      } else {
+        load();
+      }
+    } catch {
+      setError("Could not reach the server to delete this registration.");
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -380,6 +407,12 @@ export default function AdminRegistrations() {
                       className="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-navy transition-colors hover:bg-gray-50"
                     >
                       Move
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm(reg.id)}
+                      className="rounded-lg border border-red-100 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
+                    >
+                      Delete
                     </button>
                   </td>
                 </tr>
@@ -622,6 +655,45 @@ export default function AdminRegistrations() {
                 </form>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation dialog */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="rounded-xl bg-white p-6 shadow-xl w-full max-w-md">
+            <div className="flex items-start justify-between gap-2">
+              <h2 className="text-lg font-bold text-navy">Delete student?</h2>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="text-gray-400 hover:text-gray-600" aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mt-2 text-sm text-gray-600">
+              Are you sure you want to delete{" "}
+              <span className="font-medium text-navy">
+                {registrations.find((r) => r.id === deleteConfirm)?.fullName || "this student"}
+              </span>
+              ? This will remove their registration, payment proof, and all related records. This action cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void deleteRegistration(deleteConfirm!)}
+                disabled={deleting === deleteConfirm}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting === deleteConfirm ? <Loader2 size={14} className="animate-spin mr-2" /> : "Delete"}
+              </button>
+            </div>
           </div>
         </div>
       )}

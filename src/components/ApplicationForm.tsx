@@ -75,10 +75,13 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
-  const [registrationCreated, setRegistrationCreated] = useState<{
-    referenceId: string;
-    paymentId: string;
-  } | null>(null);
+const [registrationCreated, setRegistrationCreated] = useState<{
+  referenceId: string;
+} | null>(null);
+const [paymentProofFile, setPaymentProofFile] = useState<File | null>(null);
+const [isUploadingProof, setIsUploadingProof] = useState(false);
+const [proofUploaded, setProofUploaded] = useState(false);
+const [proofUploadError, setProofUploadError] = useState("");
 
   // Load courses + schedules
   useEffect(() => {
@@ -240,28 +243,13 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         return;
       }
 
-      if (typeof data.referenceId !== "string" || typeof data.paymentId !== "string") {
-        setFormError("Your registration was submitted, but we couldn't retrieve its payment details. Please contact support.");
+      if (typeof data.referenceId !== "string") {
+        setFormError("Your registration was submitted, but we couldn't retrieve its reference ID. Please contact support.");
         setIsSubmitting(false);
         return;
       }
 
-      setRegistrationCreated({ referenceId: data.referenceId, paymentId: data.paymentId });
-      const initializeResponse = await fetch("/api/payments/initialize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId: data.paymentId }),
-      });
-      const initializeData = await initializeResponse.json().catch(() => ({}));
-      if (!initializeResponse.ok || typeof initializeData.checkoutUrl !== "string") {
-        setFormError(
-          initializeData.error ||
-            "Your registration is saved, but checkout could not start. Try again below.",
-        );
-        setIsSubmitting(false);
-        return;
-      }
-      window.location.assign(initializeData.checkoutUrl);
+      setRegistrationCreated({ referenceId: data.referenceId });
       setIsSubmitting(false);
     } catch {
       setFormError("Something went wrong. Please try again.");
@@ -289,48 +277,70 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
 
         {registrationCreated ? (
           <div className="overflow-y-auto px-4 py-12 text-center sm:px-6">
-            <h3 className="text-2xl font-bold text-navy">Payment required</h3>
+            <h3 className="text-2xl font-bold text-navy">Registration received!</h3>
             <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-gray-600">
-              Your registration is saved, but your place is not confirmed until Chapa verifies your payment.
+              Your registration has been saved. Next, submit your payment screenshot for admin review. Your place is not confirmed until your payment is approved.
               Save your registration ID to check its status.
             </p>
             <p className="mx-auto mt-5 w-fit rounded-xl bg-warm-white px-5 py-3 font-mono text-lg font-bold tracking-wide text-navy">
               {registrationCreated.referenceId}
             </p>
+            {proofUploaded ? (
+              <p className="mx-auto mt-5 max-w-md text-sm font-semibold text-green-700">
+                Payment screenshot submitted! Await admin review.
+              </p>
+            ) : (
+              <form
+                className="mx-auto mt-6 max-w-md space-y-3 text-left"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  if (!paymentProofFile || !registrationCreated || isUploadingProof) return;
+                  setIsUploadingProof(true);
+                  setProofUploadError("");
+                  try {
+                    const data = new FormData();
+                    data.append("file", paymentProofFile);
+                    const response = await fetch(
+                      `/api/registrations/${encodeURIComponent(registrationCreated.referenceId)}/payment-proof`,
+                      { method: "POST", body: data }
+                    );
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || "Upload failed.");
+                    setProofUploaded(true);
+                  } catch (error) {
+                    setProofUploadError(error instanceof Error ? error.message : "Upload failed. Try again.");
+                  } finally {
+                    setIsUploadingProof(false);
+                  }
+                }}
+              >
+                <label className="block text-sm font-semibold text-navy">
+                  Upload payment screenshot (JPG, PNG or WebP, max 5 MB)
+                  <input
+                    className="mt-2 block w-full rounded-xl border border-gray-200 p-3 text-sm"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    required
+                    onChange={(event) => setPaymentProofFile(event.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {proofUploadError && (
+                  <p className="text-sm text-red-600" role="alert">{proofUploadError}</p>
+                )}
+                <button
+                  type="submit"
+                  disabled={!paymentProofFile || isUploadingProof}
+                  className="w-full rounded-xl bg-navy px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {isUploadingProof ? "Uploading..." : "Submit payment screenshot"}
+                </button>
+              </form>
+            )}
             {formError && (
               <p className="mx-auto mt-4 max-w-md text-sm text-red-600" role="alert">
                 {formError}
               </p>
             )}
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={async () => {
-                setIsSubmitting(true);
-                setFormError("");
-                try {
-                  const response = await fetch("/api/payments/initialize", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ paymentId: registrationCreated.paymentId }),
-                  });
-                  const data = await response.json().catch(() => ({}));
-                  if (!response.ok || typeof data.checkoutUrl !== "string") {
-                    setFormError(data.error || "Checkout could not start. Please try again.");
-                    return;
-                  }
-                  window.location.assign(data.checkoutUrl);
-                } catch {
-                  setFormError("We couldn't reach the payment service. Please try again.");
-                } finally {
-                  setIsSubmitting(false);
-                }
-              }}
-              className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-gold px-5 py-3 text-sm font-bold text-navy transition-colors hover:bg-gold-hover disabled:opacity-60"
-            >
-              {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-              {isSubmitting ? "Starting checkout..." : "Continue to secure payment"}
-            </button>
             <a
               href={`/registration?id=${encodeURIComponent(registrationCreated.referenceId)}`}
               className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-5 py-3 text-sm font-semibold text-navy transition-colors hover:bg-gray-50"
@@ -590,7 +600,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                   <div className="mt-4 rounded-2xl bg-navy p-4 text-white">
                     <p className="text-sm font-semibold text-gold">Next steps</p>
                     <p className="mt-2 text-xs leading-relaxed text-white/75">
-                      Complete payment through Chapa. Enrollment is confirmed only after server-side verification.
+                      Submit your payment screenshot for admin review. Enrollment is confirmed only after your payment is approved.
                     </p>
                   </div>
 
