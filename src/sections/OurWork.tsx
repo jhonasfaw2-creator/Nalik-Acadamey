@@ -166,7 +166,7 @@ function WorkCard({
   onDeactivate: () => void;
   staggerDelay: number;
 }) {
-  const reveal = useReveal<HTMLElement>(0.05);
+  const reveal = useReveal<HTMLLIElement>(0.05);
   const playButtonRef = useRef<HTMLButtonElement>(null);
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const title = (lang === "am" && project.titleAm) || project.title;
