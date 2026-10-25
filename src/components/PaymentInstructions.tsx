@@ -25,8 +25,8 @@ const PAYMENT_METHODS: PaymentMethodData[] = [
     logo: "https://www.temenos.com/wp-content/uploads/2023/07/BankofAbyssinia-logo.jpg",
     logoAlt: "Bank of Abyssinia logo",
     details: [
-      { label: "Account name", value: "Nalik Academy" },
-      { label: "Account number", value: "1000123456789", copyable: true },
+      { label: "Account name", value: "Nalik Trading and production" },
+      { label: "Account number", value: "265149995", copyable: true },
     ],
   },
   {
@@ -36,7 +36,8 @@ const PAYMENT_METHODS: PaymentMethodData[] = [
     logo: "/assets/payments/Telebirr.png",
     logoAlt: "Telebirr logo",
     details: [
-      { label: "Wallet number", value: "0911223344", copyable: true },
+      { label: "Account name", value: "Natenael" },
+      { label: "Wallet number", value: "0979989079", copyable: true },
     ],
   },
 ];
