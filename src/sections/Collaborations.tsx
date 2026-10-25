@@ -12,6 +12,7 @@ const CREATORS = [
   { name: "Shiro B", role: "Creator & Host", image: "/assets/Collabritors/shirobaee.png", tiktok: "", instagram: "" },
   { name: "TAT", role: "Streamer", image: "/assets/Collabritors/TAT.jpeg", tiktok: "", instagram: "" },
   { name: "Lil Kidus", role: "Creator & Stylist", image: "/assets/Collabritors/LilKidus.jpg", tiktok: "", instagram: "" },
+  { name: "Jahnny", role: "Vlogger & YouTuber", image: "/assets/Collabritors/jahnny.jpeg", tiktok: "", instagram: "" },
 ];
 
 const BUSINESSES = [

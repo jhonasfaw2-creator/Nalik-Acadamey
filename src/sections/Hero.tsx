@@ -482,42 +482,42 @@ export default function Hero({ onApplyClick }: HeroProps) {
               <span className="break-words text-sm font-medium text-gold">{eyebrow}</span>
             </div>
 
-            <h1 className="hero-title max-w-3xl text-[clamp(2.4rem,8vw,4.25rem)] font-semibold leading-[1.06] tracking-tight text-white sm:text-6xl md:text-7xl lg:text-[4.25rem]">
+            <h1 className="hero-title max-w-3xl text-[clamp(2.5rem,8vw,5rem)] font-bold leading-[1] tracking-tighter text-white sm:text-6xl md:text-7xl lg:text-[5rem]">
               {title}
             </h1>
 
-            <p className="hero-desc mt-5 max-w-[58ch] text-base leading-7 text-white/85 sm:mt-6 sm:text-lg sm:leading-8">
+            <p className="hero-desc mt-6 max-w-[50ch] text-lg leading-relaxed text-white/90 sm:mt-8 sm:text-xl">
               {description}
             </p>
 
-            {/* CTAs: one primary, one secondary, one text link */}
-            <div className="hero-cta mt-7 flex flex-col items-stretch gap-3 sm:mt-9 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+            {/* CTAs: Primary is distinct, secondary is subtle */}
+            <div className="hero-cta mt-7 flex flex-col items-stretch gap-3 sm:mt-9 sm:flex-row sm:items-center sm:gap-4">
               <button
                 onClick={onApplyClick}
-                className="action-primary group/btn inline-flex items-center justify-center gap-3"
+                className="action-primary group/btn relative inline-flex items-center justify-center gap-2 overflow-hidden px-8 py-3 text-lg font-semibold transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-gold/20"
               >
                 {t.apply}
                 <ArrowRight
-                  size={18}
+                  size={20}
                   className="transition-transform duration-200 group-hover/btn:translate-x-1"
                 />
               </button>
 
               <button
                 onClick={openLookup}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md border border-white/40 px-5 text-sm font-semibold text-white transition-colors hover:border-white hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:text-base"
+                className="inline-flex min-h-[50px] items-center justify-center gap-2 rounded-md border border-white/20 bg-white/5 px-6 text-base font-medium text-white transition-all hover:bg-white/15 hover:border-white/40"
               >
-                <Search size={16} />
+                <Search size={18} />
                 {t.checkStatus}
               </button>
 
               <a
                 href="#about"
                 onClick={scrollToAbout}
-                className="inline-flex min-h-11 items-center justify-center gap-2 px-2 py-2 text-sm font-medium text-white/85 underline decoration-white/35 underline-offset-4 transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:text-base"
+                className="inline-flex min-h-[50px] items-center justify-center gap-2 px-4 py-2 text-base font-medium text-white/70 transition-colors hover:text-white"
               >
                 {t.discover}
-                <ChevronDown size={16} />
+                <ChevronDown size={18} />
               </a>
             </div>
 
