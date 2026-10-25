@@ -38,8 +38,8 @@ export default function HomeClient() {
 
       <About />
       <Courses onApplyWithCourse={openFormWithCourse} />
-      <Founders />
-      <OurWork />
+      <Founders onApplyClick={openForm} />
+      <OurWork onApplyClick={openForm} />
       <Collaborations />
       <Contact onApplyClick={openForm} />
       <Footer />

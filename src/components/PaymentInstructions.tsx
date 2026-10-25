@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy } from "lucide-react";
 import Image from "next/image";
+import CopyButton from "@/components/CopyButton";
 
 interface PaymentInstructionsProps {
   amount: number;
@@ -43,20 +43,6 @@ const PAYMENT_METHODS: PaymentMethodData[] = [
 ];
 
 export default function PaymentInstructions({ amount }: PaymentInstructionsProps) {
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [copyError, setCopyError] = useState("");
-
-  const copyValue = async (value: string, key: string) => {
-    setCopyError("");
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedKey(key);
-      window.setTimeout(() => setCopiedKey(null), 1800);
-    } catch {
-      setCopyError("Copy isn’t available here. You can select the number and copy it manually.");
-    }
-  };
-
   return (
     <section aria-labelledby="payment-instructions-title" className="space-y-3 text-left">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -82,27 +68,14 @@ export default function PaymentInstructions({ amount }: PaymentInstructionsProps
           <PaymentMethod
             key={method.id}
             method={method}
-            copiedKey={copiedKey}
-            onCopy={copyValue}
           />
         ))}
       </div>
-
-      {copyError && <p className="text-xs text-red-700" role="status">{copyError}</p>}
-
     </section>
   );
 }
 
-function PaymentMethod({
-  method,
-  copiedKey,
-  onCopy,
-}: {
-  method: PaymentMethodData;
-  copiedKey: string | null;
-  onCopy: (value: string, key: string) => void;
-}) {
+function PaymentMethod({ method }: { method: PaymentMethodData }) {
   const [logoFailed, setLogoFailed] = useState(false);
 
   return (
@@ -130,8 +103,6 @@ function PaymentMethod({
 
       <dl className="mt-3 space-y-2.5">
         {method.details.map((detail) => {
-          const key = `${method.id}-${detail.label}`;
-          const copied = copiedKey === key;
           return (
             <div key={detail.label} className="flex min-w-0 items-center justify-between gap-3 border-t border-navy/10 pt-2.5">
               <div className="min-w-0">
@@ -139,15 +110,7 @@ function PaymentMethod({
                 <dd className="mt-0.5 break-all font-mono text-sm font-semibold text-navy">{detail.value}</dd>
               </div>
               {detail.copyable && (
-                <button
-                  type="button"
-                  onClick={() => void onCopy(detail.value, key)}
-                  className="action-quiet inline-flex shrink-0 items-center gap-1.5 text-xs text-navy"
-                  aria-label={`${copied ? "Copied" : "Copy"} ${detail.label.toLowerCase()}`}
-                >
-                  {copied ? <Check size={14} /> : <Copy size={14} />}
-                  {copied ? "Copied" : "Copy"}
-                </button>
+                <CopyButton value={detail.value} label="Copy" className="shrink-0" />
               )}
             </div>
           );

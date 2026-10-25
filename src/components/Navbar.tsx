@@ -134,14 +134,14 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
           {/* Desktop CTA area */}
           <div className="hidden items-center gap-3 lg:flex">
             <a
-              href="tel:+251911223344"
+              href="tel:+251979989079"
               className={cn(
                 "flex items-center gap-1.5 text-xs font-medium transition-colors duration-300 focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white",
                 scrolled ? "text-navy/50 hover:text-navy" : "text-white/50 hover:text-white"
               )}
             >
               <Phone size={12} />
-              +251 911 223 344
+              +251979989079
             </a>
 
             <button
@@ -251,7 +251,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
           </button>
 
           <a
-            href="tel:+251911223344"
+            href="tel:+251979989079"
             className={cn(
               "mt-2 flex min-h-11 items-center gap-2 text-sm text-white/60 transition-all duration-300 focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-navy",
               mobileOpen ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
@@ -259,7 +259,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
             style={{ transitionDelay: mobileOpen ? "560ms" : "0ms" }}
           >
             <Phone size={14} />
-            +251 911 223 344
+            +251979989079
           </a>
         </div>
       </div>

@@ -6,7 +6,7 @@ import { Save, Loader2, KeyRound, Eye, EyeOff, CheckCircle2 } from "lucide-react
 const SETTING_FIELDS = [
   { key: "academy_name", label: "Academy Name", placeholder: "Nalik Academy" },
   { key: "academy_email", label: "Academy Email", placeholder: "info@nalikacademy.com" },
-  { key: "academy_phone", label: "Academy Phone", placeholder: "+251 911 223 344" },
+  { key: "academy_phone", label: "Academy Phone", placeholder: "+251979989079" },
   { key: "academy_address", label: "Academy Address", placeholder: "Addis Ababa, Ethiopia" },
 ];
 

@@ -83,7 +83,7 @@ export default function Footer() {
           <div>
             <p className="text-sm font-semibold text-navy">Visit</p>
             <div className="mt-3 space-y-2 text-sm text-gray-600">
-              <a href="tel:+251911223344" className="block transition-colors hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white">+251 911 223 344</a>
+              <a href="tel:+251979989079" className="block transition-colors hover:text-gold focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-white">+251979989079</a>
               <a
                 href="https://maps.app.goo.gl/26zbvuqd1VrzoSPE8"
                 target="_blank"

@@ -65,11 +65,10 @@ async function main() {
     { section: "contact", key: "badge", value: "Get in Touch" },
     { section: "contact", key: "title", value: "Ready to start your creative journey?" },
     { section: "contact", key: "description", value: "Have questions about our courses, schedules, or the application process? Reach out; we are happy to help." },
-    { section: "contact", key: "phone", value: "+251 911 223 344" },
+    { section: "contact", key: "phone", value: "+251979989079" },
     { section: "contact", key: "email", value: "info@nalikacademy.com" },
     { section: "contact", key: "location", value: "Addis Ababa, Ethiopia" },
-    { section: "contact", key: "facebook", value: "https://facebook.com/nalikacademy" },
-    { section: "contact", key: "instagram", value: "https://instagram.com/nalikacademy" },
+    { section: "contact", key: "instagram", value: "https://www.instagram.com/nalikproduction/" },
     { section: "contact", key: "youtube", value: "https://youtube.com/@nalikacademy" },
     { section: "contact", key: "telegram", value: "https://t.me/nalikacademy" },
     // Footer
@@ -160,7 +159,7 @@ async function main() {
   const academySettings: { key: string; value: string }[] = [
     { key: "academy_name", value: "Nalik Academy" },
     { key: "academy_email", value: "info@nalikacademy.com" },
-    { key: "academy_phone", value: "+251 911 223 344" },
+    { key: "academy_phone", value: "+251979989079" },
     { key: "academy_address", value: "Addis Ababa, Ethiopia" },
   ];
 

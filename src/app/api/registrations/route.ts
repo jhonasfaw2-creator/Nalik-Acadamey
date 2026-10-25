@@ -42,7 +42,8 @@ export async function POST(request: NextRequest) {
       previousExperience,
       motivation,
     } = parsed.data;
-    if (!normalizeEthiopianPhone(phone)) {
+    const normalizedPhone = normalizeEthiopianPhone(phone);
+    if (!normalizedPhone) {
       return NextResponse.json(
         { error: "Enter an Ethiopian phone number in international format, for example +251912345678." },
         { status: 400 },
@@ -56,10 +57,8 @@ export async function POST(request: NextRequest) {
       const existing = await tx.registration.findFirst({
         where: {
           courseId,
-          OR: [
-            { phone: phone.trim() },
-            ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
-          ],
+          scheduleId,
+          phone: normalizedPhone,
         },
         select: { referenceId: true },
       });
@@ -97,7 +96,7 @@ export async function POST(request: NextRequest) {
           referenceId,
           fullName,
           email: normalizedEmail,
-          phone: phone.trim(),
+          phone: normalizedPhone,
           age,
           courseId,
           scheduleId,
@@ -117,13 +116,14 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      return registration;
+      return { ...registration, amount: amountInBirr };
     });
 
     return NextResponse.json(
       {
         success: true,
         referenceId: result.referenceId,
+        amount: result.amount,
       },
       { status: 201 },
     );

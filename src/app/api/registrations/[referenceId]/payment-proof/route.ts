@@ -10,11 +10,22 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
-const ALLOWED_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-]);
+function detectImageType(bytes: Buffer): { contentType: string; extension: string } | null {
+  const isJpeg = bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (isJpeg) return { contentType: "image/jpeg", extension: "jpg" };
+
+  const isPng = bytes.length >= 8 && bytes.subarray(0, 8).equals(
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+  );
+  if (isPng) return { contentType: "image/png", extension: "png" };
+
+  const isWebp = bytes.length >= 12 &&
+    bytes.toString("ascii", 0, 4) === "RIFF" &&
+    bytes.toString("ascii", 8, 12) === "WEBP";
+  if (isWebp) return { contentType: "image/webp", extension: "webp" };
+
+  return null;
+}
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (character) => ({
@@ -116,13 +127,6 @@ export async function POST(
       );
     }
 
-    if (!ALLOWED_TYPES.has(file.type)) {
-      return NextResponse.json(
-        { error: "Upload a JPG, PNG, or WebP image." },
-        { status: 400 },
-      );
-    }
-
     if (file.size === 0 || file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
         { error: "The screenshot must be larger than 0 bytes and no more than 5 MB." },
@@ -131,40 +135,22 @@ export async function POST(
     }
 
     const bytes = Buffer.from(await file.arrayBuffer());
-    const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-    const isPng =
-      bytes.subarray(0, 8).equals(
-        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-      );
-    const isWebp =
-      bytes.toString("ascii", 0, 4) === "RIFF" &&
-      bytes.toString("ascii", 8, 12) === "WEBP";
-
-    if (
-      (file.type === "image/jpeg" && !isJpeg) ||
-      (file.type === "image/png" && !isPng) ||
-      (file.type === "image/webp" && !isWebp)
-    ) {
+    const imageType = detectImageType(bytes);
+    if (!imageType) {
       return NextResponse.json(
-        { error: "The file contents do not match the selected image type." },
+        { error: "Upload a valid JPG, PNG, or WebP image." },
         { status: 400 },
       );
     }
 
-    const extension =
-      file.type === "image/jpeg"
-        ? "jpg"
-        : file.type === "image/png"
-          ? "png"
-          : "webp";
-
-    const receiptImage = new Blob([bytes], { type: file.type });
+    const { contentType, extension } = imageType;
+    const receiptImage = new Blob([bytes], { type: contentType });
     const blob = await put(
       `payment-proofs/${registration.id}/${randomUUID()}.${extension}`,
       receiptImage,
       {
         access: "private",
-        contentType: file.type,
+        contentType,
         addRandomSuffix: false,
         token: process.env.BLOB_READ_WRITE_TOKEN,
       },

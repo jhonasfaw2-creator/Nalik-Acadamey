@@ -220,7 +220,7 @@ export default function RegistrationLookupClient() {
           )}
 
           <p className="mt-10 text-center text-xs text-gray-400">
-            Lost your registration ID? Contact us at info@nalikacademy.com or +251 911 223 344.
+            Lost your registration ID? Contact us at info@nalikacademy.com or +251979989079.
           </p>
         </div>
       </main>
