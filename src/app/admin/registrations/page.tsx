@@ -76,7 +76,10 @@ export default function AdminRegistrations() {
   const [error, setError] = useState("");
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [schedules, setSchedules] = useState<ScheduleOption[]>([]);
+  // Which row is currently being saved, and which row has the move panel open.
+  // These are separate: the panel is open for the same row while its save runs.
   const [reassigning, setReassigning] = useState<string | null>(null);
+  const [movingId, setMovingId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -90,15 +93,15 @@ export default function AdminRegistrations() {
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
-    email: "",
     phone: "",
     age: "",
     courseId: "",
     scheduleId: "",
+    paymentStatus: "" as "" | "PAID" | "UNPAID",
   });
   const [addSaving, setAddSaving] = useState(false);
   const [addError, setAddError] = useState("");
-  const [created, setCreated] = useState<{ referenceId: string; fullName: string; status: string } | null>(null);
+  const [created, setCreated] = useState<{ referenceId: string; fullName: string; status: string; paymentStatus: "PAID" | "UNPAID" } | null>(null);
   const [copiedRef, setCopiedRef] = useState(false);
 
   // Courses and schedules for the manual enrollment and reassignment controls.
@@ -112,13 +115,14 @@ export default function AdminRegistrations() {
       .then((d) =>
         setSchedules(
           Array.isArray(d)
-            ? d.map((s: { id: string; group: string; session: string; startTime: string; endTime: string; isFull: boolean; active: boolean }) => ({
+            ? d.map((s: { id: string; group: string; session: string; startTime: string; endTime: string; isFull: boolean; active: boolean; availabilityOverride: boolean | null }) => ({
                 id: s.id,
                 group: s.group,
                 session: s.session,
                 startTime: s.startTime,
                 endTime: s.endTime,
-                isFull: s.isFull,
+                // An admin-marked Full session counts as full even with free seats.
+                isFull: s.isFull || s.availabilityOverride === false,
                 active: s.active,
               }))
             : []
@@ -187,8 +191,11 @@ export default function AdminRegistrations() {
         const data = await res.json().catch(() => ({}));
         setReassignError(data.error || "Failed to update registration.");
       } else {
+        closeMove();
         load();
       }
+    } catch {
+      setReassignError("Could not reach the server to move this student.");
     } finally {
       setReassigning(null);
     }
@@ -269,11 +276,34 @@ export default function AdminRegistrations() {
   const selectedSchedule = schedules.find((s) => s.id === form.scheduleId);
   const scheduleDisabled = (s: ScheduleOption) => !s.active || s.isFull;
 
+  // ── Move student state ──
+  const [moveForm, setMoveForm] = useState({ courseId: "", scheduleId: "" });
+
+  const openMove = (reg: Registration) => {
+    if (movingId === reg.id) {
+      setMovingId(null);
+      return;
+    }
+    setReassignError("");
+    setMovingId(reg.id);
+    setMoveForm({ courseId: reg.course?.id || "", scheduleId: reg.schedule?.id || "" });
+  };
+
+  const closeMove = () => {
+    setMovingId(null);
+    setMoveForm({ courseId: "", scheduleId: "" });
+    setReassignError("");
+  };
+
   const submitManual = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddError("");
-    if (!form.fullName.trim() || !form.email.trim() || !form.phone.trim() || !form.age || !form.courseId || !form.scheduleId) {
-      setAddError("Please fill in all fields.");
+    if (!form.fullName.trim() || !form.phone.trim() || !form.age || !form.courseId || !form.scheduleId) {
+      setAddError("Please fill in all required fields.");
+      return;
+    }
+    if (!form.paymentStatus) {
+      setAddError("Choose the payment status: Paid or Unpaid.");
       return;
     }
     setAddSaving(true);
@@ -283,17 +313,17 @@ export default function AdminRegistrations() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fullName: form.fullName.trim(),
-          email: form.email.trim(),
           phone: form.phone.trim(),
           age: Number(form.age),
           courseId: form.courseId,
           scheduleId: form.scheduleId,
+          paymentStatus: form.paymentStatus,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         setCreated(data.application);
-        setForm({ fullName: "", email: "", phone: "", age: "", courseId: "", scheduleId: "" });
+        setForm({ fullName: "", phone: "", age: "", courseId: "", scheduleId: "", paymentStatus: "" });
         load();
       } else {
         setAddError(data.error || "Failed to add student.");
@@ -391,7 +421,14 @@ export default function AdminRegistrations() {
               </div>
               <div className="mt-3 space-y-1.5 text-xs">
                 <p className="break-words font-medium text-navy">{reg.course?.title || "No course"}</p>
-                <p className="break-all text-gray-500">{reg.phone}{reg.email ? ` · ${reg.email}` : ""}</p>
+                <p className="break-words text-navy">
+                  {reg.schedule ? (
+                    <>
+                      {reg.schedule.session} <span className="text-gray-500">({reg.schedule.days})</span>
+                    </>
+                  ) : "No schedule"}
+                </p>
+                <p className="break-all text-gray-500">{reg.phone}</p>
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <span className={`font-medium ${reg.paymentProofStatus === "PENDING_REVIEW" ? "text-amber-700" : reg.paymentProofStatus === "APPROVED" ? "text-green-700" : reg.paymentProofStatus === "REJECTED" ? "text-red-700" : "text-gray-500"}`}>
                     {reg.paymentProofStatus === "NOT_SUBMITTED" ? "No proof" : reg.paymentProofStatus.replace(/_/g, " ")}
@@ -406,22 +443,30 @@ export default function AdminRegistrations() {
                 {reg.paymentProofStatus === "PENDING_REVIEW" && <button onClick={() => reviewRegistration(reg.id, "APPROVED")} disabled={reviewing === reg.id} className="action-quiet text-sm text-green-700 disabled:opacity-50">{reviewing === reg.id ? "Approving…" : "Approve"}</button>}
                 {reg.paymentProofStatus === "PENDING_REVIEW" && <button onClick={() => { setRejectingId(reg.id); setRejectNote(""); }} className="action-quiet text-sm text-red-700">Reject</button>}
                 {(reg.paymentProofStatus === "NOT_SUBMITTED" || reg.paymentProofStatus === "REJECTED") && reg.status === "PENDING" && reg.payments.some((payment) => payment.status === "SUCCESS") && <button onClick={() => void confirmRegistration(reg.id)} disabled={confirming === reg.id} className="action-quiet text-sm text-green-700 disabled:opacity-50">{confirming === reg.id ? "Confirming…" : "Confirm"}</button>}
-                <button onClick={() => setReassigning(reassigning === reg.id ? null : reg.id)} className="action-quiet text-sm text-navy">Move</button>
+                <button onClick={() => openMove(reg)} className="action-quiet text-sm text-navy">Move</button>
                 <button onClick={() => setDeleteConfirm(reg.id)} className="action-quiet text-sm text-red-700">Delete</button>
               </div>
-              {reassigning === reg.id && (
+               {movingId === reg.id && (
                 <div className="mt-3 space-y-3 rounded-lg bg-warm-white p-3">
-                  <label className="block text-xs font-medium text-gray-600" htmlFor={`mobile-course-${reg.id}`}>Course</label>
-                  <select id={`mobile-course-${reg.id}`} defaultValue={reg.course?.id || ""} className="min-h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-navy">
+                  <label className="block text-xs font-medium text-gray-600">Course</label>
+                  <select 
+                    value={moveForm.courseId} 
+                    onChange={(e) => setMoveForm({ courseId: e.target.value, scheduleId: "" })}
+                    className="min-h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-navy"
+                  >
                     {courses.map((course) => <option key={course.id} value={course.id}>{course.title}</option>)}
                   </select>
-                  <label className="block text-xs font-medium text-gray-600" htmlFor={`mobile-schedule-${reg.id}`}>Schedule</label>
-                  <select id={`mobile-schedule-${reg.id}`} defaultValue={reg.schedule?.id || ""} className="min-h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-navy">
+                  <label className="block text-xs font-medium text-gray-600">Schedule</label>
+                  <select 
+                    value={moveForm.scheduleId} 
+                    onChange={(e) => setMoveForm({ ...moveForm, scheduleId: e.target.value })}
+                    className="min-h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-navy"
+                  >
                     {schedules.map((schedule) => <option key={schedule.id} value={schedule.id} disabled={scheduleDisabled(schedule) && schedule.id !== reg.schedule?.id}>Schedule {schedule.group}: {schedule.session} ({schedule.startTime}–{schedule.endTime})</option>)}
                   </select>
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => { const courseEl = document.getElementById(`mobile-course-${reg.id}`) as HTMLSelectElement | null; const scheduleEl = document.getElementById(`mobile-schedule-${reg.id}`) as HTMLSelectElement | null; if (courseEl && scheduleEl) reassign(reg.id, courseEl.value, scheduleEl.value); }} disabled={reassigning === reg.id} className="action-primary disabled:opacity-50">Save move</button>
-                    <button onClick={() => setReassigning(null)} className="action-secondary">Cancel</button>
+                    <button onClick={() => reassign(reg.id, moveForm.courseId, moveForm.scheduleId)} disabled={reassigning === reg.id || !moveForm.courseId || !moveForm.scheduleId} className="action-primary disabled:opacity-50">{reassigning === reg.id ? "Saving…" : "Save move"}</button>
+                    <button onClick={closeMove} className="action-secondary">Cancel</button>
                   </div>
                   {reassignError && <p className="break-words text-xs text-red-600">{reassignError}</p>}
                 </div>
@@ -436,9 +481,9 @@ export default function AdminRegistrations() {
             <thead>
               <tr>
                 <th className="px-4 py-3 font-medium text-gray-500">Student name</th>
-                <th className="px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Email</th>
                 <th className="px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Phone</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Course</th>
+                <th className="px-4 py-3 font-medium text-gray-500">Schedule</th>
                 <th className="px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Registration date</th>
                 <th className="px-4 py-3 font-medium text-gray-500">Payment Proof</th>
                 <th className="px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Payment</th>
@@ -452,9 +497,15 @@ export default function AdminRegistrations() {
                   <td className="px-4 py-3">
                     <p className="font-medium text-navy">{reg.fullName}</p>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 hidden sm:table-cell">{reg.email || "—"}</td>
                   <td className="px-4 py-3 text-sm text-gray-600 hidden sm:table-cell">{reg.phone}</td>
                   <td className="px-4 py-3 text-sm text-navy">{reg.course?.title || "No course"}</td>
+                  <td className="px-4 py-3 text-sm text-navy">
+                    {reg.schedule ? (
+                      <>
+                        {reg.schedule.session} <span className="text-gray-500 text-xs">({reg.schedule.days})</span>
+                      </>
+                    ) : "—"}
+                  </td>
                   <td className="px-4 py-3 text-xs text-gray-500 hidden sm:table-cell">
                     {new Date(reg.createdAt).toLocaleString("en-GB", {
                       day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
@@ -522,7 +573,7 @@ export default function AdminRegistrations() {
                         </button>
                       )}
                       <button
-                        onClick={() => setReassigning(reassigning === reg.id ? null : reg.id)}
+                        onClick={() => openMove(reg)}
                         className="min-h-10 px-1 text-xs font-medium text-navy transition-colors hover:text-gold sm:mr-2 sm:text-sm"
                       >
                         Move
@@ -537,8 +588,8 @@ export default function AdminRegistrations() {
                   </td>
                 </tr>
               ))}
-              {reassigning && (() => {
-                const reg = registrations.find((r) => r.id === reassigning);
+              {movingId && (() => {
+                const reg = registrations.find((r) => r.id === movingId);
                 if (!reg) return null;
                 return (
                   <tr className="bg-gold/5">
@@ -549,8 +600,8 @@ export default function AdminRegistrations() {
                             Move {reg.fullName} ({reg.referenceId}) to
                           </label>
                           <select
-                            id={`course-${reg.id}`}
-                            defaultValue={reg.course?.id || ""}
+                            value={moveForm.courseId}
+                            onChange={(e) => setMoveForm({ courseId: e.target.value, scheduleId: "" })}
                             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-navy focus:border-gold focus:outline-none"
                           >
                             {courses.map((c) => (
@@ -561,8 +612,8 @@ export default function AdminRegistrations() {
                         <div className="flex-1">
                           <label className="mb-1 block text-xs font-medium text-transparent">.</label>
                           <select
-                            id={`schedule-${reg.id}`}
-                            defaultValue={reg.schedule?.id || ""}
+                            value={moveForm.scheduleId}
+                            onChange={(e) => setMoveForm({ ...moveForm, scheduleId: e.target.value })}
                             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-navy focus:border-gold focus:outline-none"
                           >
                             {schedules.map((s) => (
@@ -574,18 +625,14 @@ export default function AdminRegistrations() {
                         </div>
                         <div className="flex gap-2">
                           <button
-                            onClick={() => {
-                              const courseEl = document.getElementById(`course-${reg.id}`) as HTMLSelectElement | null;
-                              const scheduleEl = document.getElementById(`schedule-${reg.id}`) as HTMLSelectElement | null;
-                              if (courseEl && scheduleEl) reassign(reg.id, courseEl.value, scheduleEl.value);
-                            }}
-                            disabled={reassigning === reg.id}
+                            onClick={() => reassign(reg.id, moveForm.courseId, moveForm.scheduleId)}
+                            disabled={reassigning === reg.id || !moveForm.courseId || !moveForm.scheduleId}
                             className="action-primary disabled:opacity-50"
                           >
-                            Save
+                            {reassigning === reg.id ? "Saving…" : "Save"}
                           </button>
                           <button
-                            onClick={() => setReassigning(null)}
+                            onClick={closeMove}
                             className="action-secondary"
                           >
                             Cancel
@@ -643,7 +690,8 @@ export default function AdminRegistrations() {
                 </div>
                 <h2 className="text-lg font-bold text-navy">Student added</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  {created.fullName} was added with registration status pending.
+                  {created.fullName} was added as{" "}
+                  {created.paymentStatus === "PAID" ? "paid and enrolled" : "unpaid, awaiting payment"}.
                 </p>
                 <div className="mx-auto mt-5 max-w-xs rounded-lg bg-warm-white px-4 py-3 text-left">
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Registration ID</p>
@@ -691,27 +739,15 @@ export default function AdminRegistrations() {
                       className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy placeholder-gray-400 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
                     />
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">Email *</label>
-                      <input
-                        type="email"
-                        value={form.email}
-                        onChange={(e) => setForm({ ...form, email: e.target.value })}
-                        placeholder="student@example.com"
-                        className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy placeholder-gray-400 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">Phone *</label>
-                      <input
-                        type="tel"
-                        value={form.phone}
-                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                        placeholder="+251 9XX XXX XXX"
-                        className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy placeholder-gray-400 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
-                      />
-                    </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">Phone *</label>
+                    <input
+                      type="tel"
+                      value={form.phone}
+                      onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                      placeholder="+251 9XX XXX XXX"
+                      className="w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm text-navy placeholder-gray-400 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20"
+                    />
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Age *</label>
@@ -757,6 +793,35 @@ export default function AdminRegistrations() {
                       <p className="mt-1 text-xs text-red-500">This session is full — pick another one.</p>
                     )}
                   </div>
+                  <fieldset>
+                    <legend className="mb-1 block text-sm font-medium text-gray-700">Payment status *</legend>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([
+                        { value: "PAID", label: "Paid" },
+                        { value: "UNPAID", label: "Unpaid" },
+                      ] as const).map((option) => (
+                        <label
+                          key={option.value}
+                          className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3.5 py-2.5 text-sm transition-colors ${form.paymentStatus === option.value ? "border-gold bg-gold/5 font-medium text-navy" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}
+                        >
+                          <input
+                            type="radio"
+                            name="paymentStatus"
+                            value={option.value}
+                            checked={form.paymentStatus === option.value}
+                            onChange={() => setForm({ ...form, paymentStatus: option.value })}
+                            className="h-4 w-4 accent-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+                          />
+                          {option.label}
+                        </label>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {form.paymentStatus === "PAID"
+                        ? "Paid students are enrolled immediately."
+                        : "Unpaid students stay pending until payment is recorded."}
+                    </p>
+                  </fieldset>
                   <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
                     Confirmed registrations are enrolled and count toward the selected schedule capacity.
                   </p>
