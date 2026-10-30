@@ -179,7 +179,8 @@ export default function About({ onApplyClick }: AboutProps) {
     setCanAutoplay(!reduceMotion && !saveData && !slow);
   }, []);
 
-  // Only start loading the video when the visitor is about to reach it.
+  // Start loading the video only once the media frame actually enters the
+  // viewport, so the hero is never competing with a second full download.
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
@@ -194,7 +195,7 @@ export default function About({ onApplyClick }: AboutProps) {
           observer.disconnect();
         }
       },
-      { rootMargin: "300px 0px" },
+      { rootMargin: "0px" },
     );
     observer.observe(frame);
     return () => observer.disconnect();
@@ -215,8 +216,12 @@ export default function About({ onApplyClick }: AboutProps) {
     if (!video || !mountVideo) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && !userPaused) video.play().catch(() => {});
-        else video.pause();
+        if (entry.isIntersecting && !userPaused) {
+          video.play().catch(() => {
+            // Autoplay was blocked: keep the poster and offer an explicit play button.
+            setCanAutoplay(false);
+          });
+        } else video.pause();
       },
       { threshold: 0.25 },
     );
@@ -311,7 +316,7 @@ export default function About({ onApplyClick }: AboutProps) {
                   muted={isMuted}
                   loop
                   playsInline
-                  preload="metadata"
+                  preload="auto"
                   poster={content.poster}
                   aria-label={t.videoLabel}
                   onPlaying={() => setIsVideoReady(true)}

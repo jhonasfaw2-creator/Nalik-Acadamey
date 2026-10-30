@@ -2,26 +2,31 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { ArrowRight, Phone, Search, X } from "lucide-react";
+import { useApplicationForm } from "@/components/ApplicationFormProvider";
 
 interface NavbarProps {
-  onApplyClick: () => void;
+  onApplyClick?: () => void;
 }
 
 const NAV_LINKS = [
-  { label: "Home", href: "#home" },
-  { label: "About", href: "#about" },
-  { label: "Courses", href: "#courses" },
-  { label: "Our Work", href: "#our-work" },
-  { label: "Contact", href: "#contact" },
+  { label: "Home", href: "/#home", section: "home" },
+  { label: "About", href: "/#about", section: "about" },
+  { label: "Courses", href: "/#courses", section: "courses" },
+  { label: "Our Work", href: "/#our-work", section: "our-work" },
+  { label: "Contact", href: "/#contact", section: "contact" },
 ];
 
 export default function Navbar({ onApplyClick }: NavbarProps) {
+  const { openForm } = useApplicationForm();
+  const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState("#home");
   const [logoZoomOpen, setLogoZoomOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState("home");
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -30,37 +35,71 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
   }, []);
 
   useEffect(() => {
-    const sections = NAV_LINKS.map((l) => l.href.replace("#", ""));
-    const handleScroll = () => {
-      const scrollPos = window.scrollY + 120;
-      for (let i = sections.length - 1; i >= 0; i--) {
-        const el = document.getElementById(sections[i]);
-        if (el && el.offsetTop <= scrollPos) {
-          setActiveSection(`#${sections[i]}`);
-          break;
-        }
-      }
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll();
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  const handleNavClick = useCallback((href: string) => {
-    setMobileOpen(false);
-    setActiveSection(href);
-    const id = href.replace("#", "");
-    const el = document.getElementById(id);
-    if (el) {
-      const top = el.getBoundingClientRect().top + window.scrollY - 80;
-      window.scrollTo({ top, behavior: "smooth" });
+    if (pathname !== "/") {
+      setActiveSection("home");
+      return;
     }
-  }, []);
+
+    const sections = Array.from(
+      document.querySelectorAll<HTMLElement>("main > section[id], footer#footer")
+    );
+    if (sections.length === 0) return;
+
+    const updateFromHash = () => {
+      setActiveSection(window.location.hash.slice(1) || "home");
+    };
+
+    let frame = 0;
+    const syncSectionToUrl = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const activationLine = window.innerHeight * 0.35;
+        let currentSection = sections[0].id;
+
+        for (const section of sections) {
+          if (section.getBoundingClientRect().top <= activationLine) {
+            currentSection = section.id;
+          } else {
+            break;
+          }
+        }
+
+        if (
+          window.innerHeight + window.scrollY >=
+          document.documentElement.scrollHeight - 1
+        ) {
+          currentSection = sections[sections.length - 1].id;
+        }
+
+        setActiveSection(currentSection);
+        const hash = currentSection === "home" ? "" : `#${currentSection}`;
+        if (window.location.hash !== hash) {
+          window.history.replaceState(
+            window.history.state,
+            "",
+            hash ? `/${hash}` : "/"
+          );
+        }
+      });
+    };
+
+    updateFromHash();
+    window.addEventListener("scroll", syncSectionToUrl, { passive: true });
+    window.addEventListener("hashchange", updateFromHash);
+    window.addEventListener("popstate", updateFromHash);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", syncSectionToUrl);
+      window.removeEventListener("hashchange", updateFromHash);
+      window.removeEventListener("popstate", updateFromHash);
+    };
+  }, [pathname]);
 
   const handleApply = useCallback(() => {
     setMobileOpen(false);
-    onApplyClick();
-  }, [onApplyClick]);
+    openForm();
+  }, [openForm]);
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
@@ -79,9 +118,8 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
       >
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           {/* Logo */}
-          <a
-            href="#home"
-            onClick={(e) => { e.preventDefault(); handleNavClick("#home"); }}
+          <Link
+            href="/"
             className="flex items-center gap-3 group"
           >
               <div className="relative h-10 w-10">
@@ -105,17 +143,16 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
                 Nalik Academy
               </span>
             </div>
-          </a>
+          </Link>
 
           {/* Desktop nav */}
           <div className="hidden items-center gap-1 lg:flex">
             {NAV_LINKS.map((link) => {
-              const isActive = activeSection === link.href;
+              const isActive = pathname === "/" && activeSection === link.section;
               return (
-                <a
+                <Link
                   key={link.href}
                   href={link.href}
-                  onClick={(e) => { e.preventDefault(); handleNavClick(link.href); }}
                   className={cn(
                     "min-h-11 px-3 py-2 text-sm font-medium transition-colors focus-visible:underline",
                     isActive
@@ -126,7 +163,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
                   )}
                 >
                   {link.label}
-                </a>
+                </Link>
               );
             })}
           </div>
@@ -221,12 +258,12 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
           )}
         >
           {NAV_LINKS.map((link, i) => {
-            const isActive = activeSection === link.href;
+            const isActive = pathname === "/" && activeSection === link.section;
             return (
-              <a
+              <Link
                 key={link.href}
                 href={link.href}
-                onClick={(e) => { e.preventDefault(); handleNavClick(link.href); }}
+                onClick={() => { setMobileOpen(false); }}
                 className={cn(
                   "flex min-h-12 items-center text-2xl font-bold tracking-tight transition-all duration-300 focus-visible:underline sm:text-3xl",
                   isActive ? "text-gold" : "text-white/70 hover:text-white",
@@ -235,7 +272,7 @@ export default function Navbar({ onApplyClick }: NavbarProps) {
                 style={{ transitionDelay: mobileOpen ? `${100 + i * 60}ms` : "0ms" }}
               >
                 {link.label}
-              </a>
+              </Link>
             );
           })}
 

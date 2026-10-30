@@ -18,6 +18,7 @@ import {
   getRegistrationState,
   type RegistrationSummary,
 } from "@/lib/registration";
+import { formatPaymentDeadline } from "@/lib/paymentDeadline";
 
 interface RegistrationDetailsProps {
   registration: RegistrationSummary;
@@ -100,6 +101,17 @@ export default function RegistrationDetails({ registration, highlightReference =
       value: <StatusPill label={state.label} tone={state.tone} />,
     }
   );
+
+  if (
+    registration.paymentProofDeadline &&
+    registration.registrationStatus === "PENDING" &&
+    (registration.paymentProofStatus === "NOT_SUBMITTED" || registration.paymentProofStatus === "REJECTED")
+  ) {
+    rows.push({
+      label: "Payment deadline",
+      value: formatPaymentDeadline(registration.paymentProofDeadline),
+    });
+  }
 
   if (registration.paymentProofStatus) {
     const proofTone =

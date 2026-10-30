@@ -7,7 +7,7 @@ const SETTING_FIELDS = [
   { key: "academy_name", label: "Academy Name", placeholder: "Nalik Academy" },
   { key: "academy_email", label: "Academy Email", placeholder: "info@nalikacademy.com" },
   { key: "academy_phone", label: "Academy Phone", placeholder: "+251979989079" },
-  { key: "academy_address", label: "Academy Address", placeholder: "Addis Ababa, Ethiopia" },
+  { key: "academy_address", label: "Academy Address", placeholder: "2Q8Q+776, Addis Ababa" },
 ];
 
 export default function AdminSettings() {

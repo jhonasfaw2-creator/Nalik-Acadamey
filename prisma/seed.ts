@@ -67,7 +67,7 @@ async function main() {
     { section: "contact", key: "description", value: "Have questions about our courses, schedules, or the application process? Reach out; we are happy to help." },
     { section: "contact", key: "phone", value: "+251979989079" },
     { section: "contact", key: "email", value: "info@nalikacademy.com" },
-    { section: "contact", key: "location", value: "Addis Ababa, Ethiopia" },
+    { section: "contact", key: "location", value: "2Q8Q+776, Addis Ababa" },
     { section: "contact", key: "instagram", value: "https://www.instagram.com/nalikproduction/" },
     { section: "contact", key: "youtube", value: "https://youtube.com/@nalikacademy" },
     { section: "contact", key: "telegram", value: "https://t.me/nalikacademy" },
@@ -160,7 +160,7 @@ async function main() {
     { key: "academy_name", value: "Nalik Academy" },
     { key: "academy_email", value: "info@nalikacademy.com" },
     { key: "academy_phone", value: "+251979989079" },
-    { key: "academy_address", value: "Addis Ababa, Ethiopia" },
+    { key: "academy_address", value: "2Q8Q+776, Addis Ababa" },
   ];
 
   for (const setting of academySettings) {

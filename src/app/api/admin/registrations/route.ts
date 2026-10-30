@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { expireOverdueRegistrations } from "@/lib/services/expiration";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,18 @@ export async function GET(request: NextRequest) {
     const skip = Math.max(0, Number.parseInt(request.nextUrl.searchParams.get("skip") || "0", 10) || 0);
     const take = Math.min(100, Math.max(1, Number.parseInt(request.nextUrl.searchParams.get("take") || "100", 10) || 100));
 
-    const baseWhere: Prisma.RegistrationWhereInput = {};
+    // Soft-expire overdue registrations before listing so the active list never
+    // shows one whose 24-hour proof window closed. The cron job is the primary
+    // trigger; this keeps the admin view correct if a run was delayed. A failed
+    // sweep must never take down the list itself.
+    try {
+      await expireOverdueRegistrations();
+    } catch (sweepError) {
+      console.error("Registration expiration sweep failed:", sweepError);
+    }
+
+    // Expired registrations are kept in the database but leave the active list.
+    const baseWhere: Prisma.RegistrationWhereInput = { status: { not: "EXPIRED" } };
     if (courseId) baseWhere.courseId = courseId;
     if (search) {
       baseWhere.OR = [

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkAndIncrement } from "@/lib/rateLimit";
-import { createDownloadToken } from "@/lib/downloadToken";
+import { createDownloadTokenOrNull } from "@/lib/downloadToken";
+import { isPaymentProofWindowOpen } from "@/lib/paymentDeadline";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,9 @@ export async function GET(request: NextRequest) {
         status: true,
         paymentProofStatus: true,
         paymentProofNote: true,
+        proofDeadlineAt: true,
+        expiredAt: true,
+        payments: { where: { status: "SUCCESS" }, select: { id: true } },
         course: {
           select: {
             id: true,
@@ -52,8 +56,31 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const now = new Date();
+    const windowClosed =
+      !!registration.proofDeadlineAt &&
+      registration.proofDeadlineAt.getTime() <= now.getTime();
+    const hasVerifiedPayment = registration.payments.length > 0;
+    // Reflect the deadline immediately, even before the expiration sweep runs.
+    const isExpired =
+      registration.status === "EXPIRED" ||
+      (registration.status === "PENDING" &&
+        windowClosed &&
+        registration.paymentProofStatus === "NOT_SUBMITTED" &&
+        !hasVerifiedPayment);
+    const registrationStatus = isExpired ? "EXPIRED" : registration.status;
     const enrolled =
-      registration.status === "PAID" || registration.status === "CONFIRMED";
+      registrationStatus === "PAID" || registrationStatus === "CONFIRMED";
+    const canSubmitPaymentProof =
+      registrationStatus === "PENDING" &&
+      (registration.paymentProofStatus === "NOT_SUBMITTED" ||
+        registration.paymentProofStatus === "REJECTED") &&
+      !hasVerifiedPayment &&
+      isPaymentProofWindowOpen(registration.proofDeadlineAt, now);
+    // Never let a missing signing secret turn an enrolled lookup into a 500.
+    const downloadToken = enrolled
+      ? createDownloadTokenOrNull(registration.referenceId)
+      : null;
 
     return NextResponse.json({
       found: true,
@@ -62,7 +89,7 @@ export async function GET(request: NextRequest) {
         fullName: registration.fullName,
         course: registration.course?.title || null,
         courseId: registration.course?.id || null,
-        ...(enrolled ? { downloadToken: createDownloadToken(registration.referenceId) } : {}),
+        ...(downloadToken ? { downloadToken } : {}),
         schedule: registration.schedule
           ? {
               days: registration.schedule.days,
@@ -75,9 +102,14 @@ export async function GET(request: NextRequest) {
                 : null,
             }
           : null,
-        registrationStatus: registration.status,
+        registrationStatus,
         paymentProofStatus: registration.paymentProofStatus ?? null,
         paymentProofNote: registration.paymentProofNote ?? null,
+        proofDeadlineAt: registration.proofDeadlineAt
+          ? registration.proofDeadlineAt.toISOString()
+          : null,
+        expiredAt: registration.expiredAt ? registration.expiredAt.toISOString() : null,
+        canSubmitPaymentProof,
       },
     });
   } catch (error) {

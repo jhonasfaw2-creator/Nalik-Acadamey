@@ -351,12 +351,9 @@ export default function AdminRegistrations() {
 
   return (
     <div>
+      <h1 className="sr-only">Registrations</h1>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-[clamp(1.5rem,4vw,2rem)] font-bold leading-tight text-navy">Registrations</h1>
-          <p className="mt-1 max-w-2xl text-sm leading-5 text-gray-500">View, search, filter, and manage student registrations.</p>
-        </div>
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-2.5 sm:ml-auto sm:flex-row sm:items-center">
           <button
             onClick={() => { setAddOpen(true); setCreated(null); setAddError(""); }}
             className="action-primary inline-flex items-center justify-center gap-2"
@@ -496,6 +493,7 @@ export default function AdminRegistrations() {
                 <tr key={reg.id} className="hover:bg-gray-50/50">
                   <td className="px-4 py-3">
                     <p className="font-medium text-navy">{reg.fullName}</p>
+                    <p className="mt-1 break-all font-mono text-[11px] text-gray-500">{reg.referenceId}</p>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600 hidden sm:table-cell">{reg.phone}</td>
                   <td className="px-4 py-3 text-sm text-navy">{reg.course?.title || "No course"}</td>

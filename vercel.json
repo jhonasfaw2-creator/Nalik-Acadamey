@@ -1,4 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "prisma generate && node scripts/db-push.mjs && next build"
+  "buildCommand": "prisma generate && node scripts/db-push.mjs && next build",
+  "crons": [
+    {
+      "path": "/api/cron/expire-registrations",
+      "schedule": "*/15 * * * *"
+    }
+  ]
 }

@@ -4,6 +4,7 @@ import { readJson, isUniqueConstraintError } from "@/lib/http";
 import type { Prisma } from "@prisma/client";
 import { registrationSchema } from "@/lib/validators";
 import { generateUniqueReferenceId } from "@/lib/reference";
+import { getPaymentProofDeadline } from "@/lib/paymentDeadline";
 import { checkAndIncrement } from "@/lib/rateLimit";
 import { normalizeEthiopianPhone } from "@/lib/payments/phone";
 
@@ -91,6 +92,9 @@ export async function POST(request: NextRequest) {
         throw new Error("COURSE_NOT_PAYABLE");
       }
 
+      // Bank-transfer registrations have 24 hours from creation to submit proof.
+      const proofDeadlineAt = getPaymentProofDeadline(now);
+
       const registration = await tx.registration.create({
         data: {
           referenceId,
@@ -103,6 +107,7 @@ export async function POST(request: NextRequest) {
           previousExperience: previousExperience || "",
           motivation: motivation || "",
           status: "PENDING",
+          proofDeadlineAt,
         },
         select: { id: true, referenceId: true },
       });
@@ -116,7 +121,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      return { ...registration, amount: amountInBirr };
+      return { ...registration, amount: amountInBirr, proofDeadlineAt };
     });
 
     return NextResponse.json(
@@ -124,6 +129,7 @@ export async function POST(request: NextRequest) {
         success: true,
         referenceId: result.referenceId,
         amount: result.amount,
+        proofDeadlineAt: result.proofDeadlineAt.toISOString(),
       },
       { status: 201 },
     );

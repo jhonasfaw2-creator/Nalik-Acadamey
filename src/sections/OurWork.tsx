@@ -3,79 +3,12 @@
 import { useState } from "react";
 import { ArrowRight, ArrowUpRight, Play } from "lucide-react";
 import { useLang, type Lang } from "@/hooks/useLang";
-import { useReveal } from "@/hooks/useReveal";
-
-export interface PortfolioProject {
-  id: string;
-  title: string;
-  titleAm?: string | null;
-  platform: "YouTube" | "Reel";
-  description?: string;
-  descriptionAm?: string | null;
-  thumbnailUrl: string;
-  videoUrl?: string;
-  youtubeId?: string;
-  linkUrl?: string;
-}
+import { LONG_FORM_PROJECTS, type PortfolioProject } from "@/lib/portfolio";
 
 interface SelectedWorkProps {
   projects?: PortfolioProject[];
   onApplyClick?: () => void;
 }
-
-const LONG_FORM_PROJECTS: PortfolioProject[] = [
-  {
-    id: "lf-4",
-    title: "ከ 8 ወር ቦሀላ የምወደው ሀገር ተመለስኩ",
-    titleAm: "ከ 8 ወር ቦሀላ የምወደው ሀገር ተመለስኩ",
-    platform: "YouTube",
-    description:
-      "Returned to his beloved homeland after eight months abroad — a quiet homecoming told through familiar places.",
-    descriptionAm:
-      "ከ ሰሜን ዓለም 8 ወር ከ ቍጣው በኋላ ለዘላለሙ ለሀገሩ ተመለሱ፣ በተማሪነት በጥላ እና በደስታ እንደተመለሱ ታሪክ።",
-    thumbnailUrl: "https://i.ytimg.com/vi/Jx8sE6lVu3A/hqdefault.jpg",
-    youtubeId: "Jx8sE6lVu3A",
-    linkUrl: "https://youtu.be/Jx8sE6lVu3A",
-  },
-  {
-    id: "lf-1",
-    title: "በ 17 አመቴ የራሴን ብራንድ መሰረትኩ 🤩 / Clothing Brand",
-    titleAm: "በ 17 አመት የራሱን ብራንድ መሰረት / Clothing Brand",
-    platform: "YouTube",
-    description:
-      "A founder story following a 17-year-old from the first idea to the launch of his clothing brand.",
-    descriptionAm:
-      "ተማሪ ከተመረገዘ 17 ዓመት ደግሞ ከመጀመሪያ የሚያስቡት እስከ አድራጊቱ እስከ በትር ተማሪው ብራንዱ.",
-    thumbnailUrl: "https://i.ytimg.com/vi/sncn1ALnzW8/hqdefault.jpg",
-    youtubeId: "sncn1ALnzW8",
-    linkUrl: "https://youtu.be/sncn1ALnzW8",
-  },
-  {
-    id: "lf-2",
-    title: "48 Hours in Arba Minch 🐊",
-    titleAm: "48 ሰዓት በአርባ ምንጭ",
-    platform: "YouTube",
-    description:
-      "A two-day trip through Arba Minch, shaped into a fast-moving travel story.",
-    descriptionAm: "ሁለት ቀን በአርባ ምንጭ የተነሳሽ ባህላዊ ተማሪ ታሪክ.",
-    thumbnailUrl: "https://i.ytimg.com/vi/5LEJMiHsOAs/hqdefault.jpg",
-    youtubeId: "5LEJMiHsOAs",
-    linkUrl: "https://youtu.be/5LEJMiHsOAs",
-  },
-  {
-    id: "lf-3",
-    title: "ልብስ ሸመታ ከጀማው ጋር ft. Nahom Astu",
-    titleAm: "ልብስ ሸመታ ከጀማው ጋር ft. Nahom Astu",
-    platform: "YouTube",
-    description:
-      "A community give-back with Nahom Astu, captured through interviews and street footage.",
-    descriptionAm:
-      "በንሆም አስቱው ጋር የሕዝብ ዝቅተኛ ድርጊት፣ በመድኃኒትና በገበራ ተማሪ የተገለጹትን ቪዲዮ.",
-    thumbnailUrl: "https://i.ytimg.com/vi/OJpFNPgr06Q/hqdefault.jpg",
-    youtubeId: "OJpFNPgr06Q",
-    linkUrl: "https://youtu.be/OJpFNPgr06Q",
-  },
-];
 
 const en = {
   badge: "Selected work",
@@ -103,20 +36,9 @@ const am: typeof en = {
 
 const STRINGS: Record<Lang, typeof en> = { en, am };
 
-const sectionReveal = (visible: boolean) =>
-  `transition-[opacity,transform] duration-700 ease-out motion-reduce:transition-none ${
-    visible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
-  }`;
-
-const cardReveal = (visible: boolean) =>
-  `transition-[opacity,transform] duration-700 ease-out motion-reduce:transition-none ${
-    visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
-  }`;
-
 export default function SelectedWork({ projects = LONG_FORM_PROJECTS, onApplyClick }: SelectedWorkProps) {
   const { lang } = useLang();
   const t = STRINGS[lang];
-  const headerRef = useReveal<HTMLDivElement>(0.1);
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
 
   const [featured, ...rest] = projects;
@@ -126,10 +48,10 @@ export default function SelectedWork({ projects = LONG_FORM_PROJECTS, onApplyCli
       id="our-work"
       lang={lang}
       aria-labelledby="our-work-title"
-      className="relative overflow-hidden bg-warm-white px-5 py-20 sm:px-8 sm:py-24 lg:px-10 lg:py-32"
+      className="relative scroll-mt-20 overflow-hidden bg-warm-white px-5 py-20 sm:px-8 sm:py-24 lg:px-10 lg:py-32"
     >
       <div className="mx-auto max-w-7xl">
-        <div ref={headerRef.ref} className={`max-w-3xl ${sectionReveal(headerRef.visible)}`}>
+        <div className="max-w-3xl">
           <p className="mb-4 text-sm font-medium text-gold">{t.badge}</p>
           <div className="relative mb-6 inline-block">
             <h2 id="our-work-title" className="text-3xl font-bold leading-[1.05] tracking-tight text-navy sm:text-4xl lg:text-5xl">
@@ -145,13 +67,12 @@ export default function SelectedWork({ projects = LONG_FORM_PROJECTS, onApplyCli
           role="list"
           className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-6"
         >
-          {projects.map((project, index) => (
+          {projects.map((project) => (
             <WorkCard
               key={project.id}
               project={project}
               lang={lang}
               strings={t}
-              staggerDelay={index * 70}
               isActive={activeVideoId === project.id}
               onPlay={() => setActiveVideoId(project.id)}
             />
@@ -166,7 +87,6 @@ function WorkCard({
   project,
   lang,
   strings,
-  staggerDelay,
   className = "",
   isActive,
   onPlay,
@@ -174,21 +94,17 @@ function WorkCard({
   project: PortfolioProject;
   lang: Lang;
   strings: typeof en;
-  staggerDelay?: number;
   className?: string;
   isActive: boolean;
   onPlay: () => void;
 }) {
-  const reveal = useReveal<HTMLLIElement>(0.05);
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const title = (lang === "am" && project.titleAm) || project.title;
   const description = (lang === "am" && project.descriptionAm) || project.description;
 
   return (
     <li
-      ref={reveal.ref}
-      className={`${cardReveal(reveal.visible)} min-w-0 ${className}`}
-      style={{ transitionDelay: staggerDelay ? `${staggerDelay}ms` : undefined }}
+      className={`min-w-0 ${className}`}
     >
       <article
         className={[

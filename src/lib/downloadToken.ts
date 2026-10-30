@@ -18,6 +18,20 @@ export function createDownloadToken(referenceId: string): string {
   return `${payload}.${sign(payload)}`;
 }
 
+/**
+ * Token for the course-materials endpoint, or null when signing is not
+ * configured. Registration lookup must still succeed without it — a missing
+ * SESSION_SECRET should hide materials, not fail the whole status check.
+ */
+export function createDownloadTokenOrNull(referenceId: string): string | null {
+  try {
+    return createDownloadToken(referenceId);
+  } catch (error) {
+    console.error("Could not issue a course-materials download token:", error);
+    return null;
+  }
+}
+
 export function verifyDownloadToken(token: string): string | null {
   const [payload, signature, ...extra] = token.split(".");
   if (!payload || !signature || extra.length > 0) return null;

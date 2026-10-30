@@ -95,7 +95,7 @@ export function buildScheduleIcs(data: ScheduleEventData): string {
     `DESCRIPTION:${escapeIcsText(
       `Class schedule for registration ${data.referenceId}. ${formatTime(data.startTime)}–${formatTime(data.endTime)}.`
     )}`,
-    `LOCATION:${escapeIcsText("Nalik Academy, Yeab Building 5th Floor, Addis Ababa")}`,
+    `LOCATION:${escapeIcsText("Nalik Academy, 2Q8Q+776, Addis Ababa")}`,
     `DTSTART;TZID=Africa/Addis_Ababa:${firstDate}T${pad(sh)}${pad(sm)}00`,
     `DTEND;TZID=Africa/Addis_Ababa:${firstDate}T${pad(eh)}${pad(em)}00`,
   ];

@@ -36,6 +36,15 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: "/admin/:path*",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "noindex, nofollow",
+          },
+        ],
+      },
       // Baseline security headers for all responses. A full, strict CSP is kept
       // deliberately conservative here because Next.js emits inline scripts and
       // CSS during hydration; a nonce-based CSP is the safer next step for a

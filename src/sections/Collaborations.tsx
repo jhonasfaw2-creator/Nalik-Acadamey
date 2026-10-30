@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 const CREATORS = [
@@ -80,13 +81,10 @@ export default function Collaborations() {
             {/* Invitation tile */}
             <article className="reveal-child flex flex-col items-start justify-center p-2 text-left">
               <p className="text-base font-semibold text-navy">Have a project in mind?</p>
-                <a
-                  href="#contact"
-                  className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-gold hover:text-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-warm-white"
-                >
+              <Link href="/#contact" className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-gold hover:text-gold-hover focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-warm-white">
                 Start a project
                 <ArrowRight size={13} aria-hidden="true" />
-              </a>
+              </Link>
             </article>
           </div>
         </div>

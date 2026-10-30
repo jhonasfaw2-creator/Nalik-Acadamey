@@ -17,6 +17,8 @@ export interface RegistrationSummary {
   registrationStatus: string;
   paymentProofStatus: string | null;
   paymentProofNote: string | null;
+  /** ISO deadline for bank-transfer proof (24 hours after registration). */
+  paymentProofDeadline: string | null;
 }
 
 interface RegistrationSummaryScheduleSession {
@@ -72,6 +74,9 @@ export function getRegistrationState(registrationStatus: string): {
       label: "AWAITING PAYMENT",
       tone: "pending",
     };
+  }
+  if (registrationStatus === "EXPIRED") {
+    return { label: "EXPIRED", tone: "failed" };
   }
   return { label: registrationStatus, tone: "failed" };
 }

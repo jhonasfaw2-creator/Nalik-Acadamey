@@ -102,6 +102,11 @@ model Registration {
   paymentProofSubmittedAt DateTime?
   paymentProofReviewedAt  DateTime?
   paymentProofNote        String?
+  // Public registrations get a 24-hour window to upload bank-transfer proof.
+  // Manual admin enrolments leave this null and never expire.
+  proofDeadlineAt         DateTime?
+  // Soft expiry: expired rows stay in the database but leave the active admin list.
+  expiredAt               DateTime?
   transactions            Transaction[]
   payments                Payment[]
   createdAt               DateTime      @default(now())
@@ -110,6 +115,7 @@ model Registration {
   @@unique([email, courseId])
   @@index([status])
   @@index([referenceId])
+  @@index([status, proofDeadlineAt])
 }
 
 model Transaction {

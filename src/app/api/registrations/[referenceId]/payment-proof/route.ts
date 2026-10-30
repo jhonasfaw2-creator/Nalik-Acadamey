@@ -5,6 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { checkAndIncrement } from "@/lib/rateLimit";
 import { sendTelegramMessage, sendTelegramPhoto } from "@/lib/telegram";
+import { normalizeEthiopianPhone } from "@/lib/payments/phone";
+import { isPaymentProofWindowOpen } from "@/lib/paymentDeadline";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,7 +84,10 @@ export async function POST(
         id: true,
         fullName: true,
         referenceId: true,
+        phone: true,
+        status: true,
         paymentProofStatus: true,
+        proofDeadlineAt: true,
         course: {
           select: {
             title: true,
@@ -107,6 +112,28 @@ export async function POST(
       );
     }
 
+    // A verified payment or an already-submitted proof needs no new upload.
+    if (registration.status === "CONFIRMED" || registration.status === "PAID") {
+      return NextResponse.json(
+        { error: "This registration is already confirmed. No payment proof is needed." },
+        { status: 409 },
+      );
+    }
+
+    if (registration.status === "EXPIRED") {
+      return NextResponse.json(
+        { error: "This registration expired because payment proof was not submitted within 24 hours. Contact the academy if you already made the transfer." },
+        { status: 410 },
+      );
+    }
+
+    if (!isPaymentProofWindowOpen(registration.proofDeadlineAt)) {
+      return NextResponse.json(
+        { error: "The 24-hour payment deadline has passed. Contact the academy if you already made the transfer." },
+        { status: 410 },
+      );
+    }
+
     if (
       registration.paymentProofStatus !== "NOT_SUBMITTED" &&
       registration.paymentProofStatus !== "REJECTED"
@@ -118,6 +145,22 @@ export async function POST(
     }
 
     const formData = await request.formData();
+
+    // Identity check: the phone number on the registration must match. The
+    // reference ID alone is not enough to attach a payment screenshot.
+    const submittedPhoneField = formData.get("phone");
+    const submittedPhone =
+      typeof submittedPhoneField === "string"
+        ? normalizeEthiopianPhone(submittedPhoneField)
+        : null;
+    const registeredPhone = normalizeEthiopianPhone(registration.phone);
+    if (!submittedPhone || !registeredPhone || submittedPhone !== registeredPhone) {
+      return NextResponse.json(
+        { error: "The phone number doesn't match this registration. Use the number you registered with." },
+        { status: 403 },
+      );
+    }
+
     const file = formData.get("file");
 
     if (!(file instanceof File)) {
@@ -157,10 +200,18 @@ export async function POST(
     );
 
     try {
+      // The deadline is re-checked in the write itself, so a proof that lands
+      // after the cutoff can never win a race against the expiration sweep.
+      const submissionTime = new Date();
       const updated = await prisma.registration.updateMany({
         where: {
           id: registration.id,
           paymentProofStatus: registration.paymentProofStatus,
+          status: "PENDING",
+          OR: [
+            { proofDeadlineAt: null },
+            { proofDeadlineAt: { gt: submissionTime } },
+          ],
         },
         data: {
           paymentProofPath: blob.pathname,
@@ -172,9 +223,14 @@ export async function POST(
       });
 
       if (updated.count !== 1) {
+        const deadlinePassed = !isPaymentProofWindowOpen(registration.proofDeadlineAt);
         return NextResponse.json(
-          { error: "The registration changed while uploading. Please try again." },
-          { status: 409 },
+          {
+            error: deadlinePassed
+              ? "The 24-hour payment deadline has passed. Contact the academy if you already made the transfer."
+              : "The registration changed while uploading. Please try again.",
+          },
+          { status: deadlinePassed ? 410 : 409 },
         );
       }
 

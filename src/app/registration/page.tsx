@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   description:
     "Enter your Nalik Academy registration ID to view your enrollment status and class schedule.",
   alternates: { canonical: "/registration" },
+  robots: { index: false, follow: true },
 };
 
 export default function RegistrationPage() {

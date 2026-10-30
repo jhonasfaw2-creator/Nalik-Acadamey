@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
+import Link from "next/link";
 import { useLang, type Lang } from "@/hooks/useLang";
 import { useReveal } from "@/hooks/useReveal";
 
@@ -15,7 +16,6 @@ interface FoundersProps {
 }
 
 // Space reserved for the fixed header when scrolling to #our-work.
-const HEADER_OFFSET = 80;
 
 const DEFAULTS = {
   badge: "Meet the founder",
@@ -174,15 +174,6 @@ export default function Founders({ onApplyClick }: FoundersProps) {
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
 
-  const goToWork = (event: MouseEvent<HTMLAnchorElement>) => {
-    event.preventDefault();
-    const target = document.getElementById("our-work");
-    if (!target) return;
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const top = target.getBoundingClientRect().top + window.scrollY - HEADER_OFFSET;
-    window.scrollTo({ top, behavior: reduceMotion ? "auto" : "smooth" });
-  };
-
   return (
     <section
       id="founders"
@@ -274,14 +265,13 @@ export default function Founders({ onApplyClick }: FoundersProps) {
                 </button>
               )}
 
-              <a
-                href="#our-work"
-                onClick={goToWork}
+              <Link
+                href="/#our-work"
                 className="group inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-navy underline decoration-gray-300 underline-offset-4 transition-colors hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
               >
                 {t.seeWork}
                 <ArrowUpRight size={16} strokeWidth={1.8} className="transition-colors group-hover:text-gold" />
-              </a>
+              </Link>
             </div>
           </div>
         </div>

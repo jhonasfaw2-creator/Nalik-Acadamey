@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import PaymentInstructions from "@/components/PaymentInstructions";
 import CopyButton from "@/components/CopyButton";
+import Link from "next/link";
 import { useLang, type Lang } from "@/hooks/useLang";
 
 /* -------------------------------------------------------------------------- */
@@ -57,7 +58,9 @@ interface CreatedRegistration {
   referenceId: string;
   amount: number;
   courseTitle?: string;
-  /** Optional ISO date from the API if seats are held until a deadline. */
+  /** Phone used at registration; verifies proof uploads when resuming later. */
+  phone?: string;
+  /** ISO date the payment proof is due (24 hours after registration). */
   holdUntil?: string;
 }
 
@@ -109,6 +112,7 @@ function readPending(): CreatedRegistration | null {
         referenceId: parsed.referenceId,
         amount: typeof parsed.amount === "number" ? parsed.amount : 0,
         courseTitle: typeof parsed.courseTitle === "string" ? parsed.courseTitle : undefined,
+        phone: typeof parsed.phone === "string" ? parsed.phone : undefined,
         holdUntil: typeof parsed.holdUntil === "string" ? parsed.holdUntil : undefined,
       };
     }
@@ -168,7 +172,12 @@ interface UploadResponse {
   body: string;
 }
 
-function postReceipt(url: string, file: File, onProgress: (pct: number) => void): Promise<UploadResponse> {
+function postReceipt(
+  url: string,
+  file: File,
+  onProgress: (pct: number) => void,
+  fields: Record<string, string> = {},
+): Promise<UploadResponse> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
@@ -186,6 +195,7 @@ function postReceipt(url: string, file: File, onProgress: (pct: number) => void)
     xhr.ontimeout = () => reject(new Error("NETWORK"));
     const data = new FormData();
     data.append("file", file);
+    for (const [key, value] of Object.entries(fields)) data.append(key, value);
     xhr.send(data);
   });
 }
@@ -243,7 +253,11 @@ const en = {
   startNew: "Start a new registration",
   confirmNew:
     "Starting a new registration removes this reference ID from this device. Have you saved it?",
-  payBy: (d: string) => `Pay by ${d} to keep your seat.`,
+  payBy: (d: string) =>
+    `Submit your payment proof by ${d}. Your registration expires after that.`,
+  proofPhoneLabel: "Phone number used at registration",
+  proofPhoneHelp: "We check this against your registration before accepting the screenshot.",
+  phoneRequired: "Enter the phone number you registered with.",
   uploadReceipt: "Upload your payment receipt",
   receiptHelp: "Use a clear screenshot or photo. JPG, PNG, or WebP. Large images are shrunk automatically.",
   chooseImage: "Choose an image",
@@ -329,7 +343,10 @@ const am: typeof en = {
   copied: "ተቀድቷል",
   startNew: "አዲስ ምዝገባ ጀምር",
   confirmNew: "አዲስ ምዝገባ መጀመር የአሁኑን ማጣቀሻ ቁጥር ከዚህ መሳሪያ ያስወግዳል። ቁጥሩን አስቀምጠዋል?",
-  payBy: (d) => `መቀመጫዎን ለማስጠበቅ እስከ ${d} ድረስ ይክፈሉ።`,
+  payBy: (d) => `እስከ ${d} ድረስ የክፍያ ማስረጃዎን ያስገቡ። ከዚያ በኋላ ምዝገባዎ ያበቃል።`,
+  proofPhoneLabel: "በምዝገባ ጊዜ የተጠቀሙበት ስልክ ቁጥር",
+  proofPhoneHelp: "ምስሉን ከመቀበላችን በፊት ከምዝገባዎ ጋር እናዛምደዋለን።",
+  phoneRequired: "በምዝገባ ጊዜ የተጠቀሙበትን ስልክ ቁጥር ያስገቡ።",
   uploadReceipt: "የክፍያ ደረሰኝዎን ያስገቡ",
   receiptHelp: "ግልጽ ስክሪንሾት ወይም ፎቶ ይጠቀሙ። JPG፣ PNG ወይም WebP። ትላልቅ ምስሎች በራስ-ሰር ይጨመቃሉ።",
   chooseImage: "ምስል ይምረጡ",
@@ -471,6 +488,8 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const [proofReviewStatus, setProofReviewStatus] = useState<ReviewStatus | null>(null);
   const [proofReviewNote, setProofReviewNote] = useState<string | null>(null);
   const [statusCheckStalled, setStatusCheckStalled] = useState(false);
+  // Only used for a registration resumed without a stored phone (older sessions).
+  const [proofPhone, setProofPhone] = useState("");
 
   /* ----------------------------- derived values ---------------------------- */
 
@@ -515,6 +534,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
     setProofReviewStatus(null);
     setProofReviewNote(null);
     setProofUploadError("");
+    setProofPhone("");
     setStatusCheckStalled(false);
     setUploadProgress(0);
   }
@@ -897,7 +917,13 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         referenceId: data.referenceId,
         amount: typeof data.amount === "number" ? data.amount : (coursePrice ?? 0),
         courseTitle: selectedCourse?.title,
-        holdUntil: typeof data.holdUntil === "string" ? data.holdUntil : undefined,
+        phone: phoneValue.trim(),
+        holdUntil:
+          typeof data.proofDeadlineAt === "string"
+            ? data.proofDeadlineAt
+            : typeof data.holdUntil === "string"
+              ? data.holdUntil
+              : undefined,
       };
       writePending(created);
       setFormError("");
@@ -922,6 +948,11 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
   const handleUploadProof = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!paymentProofFile || !registrationCreated || isUploadingProof) return;
+    const proofPhoneValue = registrationCreated.phone || proofPhone.trim();
+    if (!proofPhoneValue) {
+      setProofUploadError(t.phoneRequired);
+      return;
+    }
     setIsUploadingProof(true);
     setUploadProgress(0);
     setProofUploadError("");
@@ -931,6 +962,7 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
         `/api/registrations/${encodeURIComponent(registrationCreated.referenceId)}/payment-proof`,
         paymentProofFile,
         setUploadProgress,
+        { phone: proofPhoneValue },
       );
 
       let result: { error?: string; notificationSent?: boolean; proofSent?: boolean } = {};
@@ -1081,9 +1113,9 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                     {proofNotificationFailed ? (
                       <p className="mt-3 text-sm text-amber-800">
                         {t.notifFailed}{" "}
-                        <a href="/#contact" className="font-semibold underline underline-offset-2">
+                        <Link href="/#contact" className="font-semibold underline underline-offset-2">
                           {t.contactAcademy}
-                        </a>
+                        </Link>
                       </p>
                     ) : proofImageDeliveryFailed ? (
                       <p className="mt-3 text-sm text-amber-800">{t.imageFailed}</p>
@@ -1124,6 +1156,25 @@ export default function ApplicationForm({ open, onClose, preselectedCourse }: Ap
                         {t.receiptHelp}
                       </p>
                     </div>
+
+                    {!registrationCreated.phone && (
+                      <div>
+                        <label htmlFor="payment-proof-phone" className="mb-1.5 block text-sm font-medium text-gray-700">
+                          {t.proofPhoneLabel}
+                        </label>
+                        <input
+                          id="payment-proof-phone"
+                          type="tel"
+                          inputMode="tel"
+                          autoComplete="tel"
+                          value={proofPhone}
+                          onChange={(event) => setProofPhone(event.target.value)}
+                          placeholder={t.phonePh}
+                          className={fieldClass}
+                        />
+                        <p className="mt-1 text-xs text-gray-500">{t.proofPhoneHelp}</p>
+                      </div>
+                    )}
 
                     <label
                       htmlFor="payment-proof-file"

@@ -6,7 +6,6 @@ import {
   useRef,
   useCallback,
   type FormEvent,
-  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
 import {
@@ -22,6 +21,7 @@ import {
   Play,
 } from "lucide-react";
 import CopyButton from "@/components/CopyButton";
+import Link from "next/link";
 import { useLang, type Lang } from "@/hooks/useLang";
 
 /* -------------------------------------------------------------------------- */
@@ -72,6 +72,11 @@ const DEFAULTS = {
   titleAm: "",
   descriptionAm: "",
 };
+
+// Blurred 32×18 frame of the hero poster inlined as a data URI so the hero
+// paints a branded backdrop on the first frame, before the 36 KB poster loads.
+const HERO_POSTER_PLACEHOLDER =
+  "data:image/jpeg;base64,/9j/4AAQSkZJRgABAgAAAQABAAD//gAQTGF2YzYyLjExLjEwMAD/2wBDAAgQEBMQExYWFhYWFhoYGhsbGxoaGhobGxsdHR0iIiIdHR0bGx0dICAiIiUmJSMjIiMmJigoKDAwLi44ODpFRVP/xABhAAADAQEAAAAAAAAAAAAAAAADBAUGAgEAAgMBAAAAAAAAAAAAAAAAAQMCBAYFEAACAgIDAQAAAAAAAAAAAAAAAQIDMRIRUUEhEQEBAQEBAQAAAAAAAAAAAAABAAIRMSH/wAARCAASACADASIAAhEAAxEA/9oADAMBAAIRAxEAPwDA1vspWQ2ZChNSZVc12aLKGWpp9s7f8kxDj4V5w2bARhzk5znrPuasjM8i1WRmzI88hHQL0KgXpPMG/9k=";
 
 const AM_DEFAULTS = {
   eyebrow: "የፈጠራ ሚዲያ ሥልጠና",
@@ -426,19 +431,22 @@ export default function Hero({ onApplyClick }: HeroProps) {
   const StatusIcon = statusInfo?.Icon ?? CheckCircle2;
   const lookupErrorMessage = lookupError ? (lookupError.text ?? (lookupError.key ? t[lookupError.key] : "")) : "";
 
-  const scrollToAbout = (event: ReactMouseEvent<HTMLAnchorElement>) => {
-    event.preventDefault();
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    document.getElementById("about")?.scrollIntoView({ behavior: reduce ? "auto" : "smooth" });
-  };
-
   return (
     <section
       id="home"
       className="relative flex min-h-[44rem] w-full items-center overflow-hidden bg-navy sm:min-h-[680px] md:h-[100svh]"
     >
-      {/* Background video (only when allowed; waits for CMS so it never downloads twice) */}
-      {allowVideo && contentReady && (
+      {/* Instant branded backdrop: the blurred poster frame is inlined, so it
+          paints before any network request. The sharp poster covers it. */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url("${HERO_POSTER_PLACEHOLDER}")` }}
+      />
+
+      {/* Above-the-fold background video: start loading immediately; the CMS
+          remounts it only if the configured URL actually changes. */}
+      {allowVideo && (
         <video
           key={content.video}
           ref={videoRef}
@@ -446,7 +454,7 @@ export default function Hero({ onApplyClick }: HeroProps) {
           muted
           loop
           playsInline
-          preload="metadata"
+          preload="auto"
           poster={content.poster}
           onPlaying={() => setVideoLoaded(true)}
           onError={() => setVideoLoaded(false)}
@@ -459,17 +467,27 @@ export default function Hero({ onApplyClick }: HeroProps) {
         </video>
       )}
 
-      {/* Poster: the full background when video is off, and the fallback while it loads */}
-      <img
-        src={content.poster}
-        alt=""
-        loading="eager"
-        fetchPriority="high"
-        decoding="async"
-        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${
-          videoLoaded ? "opacity-0" : "opacity-100"
-        }`}
-      />
+      {/* Poster: the full background when video is off, and the fallback while it loads.
+          WebP is roughly half the bytes; the JPEG stays as the fallback. */}
+      <picture>
+        {content.poster === DEFAULTS.poster && (
+          <source
+            type="image/webp"
+            srcSet="/assets/hero/poster-640.webp 640w, /assets/hero/poster-960.webp 960w, /assets/hero/poster.webp 1280w"
+            sizes="100vw"
+          />
+        )}
+        <img
+          src={content.poster}
+          alt=""
+          loading="eager"
+          fetchPriority="high"
+          decoding="async"
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${
+            videoLoaded ? "opacity-0" : "opacity-100"
+          }`}
+        />
+      </picture>
 
       {/* Readability overlay: stronger behind the text */}
       <div className="absolute inset-0 bg-gradient-to-t from-navy/85 via-navy/60 to-navy/55 sm:bg-gradient-to-r sm:from-navy/85 sm:via-navy/60 sm:to-navy/30" />
@@ -511,14 +529,13 @@ export default function Hero({ onApplyClick }: HeroProps) {
                 {t.checkStatus}
               </button>
 
-              <a
-                href="#about"
-                onClick={scrollToAbout}
-                className="inline-flex min-h-[50px] items-center justify-center gap-2 px-4 py-2 text-base font-medium text-white/70 transition-colors hover:text-white"
+              <Link
+                href="/#about"
+                className="inline-flex min-h-[50px] shrink-0 items-center justify-center gap-2 whitespace-nowrap px-4 py-2 text-base font-medium text-white/70 transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
               >
                 {t.discover}
                 <ChevronDown size={18} />
-              </a>
+              </Link>
             </div>
 
             {/* Training highlights */}

@@ -17,13 +17,13 @@ const LOCATION = {
   name: "Nalik Academy",
   building: "Yeab Building",
   floor: "5th Floor",
-  area: "Haya Hulet",
+  area: "2Q8Q+776",
   city: "Addis Ababa",
   country: "Ethiopia",
-  plusCode: "XQJ4+95",
+  plusCode: "2Q8Q+776",
   lat: 8.9809109,
   lng: 38.7554393,
-  mapsUrl: "https://maps.app.goo.gl/26zbvuqd1VrzoSPE8",
+  mapsUrl: "https://maps.app.goo.gl/fpHDX7rRFgMsnZN68",
 } as const;
 
 const MAPS_COORDS = `${LOCATION.lat},${LOCATION.lng}`;
