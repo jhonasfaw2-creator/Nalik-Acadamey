@@ -63,4 +63,16 @@ export const LONG_FORM_PROJECTS: PortfolioProject[] = [
     youtubeId: "OJpFNPgr06Q",
     linkUrl: "https://youtu.be/OJpFNPgr06Q",
   },
+  {
+    id: "reel-1",
+    title: "My first real documentary",
+    titleAm: "ከአንድ ዓመት ልምምድ በኋላ የመጀመሪያዬ ዶክመንተሪ",
+    platform: "Reel",
+    description:
+      "His first real documentary: after a year of editing clips for other people, Natnael Enisha moved into long-form storytelling. Shot in Dire Dawa's market, the film is built from the traders, colours and voices of the place rather than a scripted tour — camera by Dawit, voiceover script by Kidus, colour and edit by Natnael, produced under Nalik Production.",
+    descriptionAm:
+      "የመጀመሪያው እውነተኛ ዶክመንተሪ፦ ለአንድ ዓመት የሌሎችን ቪዲዮ ካስተካከለ በኋላ ናትናኤል እንሻ ወደ ረጅም ትረካ ገባ። በድሬዳዋ ገበያ የተቀረጸው ሥራው ከተጻፈ ሥነ ምሥረታ ይልቅ የገበያውን ሰዎች፣ ቀለሞችንና ድምፆችን ያካተተ ነው፤ በካሜራ ዳዊት፣ በድምፅ ጽሑፍ ኪዱስ፣ በኤዲቲንግና በቀለም ናትናኤል፣ በፕሮዳክሽን ናሊክ ፕሮዳክሽን የተዘጋጀ።",
+    thumbnailUrl: "/assets/reel_poster.jpg",
+    linkUrl: "https://www.instagram.com/reel/De9N-ayqlwt/",
+  },
 ];

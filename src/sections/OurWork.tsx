@@ -16,6 +16,7 @@ const en = {
   description: "A few stories brought to life through editing. Select a video to watch.",
   projects: "Selected video projects",
   watchYouTube: "Watch on YouTube",
+  watchInstagram: "Watch on Instagram",
   watchVideo: "Watch video",
   ctaHeading: "Want to edit stories like these?",
   ctaDescription: "Build practical editing skills with Nalik Academy.",
@@ -28,6 +29,7 @@ const am: typeof en = {
   description: "በኤዲቲንግ ሕያው የሆኑ ጥቂት ታሪኮች። ለማየት ቪዲዮ ይምረጡ።",
   projects: "የተመረጡ የቪዲዮ ፕሮጀክቶች",
   watchYouTube: "በዩቲዩብ ይመልከቱ",
+  watchInstagram: "በኢንስታግራም ይመልከቱ",
   watchVideo: "ቪዲዮውን ይመልከቱ",
   ctaHeading: "እንደነዚህ ያሉ ታሪኮችን ማስተካከል ይፈልጋሉ?",
   ctaDescription: "በናሊክ አካዳሚ ተግባራዊ የኤዲቲንግ ክህሎቶችን ይገንቡ።",
@@ -42,6 +44,9 @@ export default function SelectedWork({ projects = LONG_FORM_PROJECTS, onApplyCli
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
 
   const [featured, ...rest] = projects;
+  // An odd number of cards leaves a hole in the last row, so the final card
+  // spans both columns and keeps the grid flush to its right edge.
+  const hasWideLastCard = projects.length > 1 && projects.length % 2 === 1;
 
   return (
     <section
@@ -67,13 +72,14 @@ export default function SelectedWork({ projects = LONG_FORM_PROJECTS, onApplyCli
           role="list"
           className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-6"
         >
-          {projects.map((project) => (
+          {projects.map((project, index) => (
             <WorkCard
               key={project.id}
               project={project}
               lang={lang}
               strings={t}
               isActive={activeVideoId === project.id}
+              isWide={hasWideLastCard && index === projects.length - 1}
               onPlay={() => setActiveVideoId(project.id)}
             />
           ))}
@@ -89,6 +95,7 @@ function WorkCard({
   strings,
   className = "",
   isActive,
+  isWide = false,
   onPlay,
 }: {
   project: PortfolioProject;
@@ -96,24 +103,64 @@ function WorkCard({
   strings: typeof en;
   className?: string;
   isActive: boolean;
+  /** Spans both columns so an odd last row has no empty cell. */
+  isWide?: boolean;
   onPlay: () => void;
 }) {
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const title = (lang === "am" && project.titleAm) || project.title;
   const description = (lang === "am" && project.descriptionAm) || project.description;
+  const canPlayInline = Boolean(project.youtubeId);
+  const linkLabel =
+    project.platform === "YouTube"
+      ? strings.watchYouTube
+      : project.platform === "Reel"
+        ? strings.watchInstagram
+        : strings.watchVideo;
+
+  const poster = (
+    <>
+      {!thumbnailFailed && (
+        <img
+          src={project.thumbnailUrl}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02]"
+          loading="lazy"
+          decoding="async"
+          onError={() => setThumbnailFailed(true)}
+        />
+      )}
+      <span className="absolute inset-0 bg-navy/15 transition-colors hover:bg-navy/25" aria-hidden="true" />
+      <span
+        className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300`}
+        aria-hidden="true"
+      >
+        <span className={`flex items-center justify-center rounded-full bg-white text-navy shadow-lg h-14 w-14`}>
+          <Play size={20} className="ml-0.5 fill-current" />
+        </span>
+      </span>
+      <span className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-navy/85 px-2 py-0.5 text-xs font-medium text-white">
+        {project.platform}
+      </span>
+    </>
+  );
 
   return (
     <li
-      className={`min-w-0 ${className}`}
+      className={["min-w-0", className, isWide ? "md:col-span-2" : ""].join(" ")}
     >
       <article
         className={[
           "flex flex-col overflow-hidden rounded-xl bg-white border border-gray-100 shadow-sm",
           "transition-all duration-300 hover:border-gold hover:shadow-md",
+          isWide ? "md:flex-row" : "",
         ].join(" ")}
       >
         <div
-          className={`relative aspect-video overflow-hidden bg-navy`}
+          className={[
+            "relative aspect-video overflow-hidden bg-navy",
+            isWide ? "md:w-1/2 md:shrink-0" : "",
+          ].join(" ")}
         >
           {isActive && project.youtubeId ? (
             <iframe
@@ -123,35 +170,24 @@ function WorkCard({
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
             />
-          ) : (
+          ) : canPlayInline ? (
             <button
               onClick={onPlay}
               className="block h-full w-full relative"
               aria-label={`${strings.watchVideo}: ${title}`}
             >
-              {!thumbnailFailed && (
-                <img
-                  src={project.thumbnailUrl}
-                  alt=""
-                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02]"
-                  loading="lazy"
-                  decoding="async"
-                  onError={() => setThumbnailFailed(true)}
-                />
-              )}
-              <span className="absolute inset-0 bg-navy/15 transition-colors hover:bg-navy/25" aria-hidden="true" />
-              <span
-                className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300`}
-                aria-hidden="true"
-              >
-                <span className={`flex items-center justify-center rounded-full bg-white text-navy shadow-lg h-14 w-14`}>
-                  <Play size={20} className="ml-0.5 fill-current" />
-                </span>
-              </span>
-              <span className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-navy/85 px-2 py-0.5 text-xs font-medium text-white">
-                {project.platform}
-              </span>
+              {poster}
             </button>
+          ) : (
+            <a
+              href={project.linkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block h-full w-full relative"
+              aria-label={`${linkLabel}: ${title}`}
+            >
+              {poster}
+            </a>
           )}
         </div>
 
@@ -160,7 +196,13 @@ function WorkCard({
             {title}
           </h3>
           {description && (
-            <p className={`mt-3 text-sm leading-relaxed text-gray-600 line-clamp-2`}>
+            <p
+              className={[
+                "mt-3 text-sm leading-relaxed text-gray-600",
+                // The wide card has room for the full write-up; the narrow ones stay tidy.
+                isWide ? "" : "line-clamp-2",
+              ].join(" ")}
+            >
               {description}
             </p>
           )}
@@ -171,7 +213,7 @@ function WorkCard({
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-sm font-medium text-navy underline decoration-gray-300 underline-offset-4 transition-colors hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
             >
-              {project.platform === "YouTube" ? strings.watchYouTube : strings.watchVideo}
+              {linkLabel}
               <ArrowUpRight size={15} aria-hidden="true" />
             </a>
           </div>
